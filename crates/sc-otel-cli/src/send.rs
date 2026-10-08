@@ -279,7 +279,7 @@ mod tests {
     fn attributes_map_json_scalars_to_native_values() {
         let parsed = key_values(
             attributes(Some(
-                r#"{"s":"text","b":true,"i":-3,"f":1.5,"big":18446744073709551615}"#,
+                r#"{"s":"text","b":true,"i":-3,"f":1.5,"big":18446744073709551615,"duplicate":"first","duplicate":"last"}"#,
             ))
             .expect("valid object"),
         )
@@ -295,6 +295,7 @@ mod tests {
         assert_eq!(find("i"), Some(Value::I64(-3)));
         assert_eq!(find("f"), Some(Value::F64(1.5)));
         assert_eq!(find("big"), Some(Value::F64(18_446_744_073_709_551_615.0)));
+        assert_eq!(find("duplicate"), Some(Value::from("last")));
         assert_eq!(
             scalar::<AnyValue>("k", Json::from("v")).expect("string"),
             AnyValue::from("v".to_owned())
