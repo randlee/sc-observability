@@ -2,7 +2,8 @@
 //! drops one synchronous client per call with the GIL released.
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyFloat, PyInt, PyString};
-use sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL;
+use crate::{internal_failure, result_json, unavailable_failure};
+use sc_observability_dto::{Failure, boundary_diagnostic};
 use sc_observability_otlp::api::logs::{AnyValue, LogRecord as _, Severity};
 use sc_observability_otlp::api::trace::{
     SpanContext, SpanId, SpanKind, Status, TraceFlags, TraceId, TraceState,
@@ -10,6 +11,7 @@ use sc_observability_otlp::api::trace::{
 use sc_observability_otlp::api::{InstrumentationScope, KeyValue, Value};
 use sc_observability_otlp::error_codes::{TELEMETRY_EXPORT_FAILED, sync as codes};
 use sc_observability_otlp::sdk::Resource;
+use sc_observability_otlp::sdk::error::OTelSdkError;
 use sc_observability_otlp::sdk::trace::{SpanData, SpanEvents, SpanLinks};
 use sc_observability_otlp::sync::{Client, SyncError, check_input_limits};
 use std::{
@@ -26,9 +28,6 @@ mod tests;
 const DEFAULT_ENDPOINT: &str = "http://localhost:4318";
 const ENDPOINT_ENV: &str = "OTEL_EXPORTER_OTLP_ENDPOINT";
 const SCOPE_NAME: &str = "sc_observability";
-
-/// An expected failure as `(kind, code, message)`; `None` means exported.
-pub(super) type Failure = Option<(&'static str, String, String)>;
 
 #[derive(FromPyObject)]
 #[pyo3(from_item_all)]
@@ -128,35 +127,37 @@ enum Signal {
 
 /// Exports one log record.
 #[pyfunction]
-pub(super) fn send_log(py: Python<'_>, config: Config, fields: LogFields<'_>) -> Failure {
-    run(py, config, || log(fields).map(Signal::Log))
+pub(super) fn send_log(py: Python<'_>, config: Config, fields: LogFields<'_>) -> String {
+    run(py, config, "send_log", || log(fields).map(Signal::Log))
 }
 
 /// Exports one completed span.
 #[pyfunction]
-pub(super) fn send_span(py: Python<'_>, config: Config, fields: SpanFields<'_>) -> Failure {
-    run(py, config, || {
+pub(super) fn send_span(py: Python<'_>, config: Config, fields: SpanFields<'_>) -> String {
+    run(py, config, "send_span", || {
         span(fields).map(|span| Signal::Span(Box::new(span)))
     })
 }
 
 /// Exports one metric measurement.
 #[pyfunction]
-pub(super) fn send_metric(py: Python<'_>, config: Config, fields: MetricFields<'_>) -> Failure {
-    run(py, config, || metric(fields).map(Signal::Metric))
+pub(super) fn send_metric(py: Python<'_>, config: Config, fields: MetricFields<'_>) -> String {
+    run(py, config, "send_metric", || metric(fields).map(Signal::Metric))
 }
 
+/// Returns the ADR-014 `Result[None]` wire envelope.
 fn run(
     py: Python<'_>,
     config: Config,
+    operation: &str,
     prepare: impl FnOnce() -> Result<Signal, SyncError>,
-) -> Failure {
+) -> String {
     let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
         let signal = prepare()?;
         py.detach(move || export(config, signal))
     }));
-    match outcome {
-        Ok(result) => result.err().map(|error| failure(&error)),
+    result_json(match outcome {
+        Ok(result) => result.map_err(|error| failure(operation, &error)),
         Err(payload) => {
             let cause = payload
                 .downcast_ref::<String>()
@@ -167,24 +168,32 @@ fn run(
                         .map(|text| (*text).to_owned())
                 })
                 .unwrap_or_else(|| "non-string panic payload".into());
-            Some((
-                "internal",
-                SC_OBSERVABILITY_BINDING_INTERNAL.into(),
-                format!("native telemetry call panicked: {cause}"),
-            ))
+            Err(internal_failure(format!(
+                "native telemetry call panicked: {cause}"
+            )))
         }
-    }
+    })
 }
 
-/// Display text only: the client redacts header values and URL userinfo there.
-fn failure(error: &SyncError) -> (&'static str, String, String) {
+/// Projects a client failure, keeping its registry code. `field` names the
+/// rejected native argument. Display text only: the client redacts header
+/// values and URL userinfo there.
+fn failure(operation: &str, error: &SyncError) -> Failure {
     match error {
-        SyncError::Validation { code, .. } => ("validation", (*code).into(), error.to_string()),
-        SyncError::Export(_) => (
-            "export",
-            TELEMETRY_EXPORT_FAILED.as_str().into(),
-            error.to_string(),
-        ),
+        SyncError::Validation { code, .. } => Failure::Validation {
+            diagnostic: Box::new(boundary_diagnostic(code, error.to_string())),
+            field: if *code == codes::INVALID_CONFIG { "config" } else { "fields" }.into(),
+        },
+        SyncError::Export(OTelSdkError::Timeout(_)) => Failure::Timeout {
+            diagnostic: Box::new(boundary_diagnostic(
+                TELEMETRY_EXPORT_FAILED.as_str(),
+                error.to_string(),
+            )),
+            operation: operation.into(),
+        },
+        SyncError::Export(_) => {
+            unavailable_failure(TELEMETRY_EXPORT_FAILED.as_str(), error.to_string())
+        }
     }
 }
 

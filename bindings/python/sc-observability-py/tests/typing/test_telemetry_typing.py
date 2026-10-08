@@ -4,18 +4,18 @@ from __future__ import annotations
 from pathlib import Path
 from typing import NoReturn
 
-from sc_observability import Ok, Telemetry, TelemetryErr, TelemetryResult
+from sc_observability import Err, Ok, Result, Telemetry
 
 
 def _unreachable(value: NoReturn) -> NoReturn:
     raise AssertionError(f"unreachable telemetry result: {value}")
 
 
-def render(result: TelemetryResult) -> str:
+def render(result: Result[None]) -> str:
     match result:
         case Ok():
             return "exported"
-        case TelemetryErr(error=error):
+        case Err(error=error):
             return f"{error.kind}:{error.code}:{error.message}"
         case unreachable:
             return _unreachable(unreachable)

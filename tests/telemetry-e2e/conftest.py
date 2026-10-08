@@ -413,7 +413,7 @@ def run_cli(artifacts: dict[str, Path], *args: str, cwd: Path) -> subprocess.Com
 PYTHON_DRIVER = """\
 import json
 import sys
-from sc_observability import Ok, Telemetry, TelemetryErr
+from sc_observability import Err, Ok, Telemetry
 
 request = json.load(sys.stdin)
 telemetry = Telemetry(request["endpoint"], service_name=request["service"], timeout_s=request["timeout_s"])
@@ -421,7 +421,7 @@ result = getattr(telemetry, request["operation"])(*request["args"], **request["k
 if isinstance(result, Ok):
     print(json.dumps({"ok": True, "value": result.value}))
 else:
-    assert isinstance(result, TelemetryErr), result
+    assert isinstance(result, Err), result
     print(json.dumps({"ok": False, "kind": result.error.kind, "code": result.error.code}))
 """
 

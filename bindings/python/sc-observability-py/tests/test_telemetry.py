@@ -22,7 +22,7 @@ pytestmark = pytest.mark.skipif(
     reason="requires an installed sc-observability wheel",
 )
 
-from sc_observability import Ok, Telemetry, TelemetryErr, TelemetryResult
+from sc_observability import Err, Ok, Result, Telemetry
 
 TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736"
 SPAN_ID = "00f067aa0ba902b7"
@@ -88,12 +88,12 @@ def rejecting(monkeypatch: pytest.MonkeyPatch) -> Iterator[Collector]:
         receiver.close()
 
 
-def _ok(result: TelemetryResult) -> None:
+def _ok(result: Result[None]) -> None:
     assert isinstance(result, Ok) and result.value is None, result
 
 
-def _failure(result: TelemetryResult, kind: str, code: str) -> str:
-    assert isinstance(result, TelemetryErr), result
+def _failure(result: Result[None], kind: str, code: str) -> str:
+    assert isinstance(result, Err), result
     assert (result.error.kind, result.error.code) == (kind, code), result
     return result.error.message
 
@@ -135,7 +135,7 @@ def test_metric_uses_the_environment_endpoint(collector: Collector, monkeypatch:
 def test_rejected_export_is_tagged_and_redacted(rejecting: Collector) -> None:
     endpoint = rejecting.endpoint.replace("http://", "http://user:userinfo-password@")
     message = _failure(Telemetry(endpoint, headers={"authorization": SECRET}).log("rejected"),
-                       "export", "SC_OBSERVABILITY_OTLP_EXPORT_FAILED")
+                       "unavailable", "SC_OBSERVABILITY_OTLP_EXPORT_FAILED")
     assert len(rejecting.requests) == 1
     assert SECRET not in message and "userinfo-password" not in message
 
@@ -175,7 +175,7 @@ def test_invalid_configuration_is_tagged_and_sends_nothing(collector: Collector,
 
 def test_invalid_instrument_name_records_nothing(collector: Collector) -> None:
     result = Telemetry(collector.endpoint).metric("1-not-an-instrument-name", "counter", 1)
-    assert isinstance(result, TelemetryErr) and result.error.kind == "validation", result
+    assert isinstance(result, Err) and result.error.kind == "validation", result
     assert collector.requests == []
 
 
@@ -190,8 +190,7 @@ def test_wrong_argument_types_are_programmer_errors() -> None:
 def test_unavailable_native_extension_is_an_internal_failure() -> None:
     with patch("sc_observability.telemetry.importlib.import_module", side_effect=ImportError("missing")):
         result = Telemetry().log("x")
-    assert isinstance(result, TelemetryErr)
-    assert (result.error.kind, result.error.code) == ("internal", "SC_OBSERVABILITY_BINDING_INTERNAL")
+    _failure(result, "internal", "SC_OBSERVABILITY_BINDING_INTERNAL")
 
 
 def test_blocked_export_releases_the_gil_and_returns_a_tagged_failure() -> None:
@@ -202,7 +201,7 @@ def test_blocked_export_releases_the_gil_and_returns_a_tagged_failure() -> None:
     try:
         with socket.create_server(("127.0.0.1", 0)) as server:
             endpoint = f"http://127.0.0.1:{server.getsockname()[1]}"
-            results: list[TelemetryResult] = []
+            results: list[Result[None]] = []
             done = threading.Event()
 
             def send() -> None:
@@ -221,6 +220,6 @@ def test_blocked_export_releases_the_gil_and_returns_a_tagged_failure() -> None:
         assert done.wait(30), "send did not finish after the collector closed the connection"
         worker.join(timeout=30)
         assert len(results) == 1
-        _failure(results[0], "export", "SC_OBSERVABILITY_OTLP_EXPORT_FAILED")
+        _failure(results[0], "unavailable", "SC_OBSERVABILITY_OTLP_EXPORT_FAILED")
     finally:
         faulthandler.cancel_dump_traceback_later()

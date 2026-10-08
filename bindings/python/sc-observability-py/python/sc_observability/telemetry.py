@@ -5,35 +5,16 @@ exporter reports its result; nothing is stored or retried after the call.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import importlib
 from os import PathLike, fspath
 from typing import Any, Literal, Mapping, TypeAlias
 
-from . import Ok, generated
+from . import Err, Result, _decode_control, _foreign_message, _internal
 
 AttributeValue: TypeAlias = str | bool | int | float
 Severity: TypeAlias = Literal["trace", "debug", "info", "warn", "error", "fatal"]
 SpanKind: TypeAlias = Literal["internal", "server", "client", "producer", "consumer"]
 MetricKind: TypeAlias = Literal["counter", "up_down_counter", "gauge", "histogram"]
-
-
-@dataclass(frozen=True)
-class TelemetryFailure:
-    """``validation``: rejected before export; ``export``: the exporter failed."""
-
-    kind: Literal["validation", "export", "internal"]
-    code: str
-    message: str
-
-
-@dataclass(frozen=True)
-class TelemetryErr:
-    error: TelemetryFailure
-    kind: Literal["error"] = field(default="error", init=False)
-
-
-TelemetryResult: TypeAlias = Ok[None] | TelemetryErr
 
 
 def _attributes(attributes: Mapping[str, AttributeValue] | None) -> list[tuple[str, AttributeValue]]:
@@ -53,6 +34,11 @@ class Telemetry:
     ``timeout_s`` bounds connecting, each request and the exporter's retries
     (default 3 seconds). ``service_name`` defaults to ``OTEL_SERVICE_NAME``.
     Blocking export releases the GIL.
+
+    Each call returns ``Ok(None)`` or ``Err`` with a shared ``Failure``:
+    ``validation`` for rejected input, ``timeout`` when the exporter deadline
+    passed, ``unavailable`` for other export failures, ``internal`` for
+    binding failures. Codes come from the OTLP error registry.
     """
 
     def __init__(self, endpoint: str | None = None, *, headers: Mapping[str, str] | None = None,
@@ -68,7 +54,7 @@ class Telemetry:
 
     def log(self, body: str, *, severity: Severity = "info", trace_id: str | None = None,
             span_id: str | None = None,
-            attributes: Mapping[str, AttributeValue] | None = None) -> TelemetryResult:
+            attributes: Mapping[str, AttributeValue] | None = None) -> Result[None]:
         """Export one log record; ``trace_id`` and ``span_id`` go together."""
         return self._send("send_log", {
             "body": body, "severity": severity, "trace_id": trace_id, "span_id": span_id,
@@ -79,7 +65,7 @@ class Telemetry:
              parent_span_id: str | None = None, kind: SpanKind = "internal",
              start_time_unix_nano: int | None = None, end_time_unix_nano: int | None = None,
              ok: bool = False, error: str | None = None,
-             attributes: Mapping[str, AttributeValue] | None = None) -> TelemetryResult:
+             attributes: Mapping[str, AttributeValue] | None = None) -> Result[None]:
         """Export one completed span; missing ids are random and times default to now."""
         return self._send("send_span", {
             "name": name, "trace_id": trace_id, "span_id": span_id, "parent_span_id": parent_span_id,
@@ -90,20 +76,16 @@ class Telemetry:
 
     def metric(self, name: str, kind: MetricKind, value: float, *, unit: str | None = None,
                description: str | None = None,
-               attributes: Mapping[str, AttributeValue] | None = None) -> TelemetryResult:
+               attributes: Mapping[str, AttributeValue] | None = None) -> Result[None]:
         """Export one measurement; counter and histogram values must not be negative."""
         return self._send("send_metric", {
             "name": name, "kind": kind, "value": value, "unit": unit, "description": description,
             "attributes": _attributes(attributes),
         })
 
-    def _send(self, function: str, fields: Mapping[str, Any]) -> TelemetryResult:
+    def _send(self, function: str, fields: Mapping[str, Any]) -> Result[None]:
         try:
             native = importlib.import_module("sc_observability._native")
         except Exception as error:
-            return TelemetryErr(TelemetryFailure("internal", generated.SC_OBSERVABILITY_BINDING_INTERNAL,
-                                                 f"native extension unavailable: {error}"))
-        failure = getattr(native, function)(self._config, fields)
-        if failure is None:
-            return Ok(None)
-        return TelemetryErr(TelemetryFailure(*failure))
+            return Err(_internal(f"native extension unavailable: {_foreign_message(error)}"))
+        return _decode_control(getattr(native, function)(self._config, fields))

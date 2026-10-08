@@ -29,8 +29,8 @@ from typing import Any, Iterable, Mapping
 
 import yaml
 
-from sc_observability import Ok
-from sc_observability.telemetry import Telemetry, TelemetryErr
+from sc_observability import Err, Ok
+from sc_observability.telemetry import Telemetry
 
 SOURCE_KINDS = ("sanity", "qa", "finding-counts")
 
@@ -343,7 +343,7 @@ class Importer:
                 result = getattr(self.telemetry, call.method)(*call.args, **call.kwargs)
             except Exception:
                 return ("telemetry", "EXPORT_EXCEPTION")
-            if isinstance(result, TelemetryErr):
+            if isinstance(result, Err):
                 return (result.error.kind, result.error.code)
             if not isinstance(result, Ok):
                 return ("telemetry", "UNEXPECTED_RESULT")

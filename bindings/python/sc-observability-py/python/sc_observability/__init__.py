@@ -688,12 +688,12 @@ def get_host_logger() -> Result[AttachedLogger]:
 
 
 from .async_logging import LogReceipt, ReceiptState, Resolved
-from .telemetry import Telemetry, TelemetryErr, TelemetryFailure, TelemetryResult
+from .telemetry import Telemetry
 
 
 __all__ = [
     "LogReceipt", "ReceiptState", "Resolved",
     "AttachedLogger", "Err", "FieldMatch", "LogEvent", "Logger", "LoggerConfig",
     "LogQuery", "Ok", "Result", "TraceContext", "create_logger", "get_host_logger",
-    "Telemetry", "TelemetryErr", "TelemetryFailure", "TelemetryResult",
+    "Telemetry",
 ]

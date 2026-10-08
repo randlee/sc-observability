@@ -109,7 +109,7 @@ class WheelsRunnerTests(unittest.TestCase):
         self.assertIn("telemetry.span(", probe)
         self.assertIn("telemetry.metric(", probe)
         self.assertIn('rejected.error.kind != "validation"', probe)
-        self.assertIn("TelemetryErr", probe)
+        self.assertIn("isinstance(rejected, Err)", probe)
 
     @mock.patch.object(run, "run_checked")
     def test_installed_runtime_tests_use_the_real_owned_and_async_suites_under_strict_diagnostics(

@@ -175,9 +175,9 @@ def test_unavailable_endpoint_fails_in_both_frontends(
         for name in ("cli", "python")
     }
     # CLI exit 7 is an export failure; 3 would be a validation failure.  The
-    # Python call reports a TelemetryErr whose kind is ``export``.
+    # Python call reports an ``Err`` whose failure kind is ``unavailable``.
     assert outcomes["cli"].cli("log", "--body", "never delivered", timeout=1) == 7
     refused = outcomes["python"].python("log", ["never delivered"], {}, timeout_s=1)
-    assert refused == {"ok": False, "kind": "export", "code": refused["code"]}
+    assert refused == {"ok": False, "kind": "unavailable", "code": refused["code"]}
     assert refused["code"] == "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
     assert refusing_endpoint.accepted >= 2, "both frontends must have reached the listener and been cut off"

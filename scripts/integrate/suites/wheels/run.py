@@ -117,9 +117,9 @@ import json
 import pathlib
 import sys
 from sc_observability import (
+    Err,
     Ok,
     Telemetry,
-    TelemetryErr,
 )
 import sc_observability
 import sc_observability._native as native
@@ -141,12 +141,12 @@ for operation, result in (
     ("span", telemetry.span("installed telemetry")),
     ("metric", telemetry.metric("installed.telemetry", "counter", 1.0)),
 ):
-    if not isinstance(result, (Ok, TelemetryErr)):
+    if not isinstance(result, (Ok, Err)):
         raise SystemExit(f"installed telemetry {operation} returned an untyped outcome: {result!r}")
 # Validation fails before any network use, so this outcome never depends on the host.
 rejected = telemetry.log("installed telemetry", severity="loud")
-if not isinstance(rejected, TelemetryErr) or rejected.error.kind != "validation":
-    raise SystemExit(f"installed telemetry invalid severity did not return a validation TelemetryErr: {rejected!r}")
+if not isinstance(rejected, Err) or rejected.error.kind != "validation":
+    raise SystemExit(f"installed telemetry invalid severity did not return a validation Err: {rejected!r}")
 print(json.dumps({"prefix": sys.prefix, **{key: str(value) for key, value in origins.items()}}, sort_keys=True))
 '''
 

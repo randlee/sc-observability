@@ -14,8 +14,8 @@ from typing import Iterator
 
 import pytest
 
-from sc_observability import Ok
-from sc_observability.telemetry import Telemetry, TelemetryErr, TelemetryFailure
+from sc_observability import Err, Ok, generated
+from sc_observability.telemetry import Telemetry
 
 from import_sanity import Importer, Source, _checkpoint_key, _trace_id
 
@@ -23,8 +23,12 @@ EXPORT_FAILED = "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
 INVALID_RECORD = "SC_OBSERVABILITY_OTLP_SYNC_INVALID_RECORD"
 
 
-def _err(kind: str, code: str) -> TelemetryErr:
-    return TelemetryErr(TelemetryFailure(kind, code, f"{kind} failure"))
+def _err(kind: str, code: str) -> Err:
+    extra = {"validation": {"field": "fields"}, "timeout": {"operation": "send_span"}}.get(kind, {})
+    return Err(generated.from_wire("OutputFailure", {
+        "kind": kind, "at": "2026-01-01T00:00:00Z", "code": code, "message": f"{kind} failure",
+        "remediation": {"kind": "recoverable", "steps": ["retry"]}, **extra,
+    }))
 
 
 class RecordingTelemetry:
@@ -131,9 +135,9 @@ def test_rotation_restarts_without_loss(tmp_path: Path) -> None:
     assert checkpoint["inode"] == source.stat().st_ino and checkpoint["offset"] == source.stat().st_size
 
 
-@pytest.mark.parametrize("kind", ["export", "internal"])
+@pytest.mark.parametrize("kind", ["unavailable", "timeout", "internal"])
 def test_checkpoint_not_advanced_on_export_or_internal_failure(tmp_path: Path, kind: str) -> None:
-    code = EXPORT_FAILED if kind == "export" else "SC_OBSERVABILITY_BINDING_INTERNAL"
+    code = "SC_OBSERVABILITY_BINDING_INTERNAL" if kind == "internal" else EXPORT_FAILED
     importer, source, spec, telemetry = _importer(tmp_path, contents=_row(1) + "\n")
     assert importer.import_source(spec).exported == 1
     checkpoint_before = importer.checkpoint_path.read_bytes()
@@ -286,13 +290,13 @@ def test_main_reports_counted_failure_with_status_one(tmp_path: Path, monkeypatc
             pass
 
         def run_once(self):
-            return import_sanity.Report(failures=[("export", EXPORT_FAILED)])
+            return import_sanity.Report(failures=[("unavailable", EXPORT_FAILED)])
 
     monkeypatch.setattr(import_sanity, "Telemetry", lambda *args, **kwargs: RecordingTelemetry())
     monkeypatch.setattr(import_sanity, "Importer", FakeImporter)
     assert import_sanity.main(["import", "--config", str(config)]) == 1
     assert json.loads(capsys.readouterr().out) == {
-        "exported": 0, "skipped_invalid": 0, "failures": [["export", EXPORT_FAILED]],
+        "exported": 0, "skipped_invalid": 0, "failures": [["unavailable", EXPORT_FAILED]],
     }
 
 

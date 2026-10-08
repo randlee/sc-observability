@@ -16,7 +16,7 @@ fn config(timeout_s: Option<f64>, root_certificate: Option<PathBuf>) -> Config {
 
 /// The registry code of an expected failure.
 fn code<T>(result: Result<T, SyncError>) -> String {
-    failure(&expect_err(result)).1
+    failure("send_log", &expect_err(result)).diagnostic().code.clone()
 }
 
 fn log_fields<'py>(
@@ -41,18 +41,38 @@ fn expect_err<T>(result: Result<T, SyncError>) -> SyncError {
 }
 
 #[test]
-fn validation_keeps_its_code_and_export_uses_the_registered_export_code() {
-    let (kind, code, message) = failure(&SyncError::validation(codes::INVALID_RECORD, "bad"));
-    assert_eq!((kind, code.as_str()), ("validation", codes::INVALID_RECORD));
-    assert!(message.contains("bad"));
-    let (kind, code, message) = failure(&SyncError::Export(OTelSdkError::InternalFailure(
-        "refused".into(),
-    )));
+fn failures_project_to_the_shared_failure_union_with_registry_codes() {
+    let Failure::Validation { diagnostic, field } =
+        failure("send_log", &SyncError::validation(codes::INVALID_RECORD, "bad"))
+    else {
+        std::panic::panic_any("record rejection must be a validation failure");
+    };
+    assert_eq!((diagnostic.code.as_str(), field.as_str()), (codes::INVALID_RECORD, "fields"));
+    assert!(diagnostic.message.contains("bad"));
+    let Failure::Validation { field, .. } =
+        failure("send_log", &SyncError::validation(codes::INVALID_CONFIG, "bad"))
+    else {
+        std::panic::panic_any("config rejection must be a validation failure");
+    };
+    assert_eq!(field, "config");
+    let Failure::Unavailable { diagnostic } = failure(
+        "send_span",
+        &SyncError::Export(OTelSdkError::InternalFailure("refused".into())),
+    ) else {
+        std::panic::panic_any("a refused export must be unavailable");
+    };
+    assert_eq!(diagnostic.code, TELEMETRY_EXPORT_FAILED.as_str());
+    assert!(diagnostic.message.contains("refused"));
+    let Failure::Timeout { diagnostic, operation } = failure(
+        "send_metric",
+        &SyncError::Export(OTelSdkError::Timeout(Duration::from_secs(3))),
+    ) else {
+        std::panic::panic_any("an exporter deadline must be a timeout");
+    };
     assert_eq!(
-        (kind, code.as_str()),
-        ("export", TELEMETRY_EXPORT_FAILED.as_str())
+        (diagnostic.code.as_str(), operation.as_str()),
+        (TELEMETRY_EXPORT_FAILED.as_str(), "send_metric")
     );
-    assert!(message.contains("refused"));
 }
 
 #[test]
