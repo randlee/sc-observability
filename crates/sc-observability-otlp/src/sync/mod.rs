@@ -316,11 +316,9 @@ impl Client {
                 format!("endpoint is not an absolute URL: {error}"),
             )
         })?;
-        if !url.username().is_empty() {
-            secrets.push(url.username().to_owned());
-        }
+        register_url_userinfo_secret(&mut secrets, url.username());
         if let Some(password) = url.password() {
-            secrets.push(password.to_owned());
+            register_url_userinfo_secret(&mut secrets, password);
         }
         if !matches!(url.scheme(), "http" | "https")
             || url.query().is_some()
@@ -346,7 +344,9 @@ impl Client {
     /// `https` endpoints or trusted loopback/local collectors.
     ///
     /// Header values are treated as credentials and never appear in error
-    /// text or `Debug` output.
+    /// text or `Debug` output. Each whitespace-delimited token is redacted as
+    /// well, so a short token can over-redact unrelated diagnostic text; avoid
+    /// short header values for credentials.
     ///
     /// # Errors
     ///
@@ -367,8 +367,9 @@ impl Client {
             )
         })?;
         header_value.set_sensitive(true);
-        if !value.is_empty() {
-            self.secrets.push(value.to_owned());
+        register_secret(&mut self.secrets, value);
+        for token in value.split_whitespace() {
+            register_secret(&mut self.secrets, token);
         }
         self.headers.insert(name, header_value);
         Ok(self)
@@ -614,13 +615,60 @@ impl Client {
         })
     }
 
-    /// Removes configured credentials and any URL user information.
+    /// Removes configured credentials.
     fn redact(&self, text: &str) -> String {
         let mut redacted = text.to_owned();
         for secret in &self.secrets {
             redacted = redacted.replace(secret.as_str(), REDACTED);
         }
-        redact_url_userinfo(&redacted)
+        redacted
+    }
+}
+
+fn register_secret(secrets: &mut Vec<String>, secret: &str) {
+    if !secret.is_empty() && !secrets.iter().any(|configured| configured == secret) {
+        secrets.push(secret.to_owned());
+    }
+}
+
+fn register_url_userinfo_secret(secrets: &mut Vec<String>, secret: &str) {
+    register_secret(secrets, secret);
+    let decoded = decode_url_userinfo(secret);
+    register_secret(secrets, decoded.as_ref());
+}
+
+fn decode_url_userinfo(secret: &str) -> std::borrow::Cow<'_, str> {
+    let bytes = secret.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    let mut changed = false;
+    while index < bytes.len() {
+        if bytes[index] == b'%'
+            && index + 2 < bytes.len()
+            && let (Some(high), Some(low)) =
+                (hex_value(bytes[index + 1]), hex_value(bytes[index + 2]))
+        {
+            decoded.push((high << 4) | low);
+            index += 3;
+            changed = true;
+            continue;
+        }
+        decoded.push(bytes[index]);
+        index += 1;
+    }
+    if changed {
+        std::borrow::Cow::Owned(String::from_utf8_lossy(&decoded).into_owned())
+    } else {
+        std::borrow::Cow::Borrowed(secret)
+    }
+}
+
+const fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
     }
 }
 
@@ -664,31 +712,6 @@ fn validate_span(span: &sdk::trace::SpanData) -> Result<(), SyncError> {
         return invalid("span link requires non-zero trace and span ids");
     }
     Ok(())
-}
-
-/// Replaces `user:password@` after every `://` with the redaction marker.
-fn redact_url_userinfo(text: &str) -> String {
-    let mut output = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(index) = rest.find("://") {
-        let (head, tail) = rest.split_at(index + 3);
-        output.push_str(head);
-        let authority_end = tail
-            .find(|c: char| {
-                matches!(c, '/' | '?' | '#') || c.is_whitespace() || "\"'()<>".contains(c)
-            })
-            .unwrap_or(tail.len());
-        let authority = &tail[..authority_end];
-        if let Some(at) = authority.rfind('@') {
-            output.push_str(REDACTED);
-            output.push_str(&authority[at..]);
-        } else {
-            output.push_str(authority);
-        }
-        rest = &tail[authority_end..];
-    }
-    output.push_str(rest);
-    output
 }
 
 /// Shared state between [`Client::send_metrics`] and its exporter delegate.

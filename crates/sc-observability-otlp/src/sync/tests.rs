@@ -31,8 +31,8 @@ use opentelemetry_sdk::trace::{SpanData, SpanEvents, SpanLinks};
 use prost::Message;
 
 use super::{
-    Client, DEFAULT_OTLP_ENDPOINT, SyncError, check_input_limits, parse_span_id, parse_trace_id,
-    resolve_endpoint_with,
+    Client, DEFAULT_OTLP_ENDPOINT, REDACTED, SyncError, check_input_limits, parse_span_id,
+    parse_trace_id, resolve_endpoint_with,
 };
 use crate::constants::{MAX_BATCH_RECORDS, MAX_INPUT_BYTES};
 use crate::error_codes::sync as codes;
@@ -851,10 +851,14 @@ fn invalid_configuration_is_rejected() {
 #[test]
 fn credentials_never_appear_in_failure_text() {
     const TOKEN: &str = "s3cr3t-token-value";
-    const PASSWORD: &str = "hunter2-password";
-    // The collector echoes the credential back in its error body.
-    let collector = Collector::start(Reply::Status(401, "rejected Bearer s3cr3t-token-value"));
-    let endpoint = format!("http://otlp-user:{PASSWORD}@{}", collector.address);
+    const ENCODED_PASSWORD: &str = "hunter2%2Dpassword";
+    const DECODED_PASSWORD: &str = "hunter2-password";
+    // The collector echoes only the bare header token and decoded URL password.
+    let collector = Collector::start(Reply::Status(
+        401,
+        "rejected s3cr3t-token-value hunter2-password",
+    ));
+    let endpoint = format!("http://otlp-user:{ENCODED_PASSWORD}@{}", collector.address);
     let mut client = Client::new(&endpoint)
         .and_then(|client| client.with_header("authorization", &format!("Bearer {TOKEN}")))
         .expect("client");
@@ -871,9 +875,20 @@ fn credentials_never_appear_in_failure_text() {
         rendered.push(cause.to_string());
         source = cause.source();
     }
+    assert!(
+        rendered.iter().any(|text| text.contains(REDACTED)),
+        "the collector's echoed credentials should be redacted"
+    );
     for text in rendered {
         assert!(!text.contains(TOKEN), "token leaked: {text}");
-        assert!(!text.contains(PASSWORD), "password leaked: {text}");
+        assert!(
+            !text.contains(DECODED_PASSWORD),
+            "decoded password leaked: {text}"
+        );
+        assert!(
+            !text.contains(ENCODED_PASSWORD),
+            "encoded password leaked: {text}"
+        );
         assert!(!text.contains("otlp-user"), "user name leaked: {text}");
     }
     let requests = collector.requests();
