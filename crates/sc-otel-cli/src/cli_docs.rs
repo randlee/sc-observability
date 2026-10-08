@@ -56,14 +56,14 @@ fn reference() -> (String, String) {
     );
     for (name, _) in &pages {
         let anchor = name.replace(' ', "-");
-        writeln!(markdown, "- [{name}](#{anchor})").unwrap();
+        writeln!(markdown, "- [{name}](#{anchor})").expect("writing to String cannot fail");
         writeln!(
             html,
             "<li><a href=\"{}\">{}</a></li>",
             escape(&format!("#{anchor}")),
             escape(name)
         )
-        .unwrap();
+        .expect("writing to String cannot fail");
     }
     markdown.push('\n');
     html.push_str("</ul></nav>\n");
@@ -73,7 +73,7 @@ fn reference() -> (String, String) {
             "## {name}\n\n```text\n{}```\n",
             help.trim_end().to_owned() + "\n"
         )
-        .unwrap();
+        .expect("writing to String cannot fail");
         writeln!(
             html,
             "<section id=\"{}\"><h2>{}</h2><pre>{}</pre></section>",
@@ -81,7 +81,7 @@ fn reference() -> (String, String) {
             escape(&name),
             escape(help.trim_end())
         )
-        .unwrap();
+        .expect("writing to String cannot fail");
     }
     html.push_str("</main>\n</body>\n</html>\n");
     (markdown, html)
