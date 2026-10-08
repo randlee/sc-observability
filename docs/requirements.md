@@ -746,6 +746,14 @@ and ADR-023; historical text and unrelated logging obligations remain intact.
   or a required new ATM dependency.
 - H-008 File plus OTel simultaneous logging is the only new capability. Each
   sprint shall list any added wrapper and its necessity; default is none.
+  H-1's only approved private adapters are `FlushOnlyExporter`/`FlushGate`,
+  which limit metric export to the explicit flush, suppress a second export
+  during shutdown after a caller-recording error, and detect an empty metric
+  recording; and `ExplicitHeaders`, which reapplies explicit application
+  headers after exporter-provided environment headers so explicit values win.
+  These adapters do not add a public exporter, provider or reader facade, and
+  no additional wrapper is authorized. Their implementation rationale is
+  recorded in ADR-023 and the h-1 sprint contract.
   Phase H shall finish with net deletion of source code, report actual
   added/deleted source and test lines separately, and preserve relevant tests.
   Use one git diff --numstat excluding generated paths and require a negative

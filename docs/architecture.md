@@ -1854,7 +1854,14 @@ No transport implementation or runtime dependency enters the types layer.
   OpenTelemetry dependencies (ADR-004/009 unchanged). A single workspace pin
   selects 0.33.0. `synchronous-client` selects official HTTP/protobuf,
   reqwest-blocking-client and rustls; a standard executor drives blocking
-  export. No bespoke worker, reader adapter, retry queue or request DTO.
+  export. No bespoke worker, custom reader implementation, retry queue or
+  request DTO. H-1 retains only two narrowly scoped private adapters: the
+  `FlushOnlyExporter`/`FlushGate` pair gates the official metric exporter to
+  the explicit flush, prevents a second export during shutdown after a
+  caller-recording error, and detects an empty metric recording; `ExplicitHeaders`
+  reapplies explicit application headers after exporter-provided environment
+  headers so explicit values win. Neither adapter adds a public exporter,
+  provider or reader facade, and no other wrapper is authorized.
   Metric sends take a closure over the native Meter; the SDK owns provider,
   resource, reader and flush. Flush reports failure but coarsens its cause in
   0.33.0. One small SyncError distinguishes Validation from Export and preserves
