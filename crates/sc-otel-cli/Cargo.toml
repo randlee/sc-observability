@@ -21,11 +21,6 @@ serde_json.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-# Loopback TLS collector and its in-process certificate for the trusted-root
-# export test.
-rcgen = "=0.14.10"
-rustls = { version = "=0.23.45", features = ["ring"] }
-time.workspace = true
 
 [lints]
 workspace = true

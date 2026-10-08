@@ -1711,12 +1711,9 @@ name = "sc-otel-cli"
 version = "1.6.0"
 dependencies = [
  "clap",
- "rcgen",
- "rustls",
  "sc-observability-otlp",
  "serde_json",
  "tempfile",
- "time",
 ]
 
 [[package]]
