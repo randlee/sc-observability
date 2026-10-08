@@ -190,10 +190,10 @@ pub fn resolve_endpoint(explicit: Option<&str>) -> Result<Cow<'_, str>, SyncErro
     resolve_endpoint_with(explicit, || std::env::var(OTLP_ENDPOINT_ENV))
 }
 
-fn resolve_endpoint_with<'a>(
-    explicit: Option<&'a str>,
+fn resolve_endpoint_with(
+    explicit: Option<&str>,
     read_env: impl FnOnce() -> Result<String, std::env::VarError>,
-) -> Result<Cow<'a, str>, SyncError> {
+) -> Result<Cow<'_, str>, SyncError> {
     if let Some(endpoint) = explicit {
         return Ok(Cow::Borrowed(endpoint));
     }
