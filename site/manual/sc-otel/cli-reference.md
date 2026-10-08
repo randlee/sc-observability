@@ -177,7 +177,7 @@ Options:
           Bound connecting, each request and the exporter's retries, in whole seconds greater than zero. Defaults to 3 seconds
 
       --parent-span-id <HEX>
-          Parent span id (16 hex digits). Requires --trace-id
+          Remote parent span id (16 hex digits). Requires --trace-id
 
       --root-certificate <FILE>
           Trust the CA certificates in this PEM file in addition to the system roots
@@ -213,7 +213,7 @@ Examples:
   sc-otel span --name build --start-time-unix-nano 1700000000000000000 --end-time-unix-nano 1700000005000000000
   sc-otel span --name deploy --kind client --error 'rollout timed out' --attributes @span.json
 
-Without --trace-id and --span-id the span gets new random ids. Pass the ids of a parent span with --trace-id and --parent-span-id to join an existing trace.
+Without --trace-id and --span-id the span gets new random ids. Pass the ids of a parent span with --trace-id and --parent-span-id to join an existing trace. A parent supplied this way is external to this CLI process and is marked remote.
 ```
 
 ## sc-otel metric

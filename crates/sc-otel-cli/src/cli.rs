@@ -41,7 +41,7 @@ pub(crate) enum Command {
     Log(LogArgs),
     /// Export one completed span.
     #[command(
-        after_long_help = "Examples:\n  sc-otel span --name build --start-time-unix-nano 1700000000000000000 --end-time-unix-nano 1700000005000000000\n  sc-otel span --name deploy --kind client --error 'rollout timed out' --attributes @span.json\n\nWithout --trace-id and --span-id the span gets new random ids. Pass the ids of a parent span with --trace-id and --parent-span-id to join an existing trace."
+        after_long_help = "Examples:\n  sc-otel span --name build --start-time-unix-nano 1700000000000000000 --end-time-unix-nano 1700000005000000000\n  sc-otel span --name deploy --kind client --error 'rollout timed out' --attributes @span.json\n\nWithout --trace-id and --span-id the span gets new random ids. Pass the ids of a parent span with --trace-id and --parent-span-id to join an existing trace. A parent supplied this way is external to this CLI process and is marked remote."
     )]
     Span(SpanArgs),
     /// Export one metric measurement.
@@ -87,7 +87,7 @@ pub(crate) struct SpanArgs {
     /// Span id (16 hex digits). Defaults to a new random id.
     #[arg(long, value_name = "HEX", value_parser = parse_span_id)]
     pub(crate) span_id: Option<SpanId>,
-    /// Parent span id (16 hex digits). Requires --trace-id.
+    /// Remote parent span id (16 hex digits). Requires --trace-id.
     #[arg(long, value_name = "HEX", value_parser = parse_span_id, requires = "trace_id")]
     pub(crate) parent_span_id: Option<SpanId>,
     /// Span kind.

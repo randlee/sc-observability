@@ -7,17 +7,18 @@ use crate::constants::{
 };
 use sc_observability_otlp::api::logs::{AnyValue, LogRecord as _, Severity};
 use sc_observability_otlp::api::trace::{
-    SpanContext, SpanId, SpanKind, Status, TraceFlags, TraceId, TraceState,
+    SpanContext, SpanId, SpanKind, Status, TraceFlags, TraceState,
 };
 use sc_observability_otlp::api::{InstrumentationScope, KeyValue, Value};
 use sc_observability_otlp::constants::MAX_INPUT_BYTES;
 use sc_observability_otlp::error_codes::sync as codes;
 use sc_observability_otlp::sdk::Resource;
-use sc_observability_otlp::sdk::trace::{SpanData, SpanEvents, SpanLinks};
+use sc_observability_otlp::sdk::trace::{
+    IdGenerator, RandomIdGenerator, SpanData, SpanEvents, SpanLinks,
+};
 use sc_observability_otlp::sync::{Client, SyncError, check_input_limits};
 use serde_json::Value as Json;
 use std::{
-    hash::{BuildHasher, RandomState},
     io::Read,
     time::{Duration, SystemTime},
 };
@@ -103,6 +104,7 @@ fn send_log(
 }
 
 fn span(args: &SpanArgs, scope: InstrumentationScope) -> Result<SpanData, SyncError> {
+    let id_generator = RandomIdGenerator::default();
     let end_time = args
         .end_time_unix_nano
         .map_or_else(SystemTime::now, unix_nanos);
@@ -113,10 +115,8 @@ fn span(args: &SpanArgs, scope: InstrumentationScope) -> Result<SpanData, SyncEr
     };
     Ok(SpanData {
         span_context: SpanContext::new(
-            args.trace_id.unwrap_or_else(|| {
-                TraceId::from(u128::from(random()) << 64 | u128::from(random()))
-            }),
-            args.span_id.unwrap_or_else(|| SpanId::from(random())),
+            args.trace_id.unwrap_or_else(|| id_generator.new_trace_id()),
+            args.span_id.unwrap_or_else(|| id_generator.new_span_id()),
             TraceFlags::SAMPLED,
             false,
             TraceState::NONE,
@@ -253,12 +253,6 @@ fn unix_nanos(nanos: u64) -> SystemTime {
     SystemTime::UNIX_EPOCH + Duration::from_nanos(nanos)
 }
 
-/// A non-zero id from the standard library's randomly keyed hasher; each
-/// `RandomState` carries distinct keys.
-fn random() -> u64 {
-    RandomState::new().hash_one(SystemTime::now()).max(1)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -348,11 +342,38 @@ mod tests {
     }
 
     #[test]
-    fn random_ids_are_valid_and_distinct() {
-        let ids = (0..64)
-            .map(|_| random())
-            .collect::<std::collections::HashSet<_>>();
-        assert_eq!(ids.len(), 64);
-        assert!(!ids.contains(&0));
+    fn sdk_generated_ids_and_parent_context_have_the_expected_flags() {
+        use clap::Parser;
+
+        let parse = |args: &[&str]| {
+            let cli = Cli::try_parse_from(std::iter::once("sc-otel").chain(args.iter().copied()))
+                .expect("valid span arguments");
+            let Command::Span(args) = cli.command else {
+                panic!("expected span arguments");
+            };
+            span(&args, InstrumentationScope::builder("test").build()).expect("span data")
+        };
+        let first = parse(&["span", "--name", "first"]);
+        let second = parse(&["span", "--name", "second"]);
+        assert!(first.span_context.is_valid());
+        assert_ne!(
+            first.span_context.trace_id(),
+            second.span_context.trace_id()
+        );
+        assert_ne!(first.span_context.span_id(), second.span_context.span_id());
+        assert_eq!(first.span_context.trace_flags(), TraceFlags::SAMPLED);
+        assert!(!first.parent_span_is_remote);
+
+        let child = parse(&[
+            "span",
+            "--name",
+            "child",
+            "--trace-id",
+            "4bf92f3577b34da6a3ce929d0e0e4736",
+            "--parent-span-id",
+            "00f067aa0ba902b7",
+        ]);
+        assert!(child.parent_span_is_remote);
+        assert_eq!(child.span_context.trace_flags(), TraceFlags::SAMPLED);
     }
 }

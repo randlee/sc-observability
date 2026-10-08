@@ -39,7 +39,9 @@ pub mod sdk {
     /// Native SDK completed-span types.
     pub mod trace {
         #[doc(inline)]
-        pub use opentelemetry_sdk::trace::{SpanData, SpanEvents, SpanLinks};
+        pub use opentelemetry_sdk::trace::{
+            IdGenerator, RandomIdGenerator, SpanData, SpanEvents, SpanLinks,
+        };
     }
 
     /// Native SDK logger provider and record types.
