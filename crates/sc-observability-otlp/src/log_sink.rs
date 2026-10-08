@@ -75,11 +75,14 @@ mod tests;
 /// distinct from the resource's `service.name`. Optional identifiers,
 /// outcome, diagnostic, state transition and process identity become
 /// `sc.observability.log.*` attributes and event fields are added under their
-/// own names. Events whose target is exactly `opentelemetry` or starts with
-/// `opentelemetry::` are SDK diagnostics routed back through a bridge; the sink
-/// drops them so they never recurse into the SDK. Similar application targets
-/// such as `opentelemetry_app`, `opentelemetry_sdk`, and `opentelemetry_otlp`
-/// remain eligible for export.
+/// own names. JSON integers that fit `i64` map to native `Int`; larger
+/// unsigned integers map to `String` holding their exact decimal digits, since
+/// a native `Double` would lose precision; other numbers map to `Double`. JSON
+/// null maps to the native empty map. Events whose target is exactly
+/// `opentelemetry` or starts with `opentelemetry::` are SDK diagnostics routed
+/// back through a bridge; the sink drops them so they never recurse into the
+/// SDK. Similar application targets such as `opentelemetry_app`,
+/// `opentelemetry_sdk`, and `opentelemetry_otlp` remain eligible for export.
 #[derive(Debug)]
 pub struct OtelLogSink {
     logger: SdkLogger,
@@ -223,11 +226,18 @@ fn any_value(value: &Value) -> AnyValue {
         // the native empty-map representation rather than dropping it.
         Value::Null => AnyValue::Map(Box::default()),
         Value::Bool(value) => AnyValue::Boolean(*value),
-        Value::Number(number) => number
-            .as_i64()
-            .map(AnyValue::Int)
-            .or_else(|| number.as_f64().map(AnyValue::Double))
-            .expect("JSON number has an OpenTelemetry scalar representation"),
+        Value::Number(number) => {
+            if let Some(int) = number.as_i64() {
+                AnyValue::Int(int)
+            } else if let Some(unsigned) = number.as_u64() {
+                // Above `i64::MAX`: exact decimal digits, never a lossy double.
+                AnyValue::from(unsigned.to_string())
+            } else {
+                number
+                    .as_f64()
+                    .map_or_else(|| AnyValue::from(number.to_string()), AnyValue::Double)
+            }
+        }
         Value::String(value) => AnyValue::from(value.clone()),
         Value::Array(values) => AnyValue::ListAny(Box::new(values.iter().map(any_value).collect())),
         Value::Object(values) => AnyValue::Map(Box::new(

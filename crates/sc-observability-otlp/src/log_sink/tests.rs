@@ -438,3 +438,24 @@ fn provider_remains_usable_after_the_sink_is_dropped() {
     assert_eq!(exporter.records().len(), 2);
     provider.shutdown().expect("caller shuts the provider down");
 }
+
+#[test]
+fn numbers_map_losslessly_to_native_values() {
+    use serde_json::json;
+
+    use super::any_value;
+
+    assert_eq!(
+        any_value(&json!(u64::MAX)),
+        text("18446744073709551615"),
+        "u64::MAX keeps its exact digits"
+    );
+    assert_eq!(
+        any_value(&json!(9_223_372_036_854_775_808_u64)),
+        text("9223372036854775808"),
+        "the first unsigned value above i64::MAX keeps its exact digits"
+    );
+    assert_eq!(any_value(&json!(i64::MAX)), AnyValue::Int(i64::MAX));
+    assert_eq!(any_value(&json!(i64::MIN)), AnyValue::Int(i64::MIN));
+    assert_eq!(any_value(&json!(0.5)), AnyValue::Double(0.5));
+}
