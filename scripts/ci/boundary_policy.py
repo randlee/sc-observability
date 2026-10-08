@@ -12,6 +12,29 @@ def is_first_party_dependency(name: str) -> bool:
     )
 
 
+HOME_DISCOVERY_TOKENS = (
+    "dirs::home_dir",
+    "dirs_next::home_dir",
+    "home_dir()",
+    'var("HOME")',
+    'var_os("HOME")',
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+)
+
+
+def discovers_home_paths(relative_path: Path, text: str) -> bool:
+    """Shared crate source must not discover home or XDG locations.
+
+    Integration tests under `crates/<crate>/tests/` are exempt: they set these
+    variables to isolate a child process, which is not discovery.
+    """
+    parts = relative_path.parts
+    if len(parts) > 3 and parts[0] == "crates" and parts[2] == "tests":
+        return False
+    return any(token in text for token in HOME_DISCOVERY_TOKENS)
+
+
 def boundary_manifest(root: Path, package: str) -> tuple[Path, dict]:
     matches = []
     for manifest_path in (root / "boundaries").glob("*/*.toml"):

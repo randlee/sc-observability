@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 
 from scripts.ci.boundary_policy import (
+    discovers_home_paths,
     is_first_party_dependency,
     validate_allowed_dependents,
     validate_first_party_dependencies,
@@ -100,3 +101,22 @@ class BoundaryPolicyTests(unittest.TestCase):
                 "sc-observability",
                 {"sc-observability-types", "sc-observability-otlp"},
             )
+
+    def test_home_discovery_is_rejected_in_production_source(self):
+        for path, text in [
+            ("crates/sc-otel-cli/src/send.rs", 'std::env::var("HOME")'),
+            ("crates/sc-observability/src/lib.rs", 'std::env::var_os("XDG_DATA_HOME")'),
+            ("crates/sc-observability-log/src/tests.rs", '"XDG_CONFIG_HOME"'),
+            ("crates/sc-observe/build.rs", "dirs::home_dir()"),
+        ]:
+            with self.subTest(path=path):
+                self.assertTrue(discovers_home_paths(Path(path), text))
+
+    def test_integration_test_environment_isolation_is_accepted(self):
+        isolation = 'for key in ["HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME"] { command.env(key, dir); }'
+        self.assertFalse(
+            discovers_home_paths(Path("crates/sc-otel-cli/tests/send.rs"), isolation)
+        )
+        self.assertFalse(
+            discovers_home_paths(Path("crates/sc-otel-cli/src/send.rs"), "let endpoint = 1;")
+        )

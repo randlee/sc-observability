@@ -12,7 +12,11 @@ import sys
 import tomllib
 sys.path.insert(0, str(Path('.github/scripts').resolve()))
 sys.path.insert(0, str(Path('scripts/ci').resolve()))
-from boundary_policy import is_first_party_dependency, validate_first_party_dependencies
+from boundary_policy import (
+    discovers_home_paths,
+    is_first_party_dependency,
+    validate_first_party_dependencies,
+)
 from release_manifest import workspace_members
 from compatibility_registry import (
     validate_compatibility_source_boundary,
@@ -217,18 +221,7 @@ for path in source_files:
     if re.search(r"\bATM_[A-Z0-9_]+\b", text):
         raise SystemExit(f"ATM-prefixed env/config reference found in shared crate source: {path}")
     # Enforce the shared-repo boundary: no home/path discovery in shared crates.
-    if any(
-        token in text
-        for token in [
-            "dirs::home_dir",
-            "dirs_next::home_dir",
-            "home_dir()",
-            'var(\"HOME\")',
-            "var_os(\"HOME\")",
-            "XDG_CONFIG_HOME",
-            "XDG_DATA_HOME",
-        ]
-    ):
+    if discovers_home_paths(path.relative_to(root), text):
         raise SystemExit(f"home/path discovery reference found in shared crate source: {path}")
 
 for path in [
