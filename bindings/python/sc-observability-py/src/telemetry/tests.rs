@@ -244,3 +244,195 @@ fn random_ids_are_nonzero_and_distinct() {
     assert_ne!(first, 0);
     assert_ne!(first, random());
 }
+
+/// Bounds every collector wait so a broken send cannot hang the suite.
+const WATCHDOG: Duration = Duration::from_secs(30);
+
+/// One request as the loopback collector received it.
+struct Request {
+    path: String,
+    head: String,
+    body: Vec<u8>,
+}
+
+/// Accepts one connection on a loopback port, reports the request, waits for
+/// `release` and answers with `status` and `reply` as the body.
+fn collector(
+    status: u16,
+    reply: &'static str,
+) -> (
+    String,
+    std::sync::mpsc::Receiver<Request>,
+    std::sync::mpsc::Sender<()>,
+) {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind loopback collector");
+    let endpoint = format!(
+        "http://{}",
+        listener.local_addr().expect("collector address")
+    );
+    let (request_tx, request_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+    std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept export");
+        stream
+            .set_read_timeout(Some(WATCHDOG))
+            .expect("collector read timeout");
+        let mut buffer = Vec::new();
+        let mut chunk = [0_u8; 4096];
+        let header_end = loop {
+            if let Some(index) = buffer.windows(4).position(|window| window == b"\r\n\r\n") {
+                break index + 4;
+            }
+            let read = stream.read(&mut chunk).expect("read request head");
+            assert_ne!(read, 0, "connection closed before the request head");
+            buffer.extend_from_slice(&chunk[..read]);
+        };
+        let head = String::from_utf8_lossy(&buffer[..header_end]).to_lowercase();
+        let length = head
+            .lines()
+            .find_map(|line| line.strip_prefix("content-length:"))
+            .and_then(|value| value.trim().parse::<usize>().ok())
+            .unwrap_or(0);
+        let mut body = buffer[header_end..].to_vec();
+        while body.len() < length {
+            let read = stream.read(&mut chunk).expect("read request body");
+            assert_ne!(read, 0, "connection closed before the request body");
+            body.extend_from_slice(&chunk[..read]);
+        }
+        let path = head.split(' ').nth(1).unwrap_or_default().to_owned();
+        let _ = request_tx.send(Request { path, head, body });
+        let _ = release_rx.recv_timeout(WATCHDOG);
+        let response = format!(
+            "HTTP/1.1 {status} Test\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
+            reply.len()
+        );
+        let _ = stream.write_all(response.as_bytes());
+    });
+    (endpoint, request_rx, release_tx)
+}
+
+fn loopback(endpoint: String, headers: &[(&str, &str)]) -> Config {
+    Config {
+        endpoint: Some(endpoint),
+        headers: headers
+            .iter()
+            .map(|(name, value)| ((*name).into(), (*value).into()))
+            .collect(),
+        timeout_s: Some(WATCHDOG.as_secs_f64() / 2.0),
+        root_certificate: None,
+        service_name: Some("py-native-service".into()),
+    }
+}
+
+fn envelope(json: &str) -> serde_json::Value {
+    serde_json::from_str(json).expect("ResultDto JSON envelope")
+}
+
+#[test]
+fn send_log_forwards_fields_and_headers_on_the_wire() {
+    const TRACE: &str = "4bf92f3577b34da6a3ce929d0e0e4736";
+    const SPAN: &str = "00f067aa0ba902b7";
+    let (endpoint, requests, release) = collector(200, "");
+    release.send(()).expect("pre-release collector");
+    Python::initialize();
+    let result = Python::attach(|py| {
+        let mut fields = log_fields("error", Some(TRACE), Some(SPAN));
+        fields.body = "job failed".into();
+        fields.attributes = python_attributes(py, c"[('job', 'build'), ('ratio', 0.25)]");
+        send_log(
+            py,
+            loopback(endpoint, &[("authorization", "explicit")]),
+            fields,
+        )
+    });
+    assert_eq!(envelope(&result)["kind"], "ok", "{result}");
+    let request = requests.recv_timeout(WATCHDOG).expect("exported request");
+    assert_eq!(request.path, "/v1/logs");
+    assert!(
+        request.head.contains("authorization: explicit"),
+        "{}",
+        request.head
+    );
+    let trace = u128::from_str_radix(TRACE, 16).expect("hex").to_be_bytes();
+    let span = u64::from_str_radix(SPAN, 16).expect("hex").to_be_bytes();
+    for expected in [
+        &b"job failed"[..],
+        b"ERROR",
+        b"py-native-service",
+        b"sc_observability",
+        b"job",
+        b"build",
+        &trace,
+        &span,
+        &0.25_f64.to_le_bytes(),
+    ] {
+        assert!(
+            request.body.windows(expected.len()).any(|w| w == expected),
+            "{expected:?} missing from the exported body"
+        );
+    }
+}
+
+#[test]
+fn rejected_export_message_is_redacted() {
+    const SECRET: &str = "header-secret-value";
+    const PASSWORD: &str = "userinfo-password";
+    // The collector echoes the credential back in its error body; whatever the
+    // client keeps of the rejection, the projected envelope must not carry
+    // the header value or the endpoint's user information.
+    let (endpoint, requests, release) = collector(401, "rejected header-secret-value");
+    release.send(()).expect("pre-release collector");
+    let endpoint = endpoint.replace("http://", &format!("http://otlp-user:{PASSWORD}@"));
+    Python::initialize();
+    let result = Python::attach(|py| {
+        send_log(
+            py,
+            loopback(endpoint, &[("authorization", SECRET)]),
+            log_fields("info", None, None),
+        )
+    });
+    let error = &envelope(&result)["error"];
+    assert_eq!(
+        (&error["kind"], &error["code"]),
+        (
+            &serde_json::json!("unavailable"),
+            &serde_json::json!(TELEMETRY_EXPORT_FAILED.as_str())
+        ),
+        "{result}"
+    );
+    assert!(
+        error["message"].as_str().is_some_and(|m| m.contains("401")),
+        "{result}"
+    );
+    for leaked in [SECRET, PASSWORD, "otlp-user"] {
+        assert!(!result.contains(leaked), "{leaked} leaked: {result}");
+    }
+    let request = requests.recv_timeout(WATCHDOG).expect("exported request");
+    assert!(
+        request.head.contains(&format!("authorization: {SECRET}")),
+        "the credential is still sent to the collector"
+    );
+}
+
+#[test]
+fn a_blocked_export_releases_the_gil() {
+    // The collector answers only after this thread has run Python code. A
+    // send holding the GIL blocks that until the client timeout, and the
+    // export then fails instead of succeeding.
+    let (endpoint, requests, release) = collector(200, "");
+    Python::initialize();
+    let sender = std::thread::spawn(move || {
+        Python::attach(|py| send_log(py, loopback(endpoint, &[]), log_fields("info", None, None)))
+    });
+    requests.recv_timeout(WATCHDOG).expect("exported request");
+    let ran = Python::attach(|py| {
+        py.eval(c"6 * 7", None, None)
+            .and_then(|value| value.extract::<i64>())
+            .expect("Python evaluates while the send is blocked")
+    });
+    assert_eq!(ran, 42);
+    release.send(()).expect("release collector");
+    let result = sender.join().expect("send thread");
+    assert_eq!(envelope(&result)["kind"], "ok", "{result}");
+}
