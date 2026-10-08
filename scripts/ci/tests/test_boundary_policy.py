@@ -20,7 +20,7 @@ CORE_MANIFESTS = {
     "sc-observability-log-consumer-check": "crates/sc-observability-log-consumer-check/Cargo.toml",
     "sc-otel-cli": "crates/sc-otel-cli/Cargo.toml",
 }
-SC_OTEL_CLI_EDGES = {"sc-observability-types", "sc-observability-otlp"}
+SC_OTEL_CLI_EDGES = {"sc-observability-otlp"}
 
 
 class BoundaryPolicyTests(unittest.TestCase):
