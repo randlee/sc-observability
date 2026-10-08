@@ -1932,6 +1932,15 @@ No transport implementation or runtime dependency enters the types layer.
   export. h-4 checks frontend failure equivalence only, leaving exporter timeout
   and provider-lifetime unit tests with h-1.
 
+- **Frontend instrumentation identity**: Each frontend intentionally constructs
+  its own native `InstrumentationScope`: the CLI uses `sc-otel`, while Python
+  uses `sc_observability`, and each reports its own package version. The scope
+  identifies the instrumentation library that emitted telemetry, so sharing
+  this identity would mislabel one frontend as the other. This frontend-specific
+  metadata does not change H-005's equivalent log/span/metric operations over
+  the shared synchronous client and configuration. Endpoint resolution, trace
+  and span ID parsing, and input-limit policy remain shared in `sync`.
+
 - **h-1 contract record** (implemented in `sc-observability-otlp`):
   - *Features*: `native` = official `opentelemetry` and `opentelemetry_sdk`
     0.33.0 and the `api`/`sdk` re-exports only. `log-sink` = `native` +
