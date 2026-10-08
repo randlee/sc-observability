@@ -26,8 +26,8 @@ done < <("$B4_PYTHON" scripts/ci/python_binding_validator.py embedded-environmen
 B4_TEMP_DIR="$(mktemp -d -t sc-observability-b4.XXXXXX)"
 trap 'rm -rf "$B4_TEMP_DIR"' EXIT
 
-cargo clippy --locked -p sc-observability-py --all-targets -- -D warnings
-env "${B4_EMBEDDED_ENV[@]}" cargo test --locked -p sc-observability-py
+cargo clippy --locked -p sc-observability-py --features otlp-telemetry --all-targets -- -D warnings
+env "${B4_EMBEDDED_ENV[@]}" cargo test --locked -p sc-observability-py --features otlp-telemetry
 "$B4_GENERATOR_PYTHON" scripts/generate_python_bindings.py \
   --schema bindings/schema/v2.json \
   --output-dir bindings/python/sc-observability-py/python/sc_observability/generated \
