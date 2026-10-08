@@ -1502,6 +1502,7 @@ dependencies = [
  "sc-observability-types",
  "serde_json",
  "tempfile",
+ "time",
  "tokio",
 ]
 

@@ -15,10 +15,11 @@ use opentelemetry_sdk::logs::{
 };
 use sc_observability::v2::{LogSink, LoggerBuilder, LoggerConfig, SinkRegistration};
 use sc_observability_types::{
-    ActionName, CorrelationId, Level, LogEvent, ProcessIdentity, ServiceName, SpanId,
-    TargetCategory, Timestamp, TraceContext, TraceId,
+    ActionName, CorrelationId, Diagnostic, ErrorCode, Level, LogEvent, ProcessIdentity,
+    Remediation, ServiceName, SpanId, TargetCategory, Timestamp, TraceContext, TraceId,
 };
 use serde_json::json;
+use time::{Date, Month, Time};
 
 use super::OtelLogSink;
 
@@ -340,6 +341,41 @@ fn all_zero_trace_ids_are_not_mapped_as_trace_context() {
 }
 
 #[test]
+fn unformattable_diagnostic_timestamp_does_not_panic_during_write() {
+    let exporter = CapturingExporter::default();
+    let provider = provider(exporter.clone());
+    let sink = OtelLogSink::new(&provider, scope());
+    let mut invalid = event("application");
+    invalid.diagnostic = Some(Diagnostic {
+        timestamp: Timestamp::from_offset_date_time(
+            Date::from_calendar_date(-1, Month::January, 1)
+                .expect("year -1 is a valid time-crate date")
+                .with_time(Time::MIDNIGHT)
+                .assume_utc(),
+        ),
+        code: ErrorCode::new_static("TEST-INVALID-TIMESTAMP"),
+        message: "diagnostic timestamp cannot be rendered as RFC3339".to_owned(),
+        cause: None,
+        remediation: Remediation::not_recoverable("use a supported timestamp"),
+        docs: None,
+        details: serde_json::Map::new(),
+    });
+    assert!(serde_json::to_string(invalid.diagnostic.as_ref().expect("diagnostic")).is_err());
+
+    sink.write(&invalid)
+        .expect("invalid optional diagnostic is omitted without panicking");
+    provider.force_flush().expect("provider flush");
+
+    let records = exporter.records();
+    assert_eq!(records.len(), 1);
+    assert_eq!(
+        attribute(&records[0], "sc.observability.log.diagnostic"),
+        None
+    );
+    provider.shutdown().expect("provider shutdown");
+}
+
+#[test]
 fn sdk_diagnostic_target_boundary_drops_only_the_sdk_namespace() {
     assert!(super::is_sdk_diagnostic_target("opentelemetry"));
     assert!(super::is_sdk_diagnostic_target("opentelemetry::otlp"));
@@ -348,7 +384,10 @@ fn sdk_diagnostic_target_boundary_drops_only_the_sdk_namespace() {
     assert!(!super::is_sdk_diagnostic_target("opentelemetry_otlp"));
     assert!(!super::is_sdk_diagnostic_target("opentelemetry.otlp"));
     assert!(!super::is_sdk_diagnostic_target("application"));
+}
 
+#[test]
+fn sdk_diagnostic_targets_are_dropped() {
     let exporter = CapturingExporter::default();
     let provider = provider(exporter.clone());
     let sink = OtelLogSink::new(&provider, scope());

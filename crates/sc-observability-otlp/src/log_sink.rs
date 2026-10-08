@@ -131,7 +131,7 @@ fn is_sdk_diagnostic_target(target: &str) -> bool {
             .is_some_and(|suffix| suffix.starts_with("::"))
 }
 
-/// Serializes one log event value; the shared event types always serialize.
+/// Serializes one of the infallibly serializable log event fields.
 macro_rules! json_text {
     ($value:expr) => {
         serde_json::to_string($value).expect("log event values serialize to JSON")
@@ -169,10 +169,6 @@ fn map_event(event: &LogEvent, record: &mut sdk::logs::SdkLogRecord) {
             event.outcome.as_ref().map(|value| json_text!(value)),
         ),
         (
-            "sc.observability.log.diagnostic",
-            event.diagnostic.as_ref().map(|value| json_text!(value)),
-        ),
-        (
             "sc.observability.log.state_transition",
             event
                 .state_transition
@@ -184,6 +180,13 @@ fn map_event(event: &LogEvent, record: &mut sdk::logs::SdkLogRecord) {
         if let Some(value) = value {
             record.add_attribute(key, value);
         }
+    }
+    // A caller-built diagnostic may contain a timestamp outside RFC3339's
+    // supported year range. Omit that optional attribute rather than panic.
+    if let Some(diagnostic) = event.diagnostic.as_ref()
+        && let Ok(diagnostic) = serde_json::to_string(diagnostic)
+    {
+        record.add_attribute("sc.observability.log.diagnostic", diagnostic);
     }
     for (key, value) in &event.fields {
         record.add_attribute(key.clone(), any_value(value));
