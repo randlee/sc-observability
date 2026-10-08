@@ -37,7 +37,8 @@ MYPYPATH=bindings/python/sc-observability-py/python \
   uv run --no-project --python "$B4_PYTHON" --with mypy==2.3.1 python -m mypy \
   --strict --python-version 3.10 \
   bindings/python/sc-observability-py/tests/typing/test_result_narrowing.py \
-  bindings/python/sc-observability-py/tests/typing/test_async_narrowing.py
+  bindings/python/sc-observability-py/tests/typing/test_async_narrowing.py \
+  bindings/python/sc-observability-py/tests/typing/test_telemetry_typing.py
 uv run --no-project --python "$B4_PYTHON" --with pytest==9.1.1 python -m pytest \
   bindings/python/sc-observability-py/tests/test_facade.py
 
@@ -56,7 +57,8 @@ SC_OBSERVABILITY_RUNTIME_TEST=1 PYTHONASYNCIODEBUG=1 PYTHONWARNINGS=error \
   "$B4_TEMP_DIR/tests" -ra
 "$B4_TEMP_DIR/venv/bin/python" -I -m mypy --strict --python-version 3.10 \
   "$B4_TEMP_DIR/tests/typing/test_result_narrowing.py" "$B4_TEMP_DIR/examples/standard_logging.py" \
-  "$B4_TEMP_DIR/tests/typing/test_async_narrowing.py" "$B4_TEMP_DIR/examples/async_logging.py"
+  "$B4_TEMP_DIR/tests/typing/test_async_narrowing.py" "$B4_TEMP_DIR/examples/async_logging.py" \
+  "$B4_TEMP_DIR/tests/typing/test_telemetry_typing.py"
 "$B4_TEMP_DIR/venv/bin/python" -I "$B4_TEMP_DIR/examples/standard_logging.py"
 "$B4_TEMP_DIR/venv/bin/python" -I -X dev -W error "$B4_TEMP_DIR/examples/async_logging.py"
 if [[ -z "${SC_OBSERVABILITY_ATTACHED_PACKAGE+x}" ]]; then
@@ -67,6 +69,11 @@ env "${B4_EMBEDDED_ENV[@]}" PYTHONASYNCIODEBUG=1 PYTHONWARNINGS=error \
   cargo run --locked -p rust-python-logging
 
 if rg -n '\braise\b' bindings/python/sc-observability-py/python/sc_observability/{__init__,logging,context,async_logging}.py; then
+  exit 1
+fi
+# The one allowed raise: a non-Mapping attributes argument is a programmer error.
+if rg -n '\braise\b' bindings/python/sc-observability-py/python/sc_observability/telemetry.py \
+  | rg -v -F 'raise TypeError("attributes must be a Mapping")'; then
   exit 1
 fi
 if rg -n 'panic!|\.unwrap\(' bindings/python/sc-observability-py/src; then
