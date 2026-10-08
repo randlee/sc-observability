@@ -4,13 +4,15 @@
 use std::{
     io::{BufRead, BufReader, ErrorKind, Read, Write},
     net::{TcpListener, TcpStream},
-    process::{Command, Output, Stdio},
+    process::{Child, ChildStdin, Command, Output, Stdio},
     thread,
     time::{Duration, Instant},
 };
 
 /// Watchdog for a fixture that never receives its request; not a pass condition.
 const FIXTURE_WATCHDOG: Duration = Duration::from_secs(20);
+/// Hard deadline for each CLI child, independent of the collector fixture.
+const CHILD_WATCHDOG: Duration = Duration::from_secs(20);
 const TRACE_ID: &str = "4bf92f3577b34da6a3ce929d0e0e4736";
 const SPAN_ID: &str = "00f067aa0ba902b7";
 const SECRET: &str = "s3cret-token-value";
@@ -158,8 +160,98 @@ fn sc_otel_removes_ambient_proxy_and_trust_settings() {
     }
 }
 
+struct RunningChild {
+    child: Child,
+    stdout: thread::JoinHandle<Vec<u8>>,
+    stderr: thread::JoinHandle<Vec<u8>>,
+    deadline: Instant,
+}
+
+impl RunningChild {
+    fn spawn(command: &mut Command, timeout: Duration) -> Self {
+        let mut child = command
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn sc-otel");
+        let stdout = child.stdout.take().expect("stdout");
+        let stderr = child.stderr.take().expect("stderr");
+        Self {
+            child,
+            stdout: thread::spawn(move || {
+                let mut bytes = Vec::new();
+                let mut stdout = stdout;
+                stdout.read_to_end(&mut bytes).expect("read child stdout");
+                bytes
+            }),
+            stderr: thread::spawn(move || {
+                let mut bytes = Vec::new();
+                let mut stderr = stderr;
+                stderr.read_to_end(&mut bytes).expect("read child stderr");
+                bytes
+            }),
+            deadline: Instant::now() + timeout,
+        }
+    }
+
+    fn stdin(&mut self) -> ChildStdin {
+        self.child.stdin.take().expect("stdin")
+    }
+
+    fn wait(mut self) -> Output {
+        let (status, timed_out) = loop {
+            match self.child.try_wait().expect("poll sc-otel") {
+                Some(status) => break (status, false),
+                None if Instant::now() < self.deadline => {
+                    thread::sleep(Duration::from_millis(5));
+                }
+                None => {
+                    if let Err(error) = self.child.kill() {
+                        assert_eq!(
+                            error.kind(),
+                            ErrorKind::InvalidInput,
+                            "kill sc-otel: {error}"
+                        );
+                    }
+                    break (self.child.wait().expect("reap timed-out sc-otel"), true);
+                }
+            }
+        };
+        let stdout = self.stdout.join().expect("stdout reader");
+        let stderr = self.stderr.join().expect("stderr reader");
+        if timed_out {
+            panic!(
+                "sc-otel exceeded hard deadline; status: {status}; stdout:\n{}\nstderr:\n{}",
+                String::from_utf8_lossy(&stdout),
+                String::from_utf8_lossy(&stderr),
+            );
+        }
+        Output {
+            status,
+            stdout,
+            stderr,
+        }
+    }
+}
+
 fn run(command: &mut Command) -> Output {
-    command.output().expect("run sc-otel")
+    run_with_deadline(command, CHILD_WATCHDOG)
+}
+
+fn run_with_deadline(command: &mut Command, timeout: Duration) -> Output {
+    RunningChild::spawn(command, timeout).wait()
+}
+
+fn join_stdin_writer(writer: thread::JoinHandle<()>) {
+    let deadline = Instant::now() + CHILD_WATCHDOG;
+    while !writer.is_finished() {
+        assert!(
+            Instant::now() < deadline,
+            "stdin writer exceeded hard deadline"
+        );
+        thread::sleep(Duration::from_millis(5));
+    }
+    writer.join().expect("stdin writer");
 }
 
 fn hex(text: &str) -> Vec<u8> {
@@ -226,25 +318,22 @@ fn span_exports_completed_native_span() {
     let collector = Collector::start();
     let endpoint = collector.endpoint.clone();
     let request = collector.serve("200 OK");
-    let mut child = sc_otel(&directory)
-        .args(["--endpoint", &endpoint, "span", "--name", "deploy-step"])
-        .args(["--trace-id", TRACE_ID, "--parent-span-id", SPAN_ID])
-        .args(["--kind", "client", "--error", "rollout-timed-out"])
-        .args(["--start-time-unix-nano", "1700000000000000000"])
-        .args(["--end-time-unix-nano", "1700000005000000000"])
-        .args(["--attributes", "-"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn");
+    let mut child = RunningChild::spawn(
+        sc_otel(&directory)
+            .args(["--endpoint", &endpoint, "span", "--name", "deploy-step"])
+            .args(["--trace-id", TRACE_ID, "--parent-span-id", SPAN_ID])
+            .args(["--kind", "client", "--error", "rollout-timed-out"])
+            .args(["--start-time-unix-nano", "1700000000000000000"])
+            .args(["--end-time-unix-nano", "1700000005000000000"])
+            .args(["--attributes", "-"])
+            .stdin(Stdio::piped()),
+        CHILD_WATCHDOG,
+    );
     child
-        .stdin
-        .take()
-        .expect("stdin")
+        .stdin()
         .write_all(br#"{"region":"eu-west"}"#)
         .expect("write attributes");
-    let output = child.wait_with_output().expect("wait");
+    let output = child.wait();
     assert_eq!(output.status.code(), Some(0), "{output:?}");
     let request = request.join().expect("collector");
     assert_eq!(request.path, "/v1/traces");
@@ -452,15 +541,14 @@ fn invalid_metric_names_exit_3_and_send_nothing_for_every_instrument_kind() {
 fn oversized_standard_input_is_rejected_before_export() {
     let directory = tempfile::tempdir().expect("tempdir");
     let collector = Collector::start();
-    let mut child = sc_otel(&directory)
-        .args(["--endpoint", &collector.endpoint])
-        .args(["log", "--body", "x", "--attributes", "-"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn");
-    let mut stdin = child.stdin.take().expect("stdin");
+    let mut child = RunningChild::spawn(
+        sc_otel(&directory)
+            .args(["--endpoint", &collector.endpoint])
+            .args(["log", "--body", "x", "--attributes", "-"])
+            .stdin(Stdio::piped()),
+        CHILD_WATCHDOG,
+    );
+    let mut stdin = child.stdin();
     let writer = thread::spawn(move || {
         let chunk = vec![b' '; 64 * 1024];
         // The CLI stops reading at the limit and exits, closing the pipe.
@@ -470,8 +558,8 @@ fn oversized_standard_input_is_rejected_before_export() {
             }
         }
     });
-    let output = child.wait_with_output().expect("wait");
-    writer.join().expect("writer");
+    let output = child.wait();
+    join_stdin_writer(writer);
     assert_eq!(output.status.code(), Some(3), "{output:?}");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -479,6 +567,26 @@ fn oversized_standard_input_is_rejected_before_export() {
         "{stderr}"
     );
     collector.assert_untouched();
+}
+
+#[test]
+fn child_deadline_kills_and_reaps_when_standard_input_never_reaches_eof() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run_with_deadline(
+            sc_otel(&directory)
+                .args(["log", "--body", "blocked", "--attributes", "-"])
+                .stdin(Stdio::piped()),
+            Duration::from_millis(100),
+        )
+    }))
+    .expect_err("open stdin must exceed the hard deadline");
+    let message = panic
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| panic.downcast_ref::<&str>().copied())
+        .expect("panic message");
+    assert!(message.contains("exceeded hard deadline"), "{message}");
 }
 
 #[test]
