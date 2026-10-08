@@ -182,6 +182,12 @@ def test_invalid_instrument_name_records_nothing(collector: Collector) -> None:
     assert collector.requests == []
 
 
+def test_negative_counter_is_ignored_and_returns_tagged_validation(collector: Collector) -> None:
+    result = Telemetry(collector.endpoint).metric("jobs", "counter", -1)
+    _failure(result, "validation", INVALID_RECORD)
+    assert collector.requests == []
+
+
 def test_wrong_argument_types_are_programmer_errors() -> None:
     telemetry = Telemetry("http://127.0.0.1:9")
     with pytest.raises(TypeError, match="attributes must be a Mapping"):

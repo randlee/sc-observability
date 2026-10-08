@@ -81,7 +81,12 @@ class Telemetry:
     def metric(self, name: str, kind: MetricKind, value: float, *, unit: str | None = None,
                description: str | None = None,
                attributes: Mapping[str, AttributeValue] | None = None) -> Result[None]:
-        """Export one measurement; counter and histogram values must not be negative."""
+        """Export one measurement.
+
+        The SDK ignores negative counter measurements; if no valid measurement
+        is recorded, this returns a tagged validation failure. Histograms may
+        contain negative values.
+        """
         return self._send("send_metric", {
             "name": name, "kind": kind, "value": value, "unit": unit, "description": description,
             "attributes": _attributes(attributes),
