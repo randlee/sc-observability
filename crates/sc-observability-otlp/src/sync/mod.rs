@@ -62,6 +62,7 @@
 //! }
 //! ```
 
+use std::borrow::Cow;
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
@@ -176,22 +177,29 @@ pub fn check_input_limits(input_bytes: usize, records: usize) -> Result<(), Sync
     Ok(())
 }
 
-/// Returns `explicit`, else `OTEL_EXPORTER_OTLP_ENDPOINT`, else
-/// `http://localhost:4318`: the endpoint precedence shared by the CLI and
-/// Python frontends.
+/// Returns the shared CLI and Python endpoint after applying precedence.
+///
+/// Borrows explicit and default values; an environment value is owned.
 ///
 /// # Errors
 ///
 /// Returns [`SyncError::Validation`] with
 /// [`error_codes::sync::INVALID_CONFIG`](crate::error_codes::sync::INVALID_CONFIG)
 /// when the environment variable is set but not valid UTF-8.
-pub fn resolve_endpoint(explicit: Option<&str>) -> Result<String, SyncError> {
+pub fn resolve_endpoint(explicit: Option<&str>) -> Result<Cow<'_, str>, SyncError> {
+    resolve_endpoint_with(explicit, || std::env::var(OTLP_ENDPOINT_ENV))
+}
+
+fn resolve_endpoint_with<'a>(
+    explicit: Option<&'a str>,
+    read_env: impl FnOnce() -> Result<String, std::env::VarError>,
+) -> Result<Cow<'a, str>, SyncError> {
     if let Some(endpoint) = explicit {
-        return Ok(endpoint.to_owned());
+        return Ok(Cow::Borrowed(endpoint));
     }
-    match std::env::var(OTLP_ENDPOINT_ENV) {
-        Ok(endpoint) => Ok(endpoint),
-        Err(std::env::VarError::NotPresent) => Ok(DEFAULT_OTLP_ENDPOINT.to_owned()),
+    match read_env() {
+        Ok(endpoint) => Ok(Cow::Owned(endpoint)),
+        Err(std::env::VarError::NotPresent) => Ok(Cow::Borrowed(DEFAULT_OTLP_ENDPOINT)),
         Err(std::env::VarError::NotUnicode(_)) => Err(SyncError::validation(
             codes::INVALID_CONFIG,
             format!("{OTLP_ENDPOINT_ENV} must be valid UTF-8"),

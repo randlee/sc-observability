@@ -1,6 +1,8 @@
 //! Native construction, export, validation and hardening tests for the
 //! synchronous client against loopback OTLP/HTTP and TLS collectors.
 
+use std::borrow::Cow;
+use std::ffi::OsString;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener};
@@ -29,7 +31,8 @@ use opentelemetry_sdk::trace::{SpanData, SpanEvents, SpanLinks};
 use prost::Message;
 
 use super::{
-    Client, SyncError, check_input_limits, parse_span_id, parse_trace_id, resolve_endpoint,
+    Client, DEFAULT_OTLP_ENDPOINT, SyncError, check_input_limits, parse_span_id, parse_trace_id,
+    resolve_endpoint_with,
 };
 use crate::constants::{MAX_BATCH_RECORDS, MAX_INPUT_BYTES};
 use crate::error_codes::sync as codes;
@@ -1275,11 +1278,31 @@ fn ids_must_be_fixed_width_lowercase_hex() {
 }
 
 #[test]
-fn an_explicit_endpoint_wins_over_the_environment() {
-    assert_eq!(
-        resolve_endpoint(Some("https://collector:4318"))
-            .ok()
-            .as_deref(),
-        Some("https://collector:4318")
-    );
+fn endpoint_resolution_borrows_explicit_and_default_values() {
+    let explicit = resolve_endpoint_with(Some("https://collector:4318"), || {
+        panic!("explicit endpoint must not read the environment")
+    })
+    .expect("explicit endpoint resolves");
+    assert!(matches!(explicit, Cow::Borrowed("https://collector:4318")));
+
+    let default = resolve_endpoint_with(None, || Err(std::env::VarError::NotPresent))
+        .expect("default endpoint resolves");
+    assert!(matches!(default, Cow::Borrowed(DEFAULT_OTLP_ENDPOINT)));
+}
+
+#[test]
+fn endpoint_resolution_owns_environment_value_and_rejects_non_unicode() {
+    let endpoint = resolve_endpoint_with(None, || Ok("https://env:4318".to_owned()))
+        .expect("environment endpoint resolves");
+    assert!(matches!(endpoint, Cow::Owned(value) if value == "https://env:4318"));
+
+    let error = resolve_endpoint_with(None, || {
+        Err(std::env::VarError::NotUnicode(OsString::new()))
+    })
+    .expect_err("non-Unicode environment endpoint is rejected");
+    let SyncError::Validation { code, .. } = &error else {
+        std::panic::panic_any("non-Unicode environment endpoint must be a validation error");
+    };
+    assert_eq!(*code, codes::INVALID_CONFIG);
+    assert!(error.to_string().contains("OTEL_EXPORTER_OTLP_ENDPOINT"));
 }
