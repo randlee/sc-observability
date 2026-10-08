@@ -15,14 +15,11 @@ use sc_observability_otlp::sdk::Resource;
 use sc_observability_otlp::sdk::trace::{
     IdGenerator, RandomIdGenerator, SpanData, SpanEvents, SpanLinks,
 };
-use sc_observability_otlp::sync::{Client, SyncError, check_input_limits, resolve_endpoint};
-use serde_json::Value as Json;
-use std::{
-    fs::File,
-    io::Read,
-    path::Path,
-    time::{Duration, SystemTime},
+use sc_observability_otlp::sync::{
+    Client, SyncError, check_input_limits, resolve_endpoint, span_times,
 };
+use serde_json::Value as Json;
+use std::{fs::File, io::Read, path::Path, time::SystemTime};
 
 /// Runs the parsed command; the error decides the process exit.
 pub(crate) fn run(cli: &Cli) -> Result<(), SyncError> {
@@ -104,9 +101,7 @@ fn send_log(
 
 fn span(args: &SpanArgs, scope: InstrumentationScope) -> Result<SpanData, SyncError> {
     let id_generator = RandomIdGenerator::default();
-    let end_time = args
-        .end_time_unix_nano
-        .map_or_else(SystemTime::now, unix_nanos);
+    let (start_time, end_time) = span_times(args.start_time_unix_nano, args.end_time_unix_nano)?;
     let status = match (&args.error, args.ok) {
         (Some(description), _) => Status::error(description.clone()),
         (None, true) => Status::Ok,
@@ -130,7 +125,7 @@ fn span(args: &SpanArgs, scope: InstrumentationScope) -> Result<SpanData, SyncEr
             Kind::Consumer => SpanKind::Consumer,
         },
         name: args.name.clone().into(),
-        start_time: args.start_time_unix_nano.map_or(end_time, unix_nanos),
+        start_time,
         end_time,
         attributes: key_values(attributes(args.attributes.attributes.as_deref())?)?,
         dropped_attributes_count: 0,
@@ -302,10 +297,6 @@ fn invalid(message: String) -> SyncError {
     SyncError::validation(codes::INVALID_RECORD, message)
 }
 
-fn unix_nanos(nanos: u64) -> SystemTime {
-    SystemTime::UNIX_EPOCH + Duration::from_nanos(nanos)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -458,7 +449,7 @@ mod tests {
             let _ = sender.send(read_root_certificate(&path));
         });
         let result = receiver
-            .recv_timeout(Duration::from_secs(2))
+            .recv_timeout(std::time::Duration::from_secs(2))
             .expect("reader blocked on writer-less FIFO");
         let error = result.expect_err("FIFO is not a regular certificate file");
         assert_eq!(code(&error), codes::INVALID_CONFIG);

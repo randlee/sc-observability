@@ -17,6 +17,7 @@ use sc_observability_otlp::sdk::trace::{
 };
 use sc_observability_otlp::sync::{
     Client, SyncError, check_input_limits, parse_span_id, parse_trace_id, resolve_endpoint,
+    span_times,
 };
 use std::{
     panic::AssertUnwindSafe,
@@ -338,21 +339,15 @@ fn span(fields: SpanFields<'_>) -> Result<SpanData, SyncError> {
         .as_deref()
         .map(|value| parse_span_id("parent_span_id", value))
         .transpose()?;
-    let end_time = fields
+    let end_unix_nano = fields
         .end_time_unix_nano
         .map(|nanos| unix_nanos("end_time_unix_nano", &nanos))
-        .transpose()?
-        .unwrap_or_else(SystemTime::now);
-    let start_time = fields
+        .transpose()?;
+    let start_unix_nano = fields
         .start_time_unix_nano
         .map(|nanos| unix_nanos("start_time_unix_nano", &nanos))
-        .transpose()?
-        .unwrap_or(end_time);
-    if start_time > end_time {
-        return Err(invalid(
-            "start_time_unix_nano must not be after end_time_unix_nano".into(),
-        ));
-    }
+        .transpose()?;
+    let (start_time, end_time) = span_times(start_unix_nano, end_unix_nano)?;
     let attributes = attributes(fields.attributes, fields.name.len())?;
     Ok(SpanData {
         span_context: SpanContext::new(
@@ -455,13 +450,10 @@ fn invalid(message: String) -> SyncError {
     SyncError::validation(codes::INVALID_RECORD, message)
 }
 
-fn unix_nanos(field: &str, nanos: &Bound<'_, PyInt>) -> Result<SystemTime, SyncError> {
-    nanos
-        .extract()
-        .map(|nanos| SystemTime::UNIX_EPOCH + Duration::from_nanos(nanos))
-        .map_err(|_| {
-            invalid(format!(
-                "{field}: integer outside the unsigned 64-bit range"
-            ))
-        })
+fn unix_nanos(field: &str, nanos: &Bound<'_, PyInt>) -> Result<u64, SyncError> {
+    nanos.extract().map_err(|_| {
+        invalid(format!(
+            "{field}: integer outside the unsigned 64-bit range"
+        ))
+    })
 }

@@ -30,7 +30,7 @@ use prost::Message;
 
 use super::{
     Client, DEFAULT_OTLP_ENDPOINT, REDACTED, SyncError, check_input_limits, parse_span_id,
-    parse_trace_id, resolve_endpoint_with,
+    parse_trace_id, resolve_endpoint_with, span_times,
 };
 use crate::constants::{MAX_BATCH_RECORDS, MAX_INPUT_BYTES};
 use crate::error_codes::sync as codes;
@@ -796,6 +796,44 @@ fn entered_tokio_runtime_is_rejected_and_drop_is_safe() {
         drop(client);
     });
     assert!(collector.requests().is_empty());
+}
+
+fn span_times_code(start: Option<u64>, end: Option<u64>) -> &'static str {
+    validation_code(span_times(start, end).map(|_| ()))
+}
+
+#[test]
+fn span_times_order_supplied_nanoseconds_below_clock_resolution() {
+    let at = |nanos| SystemTime::UNIX_EPOCH + Duration::from_nanos(nanos);
+    // 1 ns and 2 ns share one 100 ns Windows tick, so only the integers order them.
+    assert_eq!(span_times_code(Some(2), Some(1)), codes::INVALID_RECORD);
+    assert_eq!(
+        span_times_code(
+            Some(1_700_000_000_000_000_099),
+            Some(1_700_000_000_000_000_001)
+        ),
+        codes::INVALID_RECORD
+    );
+    assert_eq!(
+        span_times(Some(1), Some(2)).expect("ordered"),
+        (at(1), at(2))
+    );
+    assert_eq!(span_times(Some(7), Some(7)).expect("equal"), (at(7), at(7)));
+    assert_eq!(
+        span_times(None, Some(5)).expect("start defaults to end"),
+        (at(5), at(5))
+    );
+}
+
+#[test]
+fn span_times_default_end_is_now_and_bounds_the_start() {
+    let before = SystemTime::now();
+    let (start, end) = span_times(None, None).expect("both default");
+    assert_eq!(start, end);
+    assert!(before <= end && end <= SystemTime::now());
+    let (start, _) = span_times(Some(1), None).expect("past start");
+    assert_eq!(start, SystemTime::UNIX_EPOCH + Duration::from_nanos(1));
+    assert_eq!(span_times_code(Some(u64::MAX), None), codes::INVALID_RECORD);
 }
 
 #[test]

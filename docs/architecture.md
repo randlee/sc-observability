@@ -1969,6 +1969,8 @@ No transport implementation or runtime dependency enters the types layer.
     sdk::trace::SpanData)`; `send_metrics<F>(&mut self, &sdk::Resource,
     api::InstrumentationScope, F)` with `F: FnOnce(&api::metrics::Meter) ->
     Result<(), SyncError>`; `sync::check_input_limits(bytes, records)`;
+    `sync::span_times(Option<u64>, Option<u64>)`, which orders span times on the
+    supplied Unix nanoseconds before converting them to `SystemTime`;
     `OtelLogSink::new(&sdk::logs::SdkLoggerProvider, api::InstrumentationScope)`
     implementing the core `LogSink`. The SDK span collections
     `SpanEvents`/`SpanLinks` are non-exhaustive: callers fill them from

@@ -235,6 +235,45 @@ pub fn parse_span_id(field: &str, value: &str) -> Result<SpanId, SyncError> {
     SpanId::from_hex(value).map_err(|error| invalid_id(field, &error))
 }
 
+/// Returns span start and end times given as Unix nanoseconds; a missing end
+/// is the current time and a missing start is the end.
+///
+/// The order is checked on the supplied integers: `SystemTime` is coarser
+/// than a nanosecond on some platforms (100 ns on Windows), so a reversed pair
+/// within one tick compares equal once converted.
+///
+/// # Errors
+///
+/// Returns [`SyncError::Validation`] with
+/// [`error_codes::sync::INVALID_RECORD`](crate::error_codes::sync::INVALID_RECORD)
+/// when the start is after the end.
+pub fn span_times(
+    start_unix_nano: Option<u64>,
+    end_unix_nano: Option<u64>,
+) -> Result<(SystemTime, SystemTime), SyncError> {
+    let end_time = end_unix_nano.map_or_else(SystemTime::now, unix_nano);
+    let end_nanos = end_unix_nano.map_or_else(
+        || {
+            end_time
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map_or(0, |since| since.as_nanos())
+        },
+        u128::from,
+    );
+    match start_unix_nano {
+        Some(start) if u128::from(start) > end_nanos => Err(SyncError::validation(
+            codes::INVALID_RECORD,
+            "span start time is after its end time",
+        )),
+        Some(start) => Ok((unix_nano(start), end_time)),
+        None => Ok((end_time, end_time)),
+    }
+}
+
+fn unix_nano(nanos: u64) -> SystemTime {
+    SystemTime::UNIX_EPOCH + Duration::from_nanos(nanos)
+}
+
 /// The SDK parsers accept short and uppercase ids; OTLP ids are fixed-width lowercase hex.
 fn check_hex(field: &str, value: &str, digits: usize) -> Result<(), SyncError> {
     let lowercase_hex = value
