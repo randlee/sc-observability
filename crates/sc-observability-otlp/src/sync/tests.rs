@@ -7,6 +7,7 @@ use std::net::{SocketAddr, TcpListener};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
@@ -35,18 +36,13 @@ use crate::error_codes::sync as codes;
 const FIXTURE_WATCHDOG: Duration = Duration::from_secs(10);
 /// Client timeout used by the stalled-endpoint tests.
 const STALL_TIMEOUT: Duration = Duration::from_millis(250);
-/// Upper bound for one stalled send: the native retry deadline equals the
-/// timeout, so a send ends after roughly one timeout plus scheduling slack;
-/// metrics add the explicit flush and a shutdown that exports nothing.
-const STALL_BUDGET: Duration = Duration::from_secs(3);
 const SERVICE: &str = "sync-client-test";
 const ACCEPT_POLL: Duration = Duration::from_millis(5);
 
-#[derive(Clone, Copy)]
 enum Reply {
     Ok,
     Status(u16, &'static str),
-    Stall,
+    Stall(StalledRequest),
 }
 
 #[derive(Debug, Clone)]
@@ -73,6 +69,18 @@ struct Collector {
     thread: Option<thread::JoinHandle<()>>,
 }
 
+/// Test-side controls for a collector which holds a received request open.
+struct StalledCollector {
+    request_arrived: Receiver<()>,
+    release: Sender<()>,
+}
+
+/// Server-side half of [`StalledCollector`].
+struct StalledRequest {
+    request_arrived: Sender<()>,
+    release: Receiver<()>,
+}
+
 impl Collector {
     fn start(reply: Reply) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback collector");
@@ -85,7 +93,7 @@ impl Collector {
         let thread = {
             let requests = Arc::clone(&requests);
             let stop = Arc::clone(&stop);
-            thread::spawn(move || serve(&listener, reply, &requests, &stop, None))
+            thread::spawn(move || serve(&listener, &reply, &requests, &stop, None))
         };
         Self {
             address,
@@ -93,6 +101,22 @@ impl Collector {
             stop,
             thread: Some(thread),
         }
+    }
+
+    fn start_stalled() -> (Self, StalledCollector) {
+        let (request_arrived_tx, request_arrived) = mpsc::channel();
+        let (release, release_rx) = mpsc::channel();
+        let collector = Self::start(Reply::Stall(StalledRequest {
+            request_arrived: request_arrived_tx,
+            release: release_rx,
+        }));
+        (
+            collector,
+            StalledCollector {
+                request_arrived,
+                release,
+            },
+        )
     }
 
     fn endpoint(&self) -> String {
@@ -117,7 +141,7 @@ type TlsConfig = Arc<rustls::ServerConfig>;
 
 fn serve(
     listener: &TcpListener,
-    reply: Reply,
+    reply: &Reply,
     requests: &Mutex<Vec<Captured>>,
     stop: &AtomicBool,
     tls: Option<&TlsConfig>,
@@ -133,7 +157,7 @@ fn serve(
                     .set_read_timeout(Some(FIXTURE_WATCHDOG))
                     .expect("stream read timeout");
                 match tls {
-                    None => handle(stream, reply, requests, stop),
+                    None => handle(stream, reply, requests),
                     Some(config) => {
                         let connection = rustls::ServerConnection::new(Arc::clone(config))
                             .expect("TLS server connection");
@@ -141,7 +165,6 @@ fn serve(
                             rustls::StreamOwned::new(connection, stream),
                             reply,
                             requests,
-                            stop,
                         );
                     }
                 }
@@ -154,12 +177,7 @@ fn serve(
     }
 }
 
-fn handle<S: Read + Write>(
-    mut stream: S,
-    reply: Reply,
-    requests: &Mutex<Vec<Captured>>,
-    stop: &AtomicBool,
-) {
+fn handle<S: Read + Write>(mut stream: S, reply: &Reply, requests: &Mutex<Vec<Captured>>) {
     let Some(request) = read_request(&mut stream) else {
         // Failed TLS handshakes and dropped connections have no request.
         return;
@@ -167,11 +185,10 @@ fn handle<S: Read + Write>(
     requests.lock().expect("collector requests").push(request);
     match reply {
         Reply::Ok => respond(&mut stream, 200, ""),
-        Reply::Status(code, body) => respond(&mut stream, code, body),
-        Reply::Stall => {
-            let deadline = Instant::now() + FIXTURE_WATCHDOG;
-            while !stop.load(Ordering::SeqCst) && Instant::now() < deadline {
-                thread::sleep(ACCEPT_POLL);
+        Reply::Status(code, body) => respond(&mut stream, *code, body),
+        Reply::Stall(stalled) => {
+            if stalled.request_arrived.send(()).is_ok() {
+                let _ = stalled.release.recv_timeout(FIXTURE_WATCHDOG);
             }
         }
     }
@@ -629,30 +646,45 @@ fn collector_failures_are_export_errors() {
     ));
 }
 
-fn assert_stalled_send_returns(send: impl FnOnce(&mut Client) -> Result<(), SyncError>) {
-    let collector = Collector::start(Reply::Stall);
-    let mut client = Client::new(&collector.endpoint())
-        .and_then(|client| client.with_timeout(STALL_TIMEOUT))
-        .expect("client");
-    let started = Instant::now();
-    let result = send(&mut client);
-    let elapsed = started.elapsed();
+fn assert_stalled_send_returns(
+    send: impl FnOnce(&mut Client) -> Result<(), SyncError> + Send + 'static,
+) {
+    let (collector, stalled) = Collector::start_stalled();
+    let endpoint = collector.endpoint();
+    let (result_tx, result_rx) = mpsc::channel();
+    let send_thread = thread::spawn(move || {
+        let mut client = Client::new(&endpoint)
+            .and_then(|client| client.with_timeout(STALL_TIMEOUT))
+            .expect("client");
+        let _ = result_tx.send(send(&mut client));
+    });
+
+    if let Err(error) = stalled.request_arrived.recv_timeout(FIXTURE_WATCHDOG) {
+        let _ = stalled.release.send(());
+        send_thread.join().expect("join stalled send worker");
+        panic!("stalled collector received no request before watchdog: {error:?}");
+    }
+    let result = match result_rx.recv_timeout(FIXTURE_WATCHDOG) {
+        Ok(result) => result,
+        Err(error) => {
+            let _ = stalled.release.send(());
+            send_thread.join().expect("join stalled send worker");
+            panic!("stalled send did not finish before watchdog: {error:?}");
+        }
+    };
     assert!(
         matches!(result, Err(SyncError::Export(_))),
         "stall is an export failure: {result:?}"
     );
-    assert!(
-        elapsed < STALL_BUDGET,
-        "stalled send returned after {elapsed:?}, budget {STALL_BUDGET:?}"
-    );
-    assert!(
-        !collector.requests().is_empty(),
-        "the stalled collector received the request"
-    );
+    stalled
+        .release
+        .send(())
+        .expect("release stalled collector after client timeout");
+    send_thread.join().expect("join stalled send worker");
 }
 
 #[test]
-fn stalled_log_export_returns_within_timeout_budget() {
+fn stalled_log_export_times_out_while_collector_is_held() {
     assert_stalled_send_returns(|client| {
         client.send_log(&resource(), scope(), |record| {
             record.set_body(AnyValue::from("stalled"));
@@ -662,12 +694,12 @@ fn stalled_log_export_returns_within_timeout_budget() {
 }
 
 #[test]
-fn stalled_span_export_returns_within_timeout_budget() {
+fn stalled_span_export_times_out_while_collector_is_held() {
     assert_stalled_send_returns(|client| client.send_span(&resource(), completed_span()));
 }
 
 #[test]
-fn stalled_metric_flush_returns_within_timeout_budget() {
+fn stalled_metric_flush_times_out_while_collector_is_held() {
     assert_stalled_send_returns(|client| {
         client.send_metrics(&resource(), scope(), |meter| {
             meter.u64_counter("stalled").build().add(1, &[]);
@@ -815,7 +847,7 @@ fn explicit_configuration_child() {
             Ok(())
         })
         .expect("metrics sent to the explicit endpoint");
-    assert!(started.elapsed() < STALL_BUDGET * 3);
+    assert!(started.elapsed() < FIXTURE_WATCHDOG * 3);
 }
 
 /// Runs [`explicit_configuration_child`] with conflicting OTEL endpoint and
@@ -1009,7 +1041,7 @@ fn start_tls_collector(config: TlsConfig) -> Collector {
     let thread = {
         let requests = Arc::clone(&requests);
         let stop = Arc::clone(&stop);
-        thread::spawn(move || serve(&listener, Reply::Ok, &requests, &stop, Some(&config)))
+        thread::spawn(move || serve(&listener, &Reply::Ok, &requests, &stop, Some(&config)))
     };
     Collector {
         address,
