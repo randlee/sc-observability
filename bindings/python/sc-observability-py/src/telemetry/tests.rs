@@ -14,6 +14,31 @@ fn config(timeout_s: Option<f64>, root_certificate: Option<PathBuf>) -> Config {
     }
 }
 
+#[test]
+fn endpoint_selection_borrows_config_and_default_and_owns_environment_value() {
+    let environment_read = std::cell::Cell::new(false);
+    let configured = String::from("http://configured.example:4318");
+    let selected = endpoint(Some(configured.as_str()), || {
+        environment_read.set(true);
+        Some(String::from("http://environment.example:4318"))
+    });
+    assert!(matches!(&selected, std::borrow::Cow::Borrowed(_)));
+    assert_eq!(selected, configured);
+    assert!(
+        !environment_read.get(),
+        "configuration precedes the environment"
+    );
+
+    let selected = endpoint(None, || None);
+    assert!(matches!(&selected, std::borrow::Cow::Borrowed(_)));
+    assert_eq!(selected, DEFAULT_ENDPOINT);
+
+    let from_environment = String::from("http://environment.example:4318");
+    let selected = endpoint(None, || Some(from_environment.clone()));
+    assert!(matches!(&selected, std::borrow::Cow::Owned(_)));
+    assert_eq!(selected, from_environment);
+}
+
 /// The registry code of an expected failure.
 fn code<T>(result: Result<T, SyncError>) -> String {
     failure("send_log", &expect_err(result)).diagnostic().code.clone()

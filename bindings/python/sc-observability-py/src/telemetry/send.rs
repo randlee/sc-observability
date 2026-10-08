@@ -15,6 +15,7 @@ use sc_observability_otlp::sdk::error::OTelSdkError;
 use sc_observability_otlp::sdk::trace::{SpanData, SpanEvents, SpanLinks};
 use sc_observability_otlp::sync::{Client, SyncError, check_input_limits};
 use std::{
+    borrow::Cow,
     hash::{BuildHasher, RandomState},
     panic::AssertUnwindSafe,
     path::PathBuf,
@@ -249,11 +250,10 @@ fn export(config: Config, signal: Signal) -> Result<(), SyncError> {
 }
 
 fn client(config: &Config) -> Result<Client, SyncError> {
-    let endpoint = match &config.endpoint {
-        Some(endpoint) => endpoint.clone(),
-        None => std::env::var(ENDPOINT_ENV).unwrap_or_else(|_| DEFAULT_ENDPOINT.to_owned()),
-    };
-    let mut client = Client::new(&endpoint)?;
+    let endpoint = endpoint(config.endpoint.as_deref(), || {
+        std::env::var(ENDPOINT_ENV).ok()
+    });
+    let mut client = Client::new(endpoint.as_ref())?;
     for (name, value) in &config.headers {
         client = client.with_header(name, value)?;
     }
@@ -276,6 +276,18 @@ fn client(config: &Config) -> Result<Client, SyncError> {
         client = client.with_root_certificate_pem(&pem)?;
     }
     Ok(client)
+}
+
+fn endpoint<'a>(
+    configured: Option<&'a str>,
+    from_environment: impl FnOnce() -> Option<String>,
+) -> Cow<'a, str> {
+    match configured {
+        Some(endpoint) => Cow::Borrowed(endpoint),
+        None => from_environment()
+            .map(Cow::Owned)
+            .unwrap_or(Cow::Borrowed(DEFAULT_ENDPOINT)),
+    }
 }
 
 fn scope() -> InstrumentationScope {
