@@ -1,6 +1,7 @@
 //! Core-logger mapping, nonblocking export and provider-ownership tests for
 //! [`OtelLogSink`].
 
+use std::collections::HashMap;
 use std::future::Future;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, SystemTime};
@@ -159,7 +160,10 @@ fn event(target: &str) -> LogEvent {
             ("ratio".to_owned(), json!(0.5)),
             ("cached".to_owned(), json!(true)),
             ("missing".to_owned(), json!(null)),
-            ("shape".to_owned(), json!({"kind": "box"})),
+            (
+                "shape".to_owned(),
+                json!({"kind": "box", "contents": [true, null]}),
+            ),
         ]),
     }
 }
@@ -174,6 +178,15 @@ fn attribute(record: &SdkLogRecord, key: &str) -> Option<AnyValue> {
 
 fn text(value: &str) -> AnyValue {
     AnyValue::from(value.to_owned())
+}
+
+fn map(entries: impl IntoIterator<Item = (&'static str, AnyValue)>) -> AnyValue {
+    AnyValue::Map(Box::new(
+        entries
+            .into_iter()
+            .map(|(key, value)| (Key::from(key.to_owned()), value))
+            .collect::<HashMap<_, _>>(),
+    ))
 }
 
 #[test]
@@ -246,10 +259,20 @@ fn core_logger_events_are_redacted_then_mapped_to_native_records() {
     assert_eq!(attribute(record, "cached"), Some(AnyValue::Boolean(true)));
     assert_eq!(
         attribute(record, "missing"),
-        None,
-        "null fields are skipped"
+        Some(map([])),
+        "null fields remain visible as the native empty-map representation"
     );
-    assert_eq!(attribute(record, "shape"), Some(text(r#"{"kind":"box"}"#)));
+    assert_eq!(
+        attribute(record, "shape"),
+        Some(map([
+            ("kind", text("box")),
+            (
+                "contents",
+                AnyValue::ListAny(Box::new(vec![AnyValue::Boolean(true), map([]),])),
+            ),
+        ])),
+        "objects and arrays retain their native recursive structure"
+    );
     let context = record.trace_context().expect("valid trace context mapped");
     assert_eq!(context.trace_id.to_string(), TRACE_ID);
     assert_eq!(context.span_id.to_string(), SPAN_ID);

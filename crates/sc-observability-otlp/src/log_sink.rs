@@ -178,9 +178,7 @@ fn map_event(event: &LogEvent, record: &mut sdk::logs::SdkLogRecord) {
         }
     }
     for (key, value) in &event.fields {
-        if let Some(value) = any_value(value) {
-            record.add_attribute(key.clone(), value);
-        }
+        record.add_attribute(key.clone(), any_value(value));
     }
     if let Some(trace) = &event.trace {
         let ids = (
@@ -214,15 +212,24 @@ const fn severity(level: Level) -> (Severity, &'static str) {
     (severity, text)
 }
 
-fn any_value(value: &Value) -> Option<AnyValue> {
+fn any_value(value: &Value) -> AnyValue {
     match value {
-        Value::Null => None,
-        Value::Bool(value) => Some(AnyValue::Boolean(*value)),
+        // OpenTelemetry has no null `AnyValue` variant. Retain the field with
+        // the native empty-map representation rather than dropping it.
+        Value::Null => AnyValue::Map(Box::default()),
+        Value::Bool(value) => AnyValue::Boolean(*value),
         Value::Number(number) => number
             .as_i64()
             .map(AnyValue::Int)
-            .or_else(|| number.as_f64().map(AnyValue::Double)),
-        Value::String(value) => Some(AnyValue::from(value.clone())),
-        Value::Array(_) | Value::Object(_) => Some(AnyValue::from(value.to_string())),
+            .or_else(|| number.as_f64().map(AnyValue::Double))
+            .expect("JSON number has an OpenTelemetry scalar representation"),
+        Value::String(value) => AnyValue::from(value.clone()),
+        Value::Array(values) => AnyValue::ListAny(Box::new(values.iter().map(any_value).collect())),
+        Value::Object(values) => AnyValue::Map(Box::new(
+            values
+                .iter()
+                .map(|(key, value)| (key.clone().into(), any_value(value)))
+                .collect(),
+        )),
     }
 }
