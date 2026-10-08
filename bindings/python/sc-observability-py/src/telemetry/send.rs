@@ -16,8 +16,8 @@ use sc_observability_otlp::sdk::trace::{
     IdGenerator, RandomIdGenerator, SpanData, SpanEvents, SpanLinks,
 };
 use sc_observability_otlp::sync::{
-    Client, SyncError, check_input_limits, parent_span_is_remote, parse_span_id, parse_trace_id,
-    read_root_certificate, resolve_endpoint, span_times,
+    Client, InputByteCounter, SyncError, check_input_limits, parent_span_is_remote, parse_span_id,
+    parse_trace_id, read_root_certificate, resolve_endpoint, span_times,
 };
 use std::{
     panic::AssertUnwindSafe,
@@ -294,7 +294,7 @@ fn log(fields: LogFields<'_>) -> Result<Log, SyncError> {
             ));
         }
     };
-    let attributes = attributes(fields.attributes, fields.body.len())?;
+    let attributes = attributes(fields.attributes, &fields.body)?;
     Ok(Log {
         severity,
         body: fields.body,
@@ -343,7 +343,7 @@ fn span(fields: SpanFields<'_>) -> Result<SpanData, SyncError> {
         .map(|nanos| unix_nanos("start_time_unix_nano", &nanos))
         .transpose()?;
     let (start_time, end_time) = span_times(start_unix_nano, end_unix_nano)?;
-    let attributes = attributes(fields.attributes, fields.name.len())?;
+    let attributes = attributes(fields.attributes, &fields.name)?;
     Ok(SpanData {
         span_context: SpanContext::new(
             trace_id,
@@ -375,7 +375,7 @@ fn metric(fields: MetricFields<'_>) -> Result<Metric, SyncError> {
         "histogram" => MetricKind::Histogram,
         other => return Err(invalid(format!("unknown metric kind {other:?}"))),
     };
-    let attributes = attributes(fields.attributes, fields.name.len())?;
+    let attributes = attributes(fields.attributes, &fields.name)?;
     Ok(Metric {
         name: fields.name,
         kind,
@@ -386,22 +386,22 @@ fn metric(fields: MetricFields<'_>) -> Result<Metric, SyncError> {
     })
 }
 
-/// Converts attributes, counting `text_bytes` plus every key and string value
+/// Converts attributes, counting `signal_text` plus every key and string value
 /// against the shared per-call input limits.
 fn attributes(
     attributes: Vec<(String, Bound<'_, PyAny>)>,
-    text_bytes: usize,
+    signal_text: &str,
 ) -> Result<Vec<(String, Scalar)>, SyncError> {
-    check_input_limits(text_bytes, attributes.len())?;
-    let mut bytes = text_bytes;
+    check_input_limits(0, attributes.len())?;
+    let mut input = InputByteCounter::new();
+    input.add_text(signal_text)?;
     let mut converted = Vec::with_capacity(attributes.len());
     for (key, value) in attributes {
         let value = scalar(&key, &value)?;
-        bytes = bytes.saturating_add(key.len());
+        input.add_text(&key)?;
         if let Scalar::Str(text) = &value {
-            bytes = bytes.saturating_add(text.len());
+            input.add_text(text)?;
         }
-        check_input_limits(bytes, 0)?;
         converted.push((key, value));
     }
     Ok(converted)

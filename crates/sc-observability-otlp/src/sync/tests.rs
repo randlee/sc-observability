@@ -29,8 +29,8 @@ use opentelemetry_sdk::trace::{SpanData, SpanEvents, SpanLinks};
 use prost::Message;
 
 use super::{
-    Client, DEFAULT_OTLP_ENDPOINT, REDACTED, SyncError, check_input_limits, parent_span_is_remote,
-    parse_span_id, parse_trace_id, resolve_endpoint_with, span_times,
+    Client, DEFAULT_OTLP_ENDPOINT, InputByteCounter, REDACTED, SyncError, check_input_limits,
+    parent_span_is_remote, parse_span_id, parse_trace_id, resolve_endpoint_with, span_times,
 };
 use crate::constants::{MAX_BATCH_RECORDS, MAX_INPUT_BYTES};
 use crate::error_codes::sync as codes;
@@ -845,6 +845,14 @@ fn input_limits_accept_at_limit_and_reject_above() {
     );
     assert_eq!(
         validation_code(check_input_limits(1, MAX_BATCH_RECORDS + 1)),
+        codes::INPUT_LIMIT_EXCEEDED
+    );
+    let mut input = InputByteCounter::new();
+    input
+        .add_text(&"x".repeat(MAX_INPUT_BYTES))
+        .expect("at-limit text accepted");
+    assert_eq!(
+        validation_code(input.add_text("x")),
         codes::INPUT_LIMIT_EXCEEDED
     );
 }

@@ -231,6 +231,36 @@ pub fn check_input_limits(input_bytes: usize, records: usize) -> Result<(), Sync
     Ok(())
 }
 
+/// Shared byte accounting for one frontend signal before it is exported.
+///
+/// Frontends add the log body or signal name, every attribute key, and every
+/// string attribute value. Keeping the accumulation here makes the CLI and
+/// Python binding apply the same per-call input policy.
+#[derive(Default)]
+pub struct InputByteCounter {
+    bytes: usize,
+}
+
+impl InputByteCounter {
+    /// Starts an empty per-signal input counter.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { bytes: 0 }
+    }
+
+    /// Adds text to the input and rejects it as soon as it exceeds the limit.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SyncError::Validation`] with
+    /// [`error_codes::sync::INPUT_LIMIT_EXCEEDED`](crate::error_codes::sync::INPUT_LIMIT_EXCEEDED)
+    /// when the accumulated input exceeds [`MAX_INPUT_BYTES`].
+    pub fn add_text(&mut self, text: &str) -> Result<(), SyncError> {
+        self.bytes = self.bytes.saturating_add(text.len());
+        check_input_limits(self.bytes, 0)
+    }
+}
+
 /// Returns the shared CLI and Python endpoint after applying precedence.
 ///
 /// Borrows explicit and default values; an environment value is owned.

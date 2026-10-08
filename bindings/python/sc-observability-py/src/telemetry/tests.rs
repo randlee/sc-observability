@@ -227,7 +227,7 @@ fn attributes_map_python_scalars_and_reject_other_values() {
                 py,
                 c"[('flag', True), ('count', 3), ('ratio', 0.5), ('name', 'x')]",
             ),
-            0,
+            "",
         )
         .expect("supported scalars");
         assert_eq!(
@@ -245,7 +245,7 @@ fn attributes_map_python_scalars_and_reject_other_values() {
             c"[('k', {'a': 1})]",
             c"[('k', 2**63)]",
         ] {
-            let result = attributes(python_attributes(py, source), 0);
+            let result = attributes(python_attributes(py, source), "");
             assert_eq!(code(result), codes::INVALID_RECORD);
         }
     });
@@ -263,16 +263,38 @@ fn input_limits_count_attributes_and_text_bytes() {
         let long_value = format!("[('k', 'x' * {})]", MAX_INPUT_BYTES - 1);
         let eval =
             |source: String| python_attributes(py, &CString::new(source).expect("no interior NUL"));
-        assert!(attributes(eval(at_limit), 0).is_ok());
-        assert!(attributes(eval(long_value.clone()), 0).is_ok());
+        assert!(attributes(eval(at_limit), "").is_ok());
+        assert!(attributes(eval(long_value.clone()), "").is_ok());
         for result in [
-            attributes(eval(over_limit), 0),
-            attributes(eval(long_value), 1),
-            attributes(Vec::new(), MAX_INPUT_BYTES + 1),
+            attributes(eval(over_limit), ""),
+            attributes(eval(long_value), "x"),
+            attributes(Vec::new(), &"x".repeat(MAX_INPUT_BYTES + 1)),
         ] {
             assert_eq!(code(result), codes::INPUT_LIMIT_EXCEEDED);
         }
+        let long_key = format!("[('k' * {MAX_INPUT_BYTES}, True)]");
+        assert_eq!(
+            code(attributes(eval(long_key), "")),
+            codes::INPUT_LIMIT_EXCEEDED
+        );
     });
+}
+
+#[test]
+fn oversized_span_name_is_an_input_limit_failure() {
+    let result = span(SpanFields {
+        name: "x".repeat(MAX_INPUT_BYTES + 1),
+        trace_id: None,
+        span_id: None,
+        parent_span_id: None,
+        kind: "internal".into(),
+        start_time_unix_nano: None,
+        end_time_unix_nano: None,
+        ok: false,
+        error: None,
+        attributes: Vec::new(),
+    });
+    assert_eq!(code(result), codes::INPUT_LIMIT_EXCEEDED);
 }
 
 #[test]

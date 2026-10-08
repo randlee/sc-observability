@@ -16,8 +16,8 @@ use sc_observability_otlp::sdk::trace::{
     IdGenerator, RandomIdGenerator, SpanData, SpanEvents, SpanLinks,
 };
 use sc_observability_otlp::sync::{
-    Client, SyncError, check_input_limits, parent_span_is_remote, read_root_certificate,
-    resolve_endpoint, span_times,
+    Client, InputByteCounter, SyncError, check_input_limits, parent_span_is_remote,
+    read_root_certificate, resolve_endpoint, span_times,
 };
 use serde_json::Value as Json;
 use std::{io::Read, time::SystemTime};
@@ -76,7 +76,7 @@ fn send_log(
     scope: InstrumentationScope,
     args: &LogArgs,
 ) -> Result<(), SyncError> {
-    let attributes = attributes(args.attributes.attributes.as_deref())?;
+    let attributes = attributes(args.attributes.attributes.as_deref(), &args.body)?;
     let severity = match args.severity {
         LogSeverity::Trace => Severity::Trace,
         LogSeverity::Debug => Severity::Debug,
@@ -128,7 +128,10 @@ fn span(args: &SpanArgs, scope: InstrumentationScope) -> Result<SpanData, SyncEr
         name: args.name.clone().into(),
         start_time,
         end_time,
-        attributes: key_values(attributes(args.attributes.attributes.as_deref())?)?,
+        attributes: key_values(attributes(
+            args.attributes.attributes.as_deref(),
+            &args.name,
+        )?)?,
         dropped_attributes_count: 0,
         events: SpanEvents::default(),
         links: SpanLinks::default(),
@@ -143,7 +146,10 @@ fn send_metric(
     scope: InstrumentationScope,
     args: &MetricArgs,
 ) -> Result<(), SyncError> {
-    let attributes = key_values(attributes(args.attributes.attributes.as_deref())?)?;
+    let attributes = key_values(attributes(
+        args.attributes.attributes.as_deref(),
+        &args.name,
+    )?)?;
     client.send_metrics(resource, scope, |meter| {
         macro_rules! instrument {
             ($builder:expr) => {{
@@ -176,8 +182,10 @@ fn send_metric(
     })
 }
 
-/// Reads `--attributes` as one capped JSON object.
-fn attributes(source: Option<&str>) -> Result<Vec<(String, Json)>, SyncError> {
+/// Reads `--attributes` as one capped JSON object and counts it with signal text.
+fn attributes(source: Option<&str>, signal_text: &str) -> Result<Vec<(String, Json)>, SyncError> {
+    let mut input = InputByteCounter::new();
+    input.add_text(signal_text)?;
     let Some(source) = source else {
         return Ok(Vec::new());
     };
@@ -190,16 +198,16 @@ fn attributes(source: Option<&str>) -> Result<Vec<(String, Json)>, SyncError> {
     } else {
         source.to_owned()
     };
-    check_attribute_input_limits(text.len(), 0)?;
     let object: serde_json::Map<String, Json> = serde_json::from_str(&text)
         .map_err(|error| invalid(format!("attributes must be one JSON object: {error}")))?;
-    check_attribute_input_limits(text.len(), object.len())?;
+    check_input_limits(0, object.len())?;
+    for (key, value) in &object {
+        input.add_text(key)?;
+        if let Json::String(value) = value {
+            input.add_text(value)?;
+        }
+    }
     Ok(object.into_iter().collect())
-}
-
-/// Applies the shared input bounds to CLI attribute input.
-fn check_attribute_input_limits(input_bytes: usize, attributes: usize) -> Result<(), SyncError> {
-    check_input_limits(input_bytes, attributes)
 }
 
 /// Reads at most one byte past the input limit, so oversized input is
@@ -211,7 +219,7 @@ fn read_capped(reader: impl Read, name: &str) -> Result<String, SyncError> {
         .take(cap)
         .read_to_end(&mut bytes)
         .map_err(|error| invalid(format!("cannot read {name}: {error}")))?;
-    check_attribute_input_limits(bytes.len(), 0)?;
+    check_input_limits(bytes.len(), 0)?;
     String::from_utf8(bytes).map_err(|_| invalid(format!("{name} is not UTF-8")))
 }
 
@@ -292,7 +300,7 @@ mod tests {
         let parsed = key_values(
             attributes(Some(
                 r#"{"s":"text","b":true,"i":-3,"f":1.5,"big":18446744073709551615,"duplicate":"first","duplicate":"last"}"#,
-            ))
+            ), "")
             .expect("valid object"),
         )
         .expect("scalars");
@@ -323,18 +331,20 @@ mod tests {
             r#"{"a":[1]}"#,
             r#"{"a":{"b":1}}"#,
         ] {
-            let error = attributes(Some(source))
+            let error = attributes(Some(source), "")
                 .and_then(key_values)
                 .expect_err(source);
             assert_eq!(code(&error), codes::INVALID_RECORD, "{source}");
         }
-        let error =
-            attributes(Some("@/nonexistent/sc-otel-attributes.json")).expect_err("missing file");
+        let error = attributes(Some("@/nonexistent/sc-otel-attributes.json"), "")
+            .expect_err("missing file");
         assert_eq!(code(&error), codes::INVALID_RECORD);
     }
 
     #[test]
     fn structured_input_is_byte_and_record_capped() {
+        use clap::Parser;
+
         let at_limit = std::io::repeat(b' ').take(MAX_INPUT_BYTES as u64);
         assert_eq!(
             read_capped(at_limit, "input").expect("at limit").len(),
@@ -343,14 +353,34 @@ mod tests {
         let above = std::io::repeat(b' ').take(10 * MAX_INPUT_BYTES as u64);
         let error = read_capped(above, "input").expect_err("above limit");
         assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
+        let error =
+            attributes(None, &"x".repeat(MAX_INPUT_BYTES + 1)).expect_err("oversized log body");
+        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
+        let cli = Cli::try_parse_from([
+            "sc-otel",
+            "span",
+            "--name",
+            &"x".repeat(MAX_INPUT_BYTES + 1),
+        ])
+        .expect("span arguments parse");
+        let Command::Span(args) = cli.command else {
+            panic!("expected span command");
+        };
+        let error = span(&args, InstrumentationScope::builder("test").build())
+            .expect_err("oversized span name");
+        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
         let inline = format!("{{\"a\":\"{}\"}}", "x".repeat(MAX_INPUT_BYTES));
-        let error = attributes(Some(&inline)).expect_err("inline above limit");
+        let error = attributes(Some(&inline), "").expect_err("inline above limit");
+        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
+        let key = "k".repeat(MAX_INPUT_BYTES);
+        let error = attributes(Some(&format!("{{\"{key}\":true}}")), "")
+            .expect_err("oversized attribute key");
         assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
         let many = (0..=MAX_BATCH_RECORDS)
             .map(|index| format!("\"k{index}\":1"))
             .collect::<Vec<_>>()
             .join(",");
-        let error = attributes(Some(&format!("{{{many}}}"))).expect_err("too many attributes");
+        let error = attributes(Some(&format!("{{{many}}}")), "").expect_err("too many attributes");
         assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
     }
 
