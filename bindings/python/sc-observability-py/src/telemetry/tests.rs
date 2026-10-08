@@ -276,10 +276,31 @@ fn invalid_timeout_and_unreadable_certificate_are_config_failures_before_export(
 }
 
 #[test]
-fn random_ids_are_nonzero_and_distinct() {
-    let first = random();
-    assert_ne!(first, 0);
-    assert_ne!(first, random());
+fn generated_span_ids_come_from_the_sdk_generator_and_are_distinct() {
+    Python::initialize();
+    let fields = || SpanFields {
+        name: "span".into(),
+        trace_id: None,
+        span_id: None,
+        parent_span_id: None,
+        kind: "internal".into(),
+        start_time_unix_nano: None,
+        end_time_unix_nano: None,
+        ok: false,
+        error: None,
+        attributes: Vec::new(),
+    };
+    let mut traces = std::collections::HashSet::new();
+    let mut spans = std::collections::HashSet::new();
+    for _ in 0..1000 {
+        let generated = match span(fields()) {
+            Ok(span) => span,
+            Err(error) => std::panic::panic_any(error.to_string()),
+        };
+        assert!(generated.span_context.is_valid());
+        assert!(traces.insert(generated.span_context.trace_id()));
+        assert!(spans.insert(generated.span_context.span_id()));
+    }
 }
 
 /// Bounds every collector wait so a broken send cannot hang the suite.

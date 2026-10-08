@@ -12,12 +12,13 @@ use sc_observability_otlp::api::{InstrumentationScope, KeyValue, Value};
 use sc_observability_otlp::error_codes::{TELEMETRY_EXPORT_FAILED, sync as codes};
 use sc_observability_otlp::sdk::Resource;
 use sc_observability_otlp::sdk::error::OTelSdkError;
-use sc_observability_otlp::sdk::trace::{SpanData, SpanEvents, SpanLinks};
+use sc_observability_otlp::sdk::trace::{
+    IdGenerator, RandomIdGenerator, SpanData, SpanEvents, SpanLinks,
+};
 use sc_observability_otlp::sync::{
     Client, SyncError, check_input_limits, parse_span_id, parse_trace_id, resolve_endpoint,
 };
 use std::{
-    hash::{BuildHasher, RandomState},
     panic::AssertUnwindSafe,
     path::PathBuf,
     time::{Duration, SystemTime},
@@ -326,11 +327,11 @@ fn span(fields: SpanFields<'_>) -> Result<SpanData, SyncError> {
     };
     let trace_id = match fields.trace_id.as_deref() {
         Some(value) => parse_trace_id("trace_id", value)?,
-        None => TraceId::from(u128::from(random()) << 64 | u128::from(random())),
+        None => RandomIdGenerator::default().new_trace_id(),
     };
     let span_id = match fields.span_id.as_deref() {
         Some(value) => parse_span_id("span_id", value)?,
-        None => SpanId::from(random()),
+        None => RandomIdGenerator::default().new_span_id(),
     };
     let parent_span_id = fields
         .parent_span_id
@@ -463,10 +464,4 @@ fn unix_nanos(field: &str, nanos: &Bound<'_, PyInt>) -> Result<SystemTime, SyncE
                 "{field}: integer outside the unsigned 64-bit range"
             ))
         })
-}
-
-/// A non-zero id from the standard library's randomly keyed hasher; each
-/// `RandomState` carries distinct keys.
-fn random() -> u64 {
-    RandomState::new().hash_one(SystemTime::now()).max(1)
 }
