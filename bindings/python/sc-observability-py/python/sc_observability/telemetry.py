@@ -6,7 +6,7 @@ exporter reports its result; nothing is stored or retried after the call.
 from __future__ import annotations
 
 import importlib
-from os import PathLike, fspath
+from os import PathLike, fspath as _fspath
 from typing import Any, Literal, Mapping, TypeAlias
 
 from . import Err, Result, _decode_control, _foreign_message, _internal
@@ -52,7 +52,7 @@ class Telemetry:
             "endpoint": endpoint,
             "headers": _items("headers", headers),
             "timeout_s": timeout_s,
-            "root_certificate": None if root_certificate is None else fspath(root_certificate),
+            "root_certificate": None if root_certificate is None else _fspath(root_certificate),
             "service_name": service_name,
         }
 

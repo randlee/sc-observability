@@ -112,7 +112,12 @@ class Sandbox:
     def __enter__(self):
         if self.system == 'Darwin':
             profile = self.scratch / 'isolation.sb'
-            profile.write_text('(version 1)\n(allow default)\n(deny network*)\n' + '\n'.join(
+            # Keep the installed suite's in-process collector usable while
+            # denying every non-loopback network operation.
+            profile.write_text('(version 1)\n(allow default)\n(deny network*)\n'
+                               '(allow network-bind (local ip "localhost:*"))\n'
+                               '(allow network-inbound (local ip "localhost:*"))\n'
+                               '(allow network-outbound (remote ip "localhost:*"))\n' + '\n'.join(
                 f'(deny file-read* (subpath {json.dumps(str(path))}))' for path in self.denied))
             self.prefix = ['/usr/bin/sandbox-exec', '-f', str(profile)]
         elif self.system == 'Linux':
@@ -186,6 +191,20 @@ class Sandbox:
 
     def prove_denials(self, python: str, checkout: Path) -> dict:
         """The destination was verified reachable before applying the deny policy."""
+        loopback = self.scratch / 'loopback-probe.py'
+        loopback.write_text('''import socket
+server = socket.create_server(("127.0.0.1", 0))
+server.settimeout(2)
+client = socket.create_connection(server.getsockname(), timeout=2)
+connection, _ = server.accept()
+connection.sendall(b"ok")
+assert client.recv(2) == b"ok"
+connection.close(); client.close(); server.close()
+print("LOOPBACK_COLLECTOR_ALLOWED")
+''', encoding='utf-8')
+        loopback_output = self.run([python, '-I', str(loopback)], self.scratch)
+        if loopback_output.strip() != 'LOOPBACK_COLLECTOR_ALLOWED':
+            raise DistributionError('missing loopback collector proof')
         code = '''import pathlib,socket,subprocess,sys
 for item in sys.argv[1:3]:
  try: pathlib.Path(item).read_bytes()
@@ -207,5 +226,5 @@ print('CHECKOUT_CACHE_NETWORK_DENIED')
                            str(self.cache_probe), self.network_ip, '2'], self.scratch)
         if output.count('CHECKOUT_CACHE_NETWORK_DENIED') != 3:
             raise DistributionError('missing isolation denial proof')
-        return {'checkout': True, 'cargo_cache': True, 'network': True,
+        return {'checkout': True, 'cargo_cache': True, 'network': True, 'loopback': True,
                 'process_generations': 3, 'denied_roots': [str(path) for path in self.denied]}

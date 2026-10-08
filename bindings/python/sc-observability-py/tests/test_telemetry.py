@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import socket
 import struct
+import tempfile
 import threading
 from typing import Any, Iterator
 from unittest.mock import patch
@@ -242,42 +243,45 @@ def test_blocked_export_releases_the_gil_and_returns_a_tagged_failure() -> None:
     # run Python while the send is blocked for the test to finish. Every
     # socket wait has its own shorter deadline, so the watchdog fires only for
     # that deadlock.
-    faulthandler.dump_traceback_later(5 * COLLECTOR_WAIT_S, exit=True)
-    try:
-        with socket.create_server(("127.0.0.1", 0)) as server:
-            server.settimeout(COLLECTOR_WAIT_S)
-            endpoint = f"http://127.0.0.1:{server.getsockname()[1]}"
-            results: list[Result[None]] = []
-            done = threading.Event()
+    # pytest's tee-sys capture presents a text proxy without a file descriptor.
+    # Keep the watchdog active, but give faulthandler a real stderr-like file.
+    with tempfile.TemporaryFile(mode="w+") as watchdog:
+        faulthandler.dump_traceback_later(5 * COLLECTOR_WAIT_S, file=watchdog, exit=True)
+        try:
+            with socket.create_server(("127.0.0.1", 0)) as server:
+                server.settimeout(COLLECTOR_WAIT_S)
+                endpoint = f"http://127.0.0.1:{server.getsockname()[1]}"
+                results: list[Result[None]] = []
+                done = threading.Event()
 
-            def send() -> None:
-                try:
-                    results.append(Telemetry(endpoint, timeout_s=600).log("stalled"))
-                finally:
-                    done.set()
+                def send() -> None:
+                    try:
+                        results.append(Telemetry(endpoint, timeout_s=600).log("stalled"))
+                    finally:
+                        done.set()
 
-            worker = threading.Thread(target=send, daemon=True)
-            worker.start()
-            try:
-                connection, _ = server.accept()
-            except TimeoutError:
-                pytest.fail(f"no export connection within {COLLECTOR_WAIT_S} s; results: {results}")
-            with connection:
-                connection.settimeout(COLLECTOR_WAIT_S)
+                worker = threading.Thread(target=send, daemon=True)
+                worker.start()
                 try:
-                    request = _read_request(connection)
+                    connection, _ = server.accept()
                 except TimeoutError:
-                    pytest.fail(f"no complete export request within {COLLECTOR_WAIT_S} s")
-                assert request.startswith(b"POST /v1/logs "), request[:64]
-                # The collector has the request and has not answered: the send is blocked.
-                assert not done.is_set()
-                # Answer with a rejection rather than closing the connection: a
-                # 4xx is not retried (test_rejected_export_is_tagged_and_redacted
-                # sees exactly one request), so the send ends on this reply.
-                connection.sendall(b"HTTP/1.1 400 Bad Request\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
-            assert done.wait(COLLECTOR_WAIT_S), "send did not finish after the collector rejected it"
-        worker.join(timeout=COLLECTOR_WAIT_S)
-        assert len(results) == 1
-        _failure(results[0], "unavailable", "SC_OBSERVABILITY_OTLP_EXPORT_FAILED")
-    finally:
-        faulthandler.cancel_dump_traceback_later()
+                    pytest.fail(f"no export connection within {COLLECTOR_WAIT_S} s; results: {results}")
+                with connection:
+                    connection.settimeout(COLLECTOR_WAIT_S)
+                    try:
+                        request = _read_request(connection)
+                    except TimeoutError:
+                        pytest.fail(f"no complete export request within {COLLECTOR_WAIT_S} s")
+                    assert request.startswith(b"POST /v1/logs "), request[:64]
+                    # The collector has the request and has not answered: the send is blocked.
+                    assert not done.is_set()
+                    # Answer with a rejection rather than closing the connection: a
+                    # 4xx is not retried (test_rejected_export_is_tagged_and_redacted
+                    # sees exactly one request), so the send ends on this reply.
+                    connection.sendall(b"HTTP/1.1 400 Bad Request\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
+                assert done.wait(COLLECTOR_WAIT_S), "send did not finish after the collector rejected it"
+                worker.join(timeout=COLLECTOR_WAIT_S)
+                assert len(results) == 1
+                _failure(results[0], "unavailable", "SC_OBSERVABILITY_OTLP_EXPORT_FAILED")
+        finally:
+            faulthandler.cancel_dump_traceback_later()

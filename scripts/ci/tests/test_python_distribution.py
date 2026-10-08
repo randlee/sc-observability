@@ -2,6 +2,8 @@
 import io
 import json
 import os
+import platform
+import shutil
 import sys
 import tarfile
 import tempfile
@@ -20,6 +22,24 @@ from python_test_fixtures import pe
 
 
 class DistributionTests(unittest.TestCase):
+    @unittest.skipUnless(platform.system() == 'Darwin' and shutil.which('rustup')
+                         and Path('/usr/bin/sandbox-exec').exists(),
+                         'requires the Darwin sandbox and pinned Rust toolchain')
+    def test_darwin_sandbox_allows_loopback_but_keeps_denials(self):
+        from _python_sandbox import Sandbox
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scratch = root / 'scratch'
+            scratch.mkdir()
+            checkout = Path(__file__).resolve().parents[3]
+            with Sandbox(scratch, [checkout]) as sandbox:
+                proof = sandbox.prove_denials(sys.executable, checkout)
+        self.assertTrue(proof['loopback'])
+        self.assertTrue(proof['network'])
+        self.assertTrue(proof['checkout'])
+        self.assertTrue(proof['cargo_cache'])
+
     def test_source_python_contract_reads_utf8_independent_of_locale(self):
         import io
 

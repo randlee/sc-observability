@@ -2347,7 +2347,6 @@
     "external sc_observability.telemetry.Literal = typing.Literal",
     "external sc_observability.telemetry.PathLike = os.PathLike",
     "external sc_observability.telemetry.TypeAlias = typing.TypeAlias",
-    "external sc_observability.telemetry.fspath = posix.fspath",
     "field sc_observability.Err.error: 'generated.Failure'",
     "field sc_observability.Err.kind: \"Literal['error']\"",
     "field sc_observability.FieldMatch.field: 'str'",
