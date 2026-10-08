@@ -2,9 +2,9 @@
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use sc_observability_otlp::api::trace::{SpanId, TraceId};
-use std::{path::PathBuf, time::Duration};
+use std::{fmt, path::PathBuf, time::Duration};
 
-#[derive(Debug, Parser)]
+#[derive(Parser)]
 #[command(
     name = "sc-otel",
     version,
@@ -30,6 +30,50 @@ pub(crate) struct Cli {
     pub(crate) service: Option<String>,
     #[command(subcommand)]
     pub(crate) command: Command,
+}
+
+impl fmt::Debug for Cli {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let endpoint = self.endpoint.as_deref().map(redact_url_userinfo);
+        let headers = self
+            .headers
+            .iter()
+            .map(|(name, _)| name)
+            .collect::<Vec<_>>();
+
+        f.debug_struct("Cli")
+            .field("endpoint", &endpoint)
+            .field("headers", &headers)
+            .field("timeout", &self.timeout)
+            .field("root_certificate", &self.root_certificate)
+            .field("service", &self.service)
+            .field("command", &self.command)
+            .finish()
+    }
+}
+
+fn redact_url_userinfo(text: &str) -> String {
+    let mut output = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(index) = rest.find("://") {
+        let (head, tail) = rest.split_at(index + 3);
+        output.push_str(head);
+        let authority_end = tail
+            .find(|c: char| {
+                matches!(c, '/' | '?' | '#') || c.is_whitespace() || "\"'()<>".contains(c)
+            })
+            .unwrap_or(tail.len());
+        let authority = &tail[..authority_end];
+        if let Some(at) = authority.rfind('@') {
+            output.push_str("<redacted>");
+            output.push_str(&authority[at..]);
+        } else {
+            output.push_str(authority);
+        }
+        rest = &tail[authority_end..];
+    }
+    output.push_str(rest);
+    output
 }
 
 #[derive(Debug, Subcommand)]
@@ -223,6 +267,29 @@ mod tests {
         );
         assert_eq!(cli.timeout, Some(std::time::Duration::from_secs(9)));
         assert!(matches!(cli.command, Command::Log(_)));
+    }
+
+    #[test]
+    fn debug_redacts_header_values_and_endpoint_userinfo() {
+        let cli = parse(&[
+            "--endpoint",
+            "https://deploy-user:endpoint-password@collector:4318",
+            "--header",
+            "authorization=Bearer f20-secret",
+            "log",
+            "--body",
+            "started",
+        ])
+        .expect("valid log command");
+
+        let rendered = format!("{cli:?}");
+
+        assert!(rendered.contains("Cli"), "{rendered}");
+        assert!(rendered.contains("authorization"), "{rendered}");
+        assert!(rendered.contains("<redacted>"), "{rendered}");
+        assert!(!rendered.contains("Bearer f20-secret"), "{rendered}");
+        assert!(!rendered.contains("deploy-user"), "{rendered}");
+        assert!(!rendered.contains("endpoint-password"), "{rendered}");
     }
 
     #[test]
