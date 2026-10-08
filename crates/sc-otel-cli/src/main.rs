@@ -18,13 +18,28 @@ fn main() -> ExitCode {
     match result {
         Ok(exit) => ExitCode::from(exit),
         Err(payload) => {
-            eprintln!(
-                "sc-otel: unexpected internal error: {}",
-                panic_message(&*payload)
-            );
+            let include_payload =
+                panic_details_enabled(std::env::var(constants::PANIC_DETAILS_ENV).ok().as_deref());
+            eprintln!("{}", panic_diagnostic(&*payload, include_payload));
             ExitCode::from(error_codes::EXIT_INTERNAL)
         }
     }
+}
+
+fn panic_details_enabled(setting: Option<&str>) -> bool {
+    setting == Some("1")
+}
+
+fn panic_diagnostic(payload: &(dyn std::any::Any + Send), include_payload: bool) -> String {
+    let mut diagnostic = format!(
+        "sc-otel: unexpected internal error [{}].\nRecovery: Retry the command; if the error persists, report this code and the sc-otel version. Set SC_OTEL_DEBUG_PANIC=1 to include local diagnostic details.",
+        constants::INTERNAL_ERROR_CODE
+    );
+    if include_payload {
+        diagnostic.push_str("\nDiagnostic: panic payload (shown because SC_OTEL_DEBUG_PANIC=1): ");
+        diagnostic.push_str(panic_message(payload));
+    }
+    diagnostic
 }
 
 fn panic_message(payload: &(dyn std::any::Any + Send)) -> &str {
@@ -62,12 +77,38 @@ fn run() -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::panic_message;
+    use super::{panic_details_enabled, panic_diagnostic};
 
     #[test]
-    fn panic_message_preserves_string_payloads_and_bounds_other_payloads() {
-        assert_eq!(panic_message(&"expected panic"), "expected panic");
-        assert_eq!(panic_message(&String::from("owned panic")), "owned panic");
-        assert_eq!(panic_message(&42_u8), "non-string panic payload");
+    fn panic_payload_requires_the_exact_opt_in_value() {
+        assert!(!panic_details_enabled(None));
+        assert!(!panic_details_enabled(Some("0")));
+        assert!(!panic_details_enabled(Some("true")));
+        assert!(panic_details_enabled(Some("1")));
+    }
+
+    #[test]
+    fn panic_diagnostic_hides_payload_by_default_and_gives_recovery_guidance() {
+        let diagnostic = panic_diagnostic(&"Authorization: Bearer secret", false);
+
+        assert!(
+            diagnostic.starts_with("sc-otel: unexpected internal error [SC_OTEL_CLI_INTERNAL].")
+        );
+        assert!(diagnostic.contains(
+            "Recovery: Retry the command; if the error persists, report this code and the sc-otel version."
+        ));
+        assert!(
+            diagnostic.contains("Set SC_OTEL_DEBUG_PANIC=1 to include local diagnostic details.")
+        );
+        assert!(!diagnostic.contains("Authorization"));
+        assert!(!diagnostic.contains("secret"));
+    }
+
+    #[test]
+    fn panic_diagnostic_shows_payload_only_when_explicitly_enabled() {
+        let diagnostic = panic_diagnostic(&"Authorization: Bearer secret", true);
+
+        assert!(diagnostic.contains("SC_OTEL_DEBUG_PANIC=1"));
+        assert!(diagnostic.contains("Authorization: Bearer secret"));
     }
 }
