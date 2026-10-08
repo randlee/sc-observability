@@ -6,6 +6,7 @@ pub(crate) const EXIT_USAGE: u8 = 2;
 /// Input or configuration was rejected before any export was attempted.
 pub(crate) const EXIT_VALIDATION: u8 = 3;
 /// The official exporter reported a failed export.
+/// Use 7 to distinguish delivery failures from success and local CLI errors (0–3).
 pub(crate) const EXIT_EXPORT: u8 = 7;
 
 /// Endpoint used when neither `--endpoint` nor `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
