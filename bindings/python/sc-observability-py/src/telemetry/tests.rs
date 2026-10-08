@@ -1,221 +1,207 @@
-//! Conformance coverage for the existing non-exhaustive error surface.
-use super::{config, dto};
-use sc_observability_types::otlp::submission::*;
-use sc_observability_types::{ErrorContext, Remediation, error_codes};
-fn context() -> Box<ErrorContext> {
-    Box::new(
-        ErrorContext::new(
-            error_codes::SC_OBSERVABILITY_SUBMIT_VALIDATION,
-            "detail",
-            Remediation::not_recoverable("correct input"),
-        )
-        .cause("original cause"),
-    )
-}
-fn assert_projection(error: &TelemetryClientError, kind: &str, variant: &str) {
-    let value: serde_json::Value =
-        serde_json::from_str(&dto::failure(error)).expect("valid test error JSON");
-    assert_eq!(value["error"]["kind"], kind);
-    assert_eq!(value["error"]["variant"], variant);
-    assert_eq!(value["error"]["code"], error.code().as_str());
-    assert_eq!(value["error"]["cause"], "original cause");
-    assert_eq!(
-        value["error"]["remediation"]["justification"],
-        "correct input"
-    );
-}
-#[test]
-fn every_current_error_variant_has_a_specific_projection() {
-    assert_projection(
-        &SubmissionError::InvalidJson { context: context() }.into(),
-        "submission",
-        "invalid_json",
-    );
-    assert_projection(
-        &SubmissionError::UnsupportedVersion {
-            found: EnvelopeVersion::new(2),
-            context: context(),
-        }
-        .into(),
-        "submission",
-        "unsupported_version",
-    );
-    assert_projection(
-        &SubmissionError::EmptySubmission { context: context() }.into(),
-        "submission",
-        "empty_submission",
-    );
-    assert_projection(
-        &SubmissionError::Validation {
-            path: "logs".into(),
-            context: context(),
-        }
-        .into(),
-        "submission",
-        "validation",
-    );
-    assert_projection(
-        &SubmissionError::ValueOutOfRange {
-            path: "logs".into(),
-            context: context(),
-        }
-        .into(),
-        "submission",
-        "value_out_of_range",
-    );
-    assert_projection(
-        &SubmissionError::CorrelationConflict { context: context() }.into(),
-        "submission",
-        "correlation_conflict",
-    );
-    assert_projection(
-        &SubmissionError::TimingConflict { context: context() }.into(),
-        "submission",
-        "timing_conflict",
-    );
-    assert_projection(
-        &SubmissionError::DictionaryReference {
-            path: "profiles".into(),
-            context: context(),
-        }
-        .into(),
-        "submission",
-        "dictionary_reference",
-    );
-}
-#[test]
-fn every_admission_variant_has_a_specific_projection() {
-    assert_projection(
-        &AdmissionError::StoreUnavailable { context: context() }.into(),
-        "admission",
-        "store_unavailable",
-    );
-    assert_projection(
-        &AdmissionError::DiskBoundExceeded { context: context() }.into(),
-        "admission",
-        "disk_bound_exceeded",
-    );
-    assert_projection(
-        &AdmissionError::Persistence { context: context() }.into(),
-        "admission",
-        "persistence",
-    );
-    assert_projection(
-        &AdmissionError::SchemaTooNew {
-            found: 2,
-            supported: 1,
-            context: context(),
-        }
-        .into(),
-        "admission",
-        "schema_too_new",
-    );
-    assert_projection(
-        &AdmissionError::Closed { context: context() }.into(),
-        "admission",
-        "closed",
-    );
-}
-#[test]
-fn every_delivery_and_config_variant_has_a_specific_projection() {
-    assert_projection(
-        &DeliveryError::DeadlineExceeded {
-            report: FlushReport::default(),
-            context: context(),
-        }
-        .into(),
-        "delivery",
-        "deadline_exceeded",
-    );
-    assert_projection(
-        &DeliveryError::TerminalFailure {
-            report: FlushReport::default(),
-            context: context(),
-        }
-        .into(),
-        "delivery",
-        "terminal_failure",
-    );
-    assert_projection(
-        &TelemetryConfigError::ConfigFile {
-            path: "bad.yaml".into(),
-            context: context(),
-        }
-        .into(),
-        "config",
-        "config_file",
-    );
-    assert_projection(
-        &TelemetryConfigError::MissingField {
-            field: "store_path",
-            context: context(),
-        }
-        .into(),
-        "config",
-        "missing_field",
-    );
-    assert_projection(
-        &TelemetryConfigError::InvalidField {
-            field: "endpoint",
-            context: context(),
-        }
-        .into(),
-        "config",
-        "invalid_field",
-    );
-    assert_projection(
-        &TelemetryConfigError::UnsupportedCombination {
-            backend: ExporterBackendId::SyncHttp,
-            signal: Signal::Logs,
-            representation: Representation::Log,
-            context: context(),
-        }
-        .into(),
-        "config",
-        "unsupported_combination",
-    );
-}
-#[test]
-fn invalid_arguments_keep_registered_code_and_parse_cause() {
-    for error in [
-        config::config("{").unwrap_err(),
-        config::status_query("{").unwrap_err(),
-        config::status_query("\"unsupported\"").unwrap_err(),
-    ] {
-        let value: serde_json::Value =
-            serde_json::from_str(&dto::failure(&error)).expect("valid test error JSON");
-        assert_eq!(
-            value["error"]["code"],
-            error_codes::SC_OBSERVABILITY_TELEMETRY_CONFIG_INVALID.as_str()
-        );
-        assert!(
-            !value["error"]["cause"]
-                .as_str()
-                .expect("valid test error JSON")
-                .is_empty()
-        );
+//! Conversion, limit and failure-projection coverage for the Python send path.
+use super::*;
+use sc_observability_otlp::constants::{MAX_BATCH_RECORDS, MAX_INPUT_BYTES};
+use sc_observability_otlp::sdk::error::OTelSdkError;
+use std::ffi::{CStr, CString};
+
+fn config(timeout_s: Option<f64>, root_certificate: Option<PathBuf>) -> Config {
+    Config {
+        endpoint: Some("http://127.0.0.1:9".into()),
+        headers: Vec::new(),
+        timeout_s,
+        root_certificate,
+        service_name: None,
     }
 }
-struct Bad;
-impl serde::Serialize for Bad {
-    fn serialize<S: serde::Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
-        Err(serde::ser::Error::custom("serialize detail"))
+
+/// The registry code of an expected failure.
+fn code<T>(result: Result<T, SyncError>) -> String {
+    failure(&expect_err(result)).1
+}
+
+fn log_fields<'py>(
+    severity: &str,
+    trace_id: Option<&str>,
+    span_id: Option<&str>,
+) -> LogFields<'py> {
+    LogFields {
+        body: "body".into(),
+        severity: severity.into(),
+        trace_id: trace_id.map(Into::into),
+        span_id: span_id.map(Into::into),
+        attributes: Vec::new(),
+    }
+}
+
+fn expect_err<T>(result: Result<T, SyncError>) -> SyncError {
+    match result {
+        Ok(_) => std::panic::panic_any("expected a validation failure"),
+        Err(error) => error,
     }
 }
 
 #[test]
-fn panic_payload_and_serialization_failure_are_distinct() {
-    let raw =
-        dto::result::<()>(|| std::panic::resume_unwind(Box::new(String::from("panic detail"))));
-    let value: serde_json::Value = serde_json::from_str(&raw).expect("valid test error JSON");
-    assert_eq!(value["error"]["variant"], "panic");
-    assert_eq!(value["error"]["cause"], "panic detail");
-    let value: serde_json::Value =
-        serde_json::from_str(&dto::ok(Bad)).expect("valid test error JSON");
-    assert_eq!(value["error"]["variant"], "serialization");
-    assert_eq!(value["error"]["cause"], "serialize detail");
+fn validation_keeps_its_code_and_export_uses_the_registered_export_code() {
+    let (kind, code, message) = failure(&SyncError::validation(codes::INVALID_RECORD, "bad"));
+    assert_eq!((kind, code.as_str()), ("validation", codes::INVALID_RECORD));
+    assert!(message.contains("bad"));
+    let (kind, code, message) = failure(&SyncError::Export(OTelSdkError::InternalFailure(
+        "refused".into(),
+    )));
     assert_eq!(
-        value["error"]["code"],
-        sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL
+        (kind, code.as_str()),
+        ("export", TELEMETRY_EXPORT_FAILED.as_str())
     );
+    assert!(message.contains("refused"));
+}
+
+#[test]
+fn ids_must_be_fixed_width_lowercase_hex() {
+    assert!(trace_id_from("4bf92f3577b34da6a3ce929d0e0e4736").is_ok());
+    assert!(span_id_from("span_id", "00f067aa0ba902b7").is_ok());
+    for result in [
+        trace_id_from("4BF92F3577B34DA6A3CE929D0E0E4736").map(drop),
+        trace_id_from("4bf92f").map(drop),
+        span_id_from("parent_span_id", "f067aa0ba902b7").map(drop),
+        span_id_from("span_id", "00f067aa0ba902bz").map(drop),
+    ] {
+        assert_eq!(code(result), codes::INVALID_RECORD);
+    }
+}
+
+#[test]
+fn log_and_span_field_combinations_are_validated() {
+    Python::initialize();
+    let trace = "4bf92f3577b34da6a3ce929d0e0e4736";
+    for result in [
+        log(log_fields("loud", None, None)).map(drop),
+        log(log_fields("info", Some(trace), None)).map(drop),
+        log(log_fields("info", None, Some("00f067aa0ba902b7"))).map(drop),
+    ] {
+        assert_eq!(code(result), codes::INVALID_RECORD);
+    }
+    assert!(log(log_fields("warn", Some(trace), Some("00f067aa0ba902b7"))).is_ok());
+    let span_fields =
+        |kind: &str, parent: Option<&str>, ok: bool, error: Option<&str>| SpanFields {
+            name: "span".into(),
+            trace_id: None,
+            span_id: None,
+            parent_span_id: parent.map(Into::into),
+            kind: kind.into(),
+            start_time_unix_nano: Some(1),
+            end_time_unix_nano: Some(2),
+            ok,
+            error: error.map(Into::into),
+            attributes: Vec::new(),
+        };
+    for result in [
+        span(span_fields("sideways", None, false, None)).map(drop),
+        span(span_fields("client", Some("00f067aa0ba902b7"), false, None)).map(drop),
+        span(span_fields("client", None, true, Some("boom"))).map(drop),
+    ] {
+        assert_eq!(code(result), codes::INVALID_RECORD);
+    }
+    let generated = match span(span_fields("server", None, false, Some("boom"))) {
+        Ok(span) => span,
+        Err(error) => std::panic::panic_any(error.to_string()),
+    };
+    assert!(generated.span_context.is_valid());
+    assert_eq!(generated.span_kind, SpanKind::Server);
+    assert_eq!(generated.status, Status::error("boom"));
+    assert_eq!(generated.parent_span_id, SpanId::INVALID);
+}
+
+fn python_attributes<'py>(py: Python<'py>, source: &CStr) -> Vec<(String, Bound<'py, PyAny>)> {
+    py.eval(source, None, None)
+        .and_then(|value| value.extract())
+        .expect("valid attribute list")
+}
+
+#[test]
+fn attributes_map_python_scalars_and_reject_other_values() {
+    Python::initialize();
+    Python::attach(|py| {
+        let converted = attributes(
+            python_attributes(
+                py,
+                c"[('flag', True), ('count', 3), ('ratio', 0.5), ('name', 'x')]",
+            ),
+            0,
+        )
+        .expect("supported scalars");
+        assert_eq!(
+            converted,
+            [
+                ("flag".into(), Scalar::Bool(true)),
+                ("count".into(), Scalar::Int(3)),
+                ("ratio".into(), Scalar::Float(0.5)),
+                ("name".into(), Scalar::Str("x".into())),
+            ]
+        );
+        for source in [
+            c"[('k', None)]",
+            c"[('k', [1])]",
+            c"[('k', {'a': 1})]",
+            c"[('k', 2**63)]",
+        ] {
+            let result = attributes(python_attributes(py, source), 0);
+            assert_eq!(code(result), codes::INVALID_RECORD);
+        }
+    });
+}
+
+#[test]
+fn input_limits_count_attributes_and_text_bytes() {
+    Python::initialize();
+    Python::attach(|py| {
+        let at_limit = format!("[('k' + str(i), 1) for i in range({MAX_BATCH_RECORDS})]");
+        let over_limit = format!(
+            "[('k' + str(i), 1) for i in range({})]",
+            MAX_BATCH_RECORDS + 1
+        );
+        let long_value = format!("[('k', 'x' * {})]", MAX_INPUT_BYTES - 1);
+        let eval =
+            |source: String| python_attributes(py, &CString::new(source).expect("no interior NUL"));
+        assert!(attributes(eval(at_limit), 0).is_ok());
+        assert!(attributes(eval(long_value.clone()), 0).is_ok());
+        for result in [
+            attributes(eval(over_limit), 0),
+            attributes(eval(long_value), 1),
+            attributes(Vec::new(), MAX_INPUT_BYTES + 1),
+        ] {
+            assert_eq!(code(result), codes::INPUT_LIMIT_EXCEEDED);
+        }
+    });
+}
+
+#[test]
+fn invalid_timeout_and_unreadable_certificate_are_config_failures_before_export() {
+    let signal = || {
+        Signal::Metric(Metric {
+            name: "jobs".into(),
+            kind: MetricKind::Counter,
+            value: 1.0,
+            unit: None,
+            description: None,
+            attributes: Vec::new(),
+        })
+    };
+    for config in [
+        config(Some(f64::NAN), None),
+        config(Some(-1.0), None),
+        config(Some(0.0), None),
+        config(
+            None,
+            Some(PathBuf::from("/nonexistent/sc-observability-ca.pem")),
+        ),
+    ] {
+        assert_eq!(code(export(config, signal())), codes::INVALID_CONFIG);
+    }
+}
+
+#[test]
+fn random_ids_are_nonzero_and_distinct() {
+    let first = random();
+    assert_ne!(first, 0);
+    assert_ne!(first, random());
 }

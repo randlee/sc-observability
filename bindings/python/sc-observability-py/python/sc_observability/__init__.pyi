@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Generic, Literal, Mapping, TypeAlias, TypeVar, NoReturn
 from . import generated as generated
 from .async_logging import LogReceipt as LogReceipt, ReceiptState as ReceiptState, Resolved as Resolved
-from .telemetry import LeaseInfo as LeaseInfo, DeliveryStatus as DeliveryStatus, AdmissionReceipt as AdmissionReceipt, FlushReport as FlushReport, SignalCounts as SignalCounts, StoreStatus as StoreStatus, Telemetry as Telemetry, TelemetryErr as TelemetryErr, TelemetryFailure as TelemetryFailure, TelemetryResult as TelemetryResult, build_envelope as build_envelope
+from .telemetry import Telemetry as Telemetry, TelemetryErr as TelemetryErr, TelemetryFailure as TelemetryFailure, TelemetryResult as TelemetryResult
 T = TypeVar('T')
 Level: TypeAlias = Literal['trace', 'debug', 'info', 'warn', 'error']
 LevelFilter: TypeAlias = Literal['off', 'error', 'warn', 'info', 'debug', 'trace']

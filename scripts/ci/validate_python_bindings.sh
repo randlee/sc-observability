@@ -43,7 +43,7 @@ uv run --no-project --python "$B4_PYTHON" --with pytest==9.1.1 python -m pytest 
 
 uvx --from "maturin==$("$B4_PYTHON" -c 'from pathlib import Path; from scripts.ci.python_binding_validator import maturin_version; print(maturin_version(Path(".")))')" maturin build --locked \
   --manifest-path bindings/python/sc-observability-py/Cargo.toml \
-  --features test-hooks \
+  --features test-hooks,otlp-telemetry \
   --interpreter "$B4_PYTHON" \
   --out "$B4_TEMP_DIR/wheels"
 uv venv --python "$B4_PYTHON" "$B4_TEMP_DIR/venv"
