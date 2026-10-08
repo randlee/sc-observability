@@ -26,12 +26,14 @@
 //!
 //! # Configuration precedence
 //!
-//! The explicit endpoint and timeout always win over `OTEL_EXPORTER_OTLP_*`
-//! environment settings. Explicit headers are sent with every request; the
-//! official exporter still merges `OTEL_EXPORTER_OTLP_HEADERS` (and the
-//! per-signal variants) afterwards, so an environment header with the same
-//! name replaces the explicit one. Compression follows the official exporter's
-//! environment handling.
+//! The explicit endpoint, timeout and headers always win over
+//! `OTEL_EXPORTER_OTLP_*` environment settings. The official exporter still
+//! adds `OTEL_EXPORTER_OTLP_HEADERS` and the per-signal `*_HEADERS` to each
+//! request; the client's transport then sets every explicit header on the
+//! outgoing request, replacing an environment header with the same name.
+//! Environment headers with other names are still sent. Explicit header values
+//! are sent verbatim, without the environment's URL decoding. Compression
+//! follows the official exporter's environment handling.
 //!
 //! # Example
 //!
@@ -60,8 +62,9 @@
 //! }
 //! ```
 
-use std::collections::HashMap;
 use std::fmt;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
@@ -69,6 +72,7 @@ use std::time::{Duration, SystemTime};
 use opentelemetry::logs::{LogRecord as _, Logger as _, LoggerProvider as _};
 use opentelemetry::metrics::MeterProvider as _;
 use opentelemetry::trace::{SpanId, TraceId};
+use opentelemetry_http::{Bytes, HttpClient, HttpError, Request, Response};
 use opentelemetry_otlp::{
     ExporterBuildError, LogExporter, MetricExporter, Protocol, SpanExporter, WithExportConfig,
     WithHttpConfig,
@@ -86,6 +90,7 @@ use crate::constants::{
 };
 use crate::error_codes::sync as codes;
 use crate::{api, sdk};
+use otel_reqwest::header::{HeaderMap, HeaderValue};
 
 #[cfg(test)]
 mod tests;
@@ -195,7 +200,7 @@ pub fn check_input_limits(input_bytes: usize, records: usize) -> Result<(), Sync
 /// ```
 pub struct Client {
     endpoint: String,
-    headers: HashMap<String, String>,
+    headers: HeaderMap,
     timeout: Duration,
     root_certificates: Vec<otel_reqwest::Certificate>,
     secrets: Vec<String>,
@@ -251,7 +256,7 @@ impl Client {
         }
         Ok(Self {
             endpoint: url.as_str().trim_end_matches('/').to_owned(),
-            headers: HashMap::new(),
+            headers: HeaderMap::new(),
             timeout: Duration::from_millis(DEFAULT_OTLP_TIMEOUT_MS),
             root_certificates: Vec::new(),
             secrets,
@@ -275,17 +280,17 @@ impl Client {
                 format!("invalid header name {name:?}"),
             )
         })?;
-        otel_reqwest::header::HeaderValue::from_str(value).map_err(|_| {
+        let mut header_value = HeaderValue::from_str(value).map_err(|_| {
             SyncError::validation(
                 codes::INVALID_CONFIG,
                 format!("invalid value for header {name}"),
             )
         })?;
+        header_value.set_sensitive(true);
         if !value.is_empty() {
             self.secrets.push(value.to_owned());
         }
-        self.headers
-            .insert(name.as_str().to_owned(), value.to_owned());
+        self.headers.insert(name, header_value);
         Ok(self)
     }
 
@@ -386,7 +391,6 @@ impl Client {
             .with_protocol(Protocol::HttpBinary)
             .with_endpoint(self.signal_endpoint(OTLP_HTTP_LOGS_PATH))
             .with_timeout(self.timeout)
-            .with_headers(self.headers.clone())
             .with_http_client(self.http_client()?)
             .build()
             .map_err(|error| self.build_error(&error))?;
@@ -416,7 +420,6 @@ impl Client {
             .with_protocol(Protocol::HttpBinary)
             .with_endpoint(self.signal_endpoint(OTLP_HTTP_TRACES_PATH))
             .with_timeout(self.timeout)
-            .with_headers(self.headers.clone())
             .with_http_client(self.http_client()?)
             .build()
             .map_err(|error| self.build_error(&error))?;
@@ -458,7 +461,6 @@ impl Client {
             .with_protocol(Protocol::HttpBinary)
             .with_endpoint(self.signal_endpoint(OTLP_HTTP_METRICS_PATH))
             .with_timeout(self.timeout)
-            .with_headers(self.headers.clone())
             .with_http_client(self.http_client()?)
             .with_temporality(Temporality::Delta)
             .build()
@@ -500,8 +502,8 @@ impl Client {
         format!("{}/{path}", self.endpoint)
     }
 
-    fn http_client(&self) -> Result<otel_reqwest::blocking::Client, SyncError> {
-        otel_reqwest::blocking::Client::builder()
+    fn http_client(&self) -> Result<ExplicitHeaders, SyncError> {
+        let inner = otel_reqwest::blocking::Client::builder()
             .connect_timeout(self.timeout)
             .timeout(self.timeout)
             .tls_certs_merge(self.root_certificates.iter().cloned())
@@ -511,7 +513,11 @@ impl Client {
                     codes::INVALID_CONFIG,
                     self.redact(&format!("HTTP transport configuration failed: {error}")),
                 )
-            })
+            })?;
+        Ok(ExplicitHeaders {
+            inner,
+            headers: self.headers.clone(),
+        })
     }
 
     fn build_error(&self, error: &ExporterBuildError) -> SyncError {
@@ -641,5 +647,41 @@ impl PushMetricExporter for FlushOnlyExporter {
 
     fn temporality(&self) -> Temporality {
         self.inner.temporality()
+    }
+}
+
+/// The official blocking reqwest client with the explicit headers applied last.
+///
+/// The exporter adds `OTEL_EXPORTER_OTLP_*HEADERS` to each request before it
+/// reaches the transport; setting the explicit headers here makes them replace
+/// any same-name environment header, which the exporter's own `with_headers`
+/// cannot do.
+struct ExplicitHeaders {
+    inner: otel_reqwest::blocking::Client,
+    headers: HeaderMap,
+}
+
+impl fmt::Debug for ExplicitHeaders {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ExplicitHeaders")
+            .field("headers", &self.headers.keys().collect::<Vec<_>>())
+            .finish_non_exhaustive()
+    }
+}
+
+// `HttpClient` is an `async_trait`; this is its expanded signature.
+impl HttpClient for ExplicitHeaders {
+    fn send_bytes<'life0, 'async_trait>(
+        &'life0 self,
+        mut request: Request<Bytes>,
+    ) -> Pin<Box<dyn Future<Output = Result<Response<Bytes>, HttpError>> + Send + 'async_trait>>
+    where
+        'life0: 'async_trait,
+        Self: 'async_trait,
+    {
+        for (name, value) in &self.headers {
+            request.headers_mut().insert(name, value.clone());
+        }
+        self.inner.send_bytes(request)
     }
 }

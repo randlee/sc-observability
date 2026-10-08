@@ -17,7 +17,7 @@ otlp-sdk = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otl
 # Native OpenTelemetry log sink for the core logger (ADR-023); no OTLP transport.
 log-sink = ["dep:sc-observability", "dep:opentelemetry", "dep:opentelemetry_sdk"]
 # Blocking OTLP/HTTP protobuf client for CLI and Python frontends (ADR-023).
-synchronous-client = ["log-sink", "dep:opentelemetry-otlp", "opentelemetry-otlp/http-proto", "opentelemetry-otlp/reqwest-blocking-client", "opentelemetry-otlp/reqwest-rustls", "dep:otel-reqwest", "dep:futures-executor", "dep:tokio"]
+synchronous-client = ["log-sink", "dep:opentelemetry-otlp", "opentelemetry-otlp/http-proto", "opentelemetry-otlp/reqwest-blocking-client", "opentelemetry-otlp/reqwest-rustls", "dep:opentelemetry-http", "dep:otel-reqwest", "dep:futures-executor", "dep:tokio"]
 sync-http = ["dep:reqwest", "dep:httpdate", "dep:getrandom", "dep:bytes", "dep:tokio"]
 
 [dependencies]
@@ -31,6 +31,7 @@ sc-observability-types.workspace = true
 sc-observability = { workspace = true, optional = true }
 opentelemetry = { workspace = true, optional = true }
 opentelemetry_sdk = { workspace = true, optional = true }
+opentelemetry-http = { workspace = true, optional = true }
 opentelemetry-otlp = { workspace = true, optional = true }
 opentelemetry-proto = { workspace = true, optional = true }
 tonic = { workspace = true, optional = true }

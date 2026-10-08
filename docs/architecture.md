@@ -1952,7 +1952,8 @@ No transport implementation or runtime dependency enters the types layer.
     `opentelemetry_sdk` 0.33.0, no transport; the ATM/native Tokio path selects
     only this. `synchronous-client` = `log-sink` + `opentelemetry-otlp`
     `http-proto`, `reqwest-blocking-client` and `reqwest-rustls`, a
-    caller-supplied blocking reqwest 0.13 client with rustls, `futures-executor`
+    caller-supplied blocking reqwest 0.13 client with rustls, `opentelemetry-http`
+    (its `HttpClient` trait only), `futures-executor`
     and `tokio` for `Handle::try_current` only. Frontends enable only
     `sc-observability-otlp/synchronous-client`. `validate_dependency_bans.sh`
     checks the resolved `log-sink` graph contains no `reqwest`,
@@ -1991,9 +1992,11 @@ No transport implementation or runtime dependency enters the types layer.
     exporter delegate forwards only the explicit flush, giving exactly one
     request and none after a closure error. Flush failure is reported with the
     SDK's coarsened cause; shutdown adds no second export.
-  - *Precedence and limits*: explicit endpoint, timeout and protocol win over
-    `OTEL_EXPORTER_OTLP_*`. The 0.33.0 exporter merges
-    `OTEL_EXPORTER_OTLP_HEADERS` after explicit headers, so an environment
-    header overrides an explicit header of the same name. The timeout bounds
-    connect, request and the native retry deadline; upstream offers no forcible
-    cancellation.
+  - *Precedence and limits*: explicit endpoint, timeout, protocol and headers
+    win over `OTEL_EXPORTER_OTLP_*`. The 0.33.0 exporter merges the general and
+    per-signal `*_HEADERS` into each request, so the client passes explicit
+    headers to its transport instead of `with_headers`: the official blocking
+    reqwest client, through the `opentelemetry-http` `HttpClient` trait, sets
+    them last on every request. Environment headers with other names are still
+    sent. The timeout bounds connect, request and the native retry deadline;
+    upstream offers no forcible cancellation.

@@ -784,9 +784,12 @@ fn credentials_never_appear_in_failure_text() {
     );
 }
 
-/// Child half of [`explicit_endpoint_and_timeout_win_over_environment`]: runs
-/// only when re-invoked with the OTEL environment set, so the variables never
-/// leak into this process's other tests.
+/// Explicit header the precedence child sets and every environment collides with.
+const EXPLICIT_TENANT: &str = "explicit-tenant";
+
+/// Child half of the precedence tests: runs only when re-invoked with the OTEL
+/// environment set, so the variables never leak into this process's other
+/// tests. Sends one log, span and metric export with explicit configuration.
 #[test]
 fn explicit_configuration_child() {
     let Ok(endpoint) = std::env::var("SC_OTLP_SYNC_PRECEDENCE_ENDPOINT") else {
@@ -794,33 +797,53 @@ fn explicit_configuration_child() {
     };
     let mut client = Client::new(&endpoint)
         .and_then(|client| client.with_timeout(STALL_TIMEOUT))
+        .and_then(|client| client.with_header("x-tenant", EXPLICIT_TENANT))
         .expect("client");
     let started = Instant::now();
     client
+        .send_log(&resource(), scope(), |record| {
+            record.set_body(AnyValue::from("precedence"));
+            Ok(())
+        })
+        .expect("log sent to the explicit endpoint");
+    client
         .send_span(&resource(), completed_span())
-        .expect("explicit endpoint used despite OTEL_EXPORTER_OTLP_* endpoints");
-    assert!(started.elapsed() < STALL_BUDGET);
+        .expect("span sent to the explicit endpoint");
+    client
+        .send_metrics(&resource(), scope(), |meter| {
+            meter.u64_counter("precedence").build().add(1, &[]);
+            Ok(())
+        })
+        .expect("metrics sent to the explicit endpoint");
+    assert!(started.elapsed() < STALL_BUDGET * 3);
 }
 
-#[test]
-fn explicit_endpoint_and_timeout_win_over_environment() {
+/// Runs [`explicit_configuration_child`] with conflicting OTEL endpoint and
+/// timeout settings plus `extra` and returns the requests the explicit
+/// endpoint received, by signal path.
+fn run_precedence_child(extra: &[(&str, &str)]) -> Vec<Captured> {
     let collector = Collector::start(Reply::Ok);
-    let output = Command::new(std::env::current_exe().expect("test binary"))
+    let mut command = Command::new(std::env::current_exe().expect("test binary"));
+    command
         .args([
             "--exact",
             "sync::tests::explicit_configuration_child",
             "--nocapture",
         ])
         .env("SC_OTLP_SYNC_PRECEDENCE_ENDPOINT", collector.endpoint())
-        .env("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:9")
-        .env(
-            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
-            "http://127.0.0.1:9/v1/traces",
-        )
+        .env("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:9");
+    for signal in ["LOGS", "TRACES", "METRICS"] {
+        command
+            .env(
+                format!("OTEL_EXPORTER_OTLP_{signal}_ENDPOINT"),
+                "http://127.0.0.1:9/v1/other",
+            )
+            .env(format!("OTEL_EXPORTER_OTLP_{signal}_TIMEOUT"), "60000");
+    }
+    command
         .env("OTEL_EXPORTER_OTLP_TIMEOUT", "60000")
-        .env("OTEL_EXPORTER_OTLP_TRACES_TIMEOUT", "60000")
-        .output()
-        .expect("run precedence child test");
+        .envs(extra.iter().copied());
+    let output = command.output().expect("run precedence child test");
     assert!(
         output.status.success(),
         "child failed: {}",
@@ -830,11 +853,79 @@ fn explicit_endpoint_and_timeout_win_over_environment() {
         String::from_utf8_lossy(&output.stdout).contains("1 passed"),
         "child test ran"
     );
+    let mut requests = collector.requests();
+    requests.sort_by(|left, right| left.path.cmp(&right.path));
+    let paths: Vec<&str> = requests
+        .iter()
+        .map(|request| request.path.as_str())
+        .collect();
     assert_eq!(
-        collector.requests().len(),
-        1,
-        "the explicit endpoint received the span"
+        paths,
+        ["/v1/logs", "/v1/metrics", "/v1/traces"],
+        "every signal reached the explicit endpoint"
     );
+    requests
+}
+
+#[test]
+fn explicit_endpoint_and_timeout_win_over_environment() {
+    for request in run_precedence_child(&[]) {
+        assert_eq!(request.header("x-tenant"), Some(EXPLICIT_TENANT));
+    }
+}
+
+#[test]
+fn explicit_headers_win_over_general_environment_headers() {
+    let requests = run_precedence_child(&[(
+        "OTEL_EXPORTER_OTLP_HEADERS",
+        "x-tenant=env-tenant,x-env-general=applied",
+    )]);
+    for request in requests {
+        assert_eq!(
+            request.header("x-tenant"),
+            Some(EXPLICIT_TENANT),
+            "{}: explicit header replaced by the environment",
+            request.path
+        );
+        assert_eq!(
+            request.header("x-env-general"),
+            Some("applied"),
+            "{}: environment headers were applied",
+            request.path
+        );
+    }
+}
+
+#[test]
+fn explicit_headers_win_over_signal_environment_headers() {
+    let requests = run_precedence_child(&[
+        ("OTEL_EXPORTER_OTLP_HEADERS", "x-tenant=env-general"),
+        (
+            "OTEL_EXPORTER_OTLP_LOGS_HEADERS",
+            "x-tenant=env-logs,x-env-signal=logs",
+        ),
+        (
+            "OTEL_EXPORTER_OTLP_TRACES_HEADERS",
+            "x-tenant=env-traces,x-env-signal=traces",
+        ),
+        (
+            "OTEL_EXPORTER_OTLP_METRICS_HEADERS",
+            "x-tenant=env-metrics,x-env-signal=metrics",
+        ),
+    ]);
+    for request in requests {
+        let signal = request.path.trim_start_matches("/v1/");
+        assert_eq!(
+            request.header("x-tenant"),
+            Some(EXPLICIT_TENANT),
+            "{signal}: explicit header replaced by the environment"
+        );
+        assert_eq!(
+            request.header("x-env-signal"),
+            Some(signal),
+            "{signal}: signal environment headers were applied"
+        );
+    }
 }
 
 /// Self-signed loopback certificate and key generated with the `openssl` CLI.

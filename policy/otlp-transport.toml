@@ -66,6 +66,12 @@ backends = ["synchronous-client"]
 features = []
 default_features = true
 
+[transport.opentelemetry-http]
+version = "=0.33.0"
+backends = ["synchronous-client"]
+features = []
+default_features = false
+
 [transport.otel-reqwest]
 version = "=0.13.5"
 backends = ["synchronous-client"]
