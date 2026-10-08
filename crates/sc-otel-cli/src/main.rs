@@ -1,17 +1,10 @@
-//! `sc-otel` submits and inspects durable telemetry envelopes.
+//! `sc-otel` sends OpenTelemetry logs, spans and metrics over OTLP/HTTP.
 
 mod cli;
 #[cfg(test)]
 mod cli_docs;
-mod client;
-mod config;
 mod constants;
-mod error;
-mod error_codes;
-mod exit;
-mod input;
-mod output;
-mod run;
+mod send;
 
 use clap::Parser;
 use std::{panic::AssertUnwindSafe, process::ExitCode};
@@ -45,14 +38,25 @@ fn run() -> u8 {
     let cli = match cli::Cli::try_parse() {
         Ok(cli) => cli,
         Err(error) => {
-            let exit = exit::parser_exit(&error);
+            let exit = if error.use_stderr() {
+                constants::EXIT_USAGE
+            } else {
+                constants::EXIT_OK
+            };
             if let Err(print_error) = error.print() {
                 eprintln!("sc-otel: unable to render usage error: {print_error}");
             }
             return exit;
         }
     };
-    run::run(&cli)
+    match send::run(&cli) {
+        Ok(()) => constants::EXIT_OK,
+        Err(error) => {
+            // Display only: the client redacts header values and URL userinfo there.
+            eprintln!("sc-otel: {error}");
+            send::exit_code(&error)
+        }
+    }
 }
 
 #[cfg(test)]

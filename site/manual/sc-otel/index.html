@@ -14,43 +14,40 @@ a{color:#244b9b}h2{scroll-margin-top:1rem}</style>
 <p>Generated from the live Clap command tree. Source: cli.rs and its help text. Updated automatically for every release. Do not edit generated output.</p>
 <nav aria-label="Commands"><ul>
 <li><a href="#sc-otel">sc-otel</a></li>
-<li><a href="#sc-otel-emit">sc-otel emit</a></li>
-<li><a href="#sc-otel-validate">sc-otel validate</a></li>
-<li><a href="#sc-otel-flush">sc-otel flush</a></li>
-<li><a href="#sc-otel-status">sc-otel status</a></li>
+<li><a href="#sc-otel-log">sc-otel log</a></li>
+<li><a href="#sc-otel-span">sc-otel span</a></li>
+<li><a href="#sc-otel-metric">sc-otel metric</a></li>
 <li><a href="#sc-otel-help">sc-otel help</a></li>
-<li><a href="#sc-otel-help-emit">sc-otel help emit</a></li>
-<li><a href="#sc-otel-help-validate">sc-otel help validate</a></li>
-<li><a href="#sc-otel-help-flush">sc-otel help flush</a></li>
-<li><a href="#sc-otel-help-status">sc-otel help status</a></li>
+<li><a href="#sc-otel-help-log">sc-otel help log</a></li>
+<li><a href="#sc-otel-help-span">sc-otel help span</a></li>
+<li><a href="#sc-otel-help-metric">sc-otel help metric</a></li>
 <li><a href="#sc-otel-help-help">sc-otel help help</a></li>
 </ul></nav>
-<section id="sc-otel"><h2>sc-otel</h2><pre>Submit logs, spans, metrics, and profiles through a durable local queue to an OTLP collector. Delivery is at least once: retained records can be resent after interrupted or uncertain delivery.
+<section id="sc-otel"><h2>sc-otel</h2><pre>Send one log record, one completed span or one metric measurement to an OTLP/HTTP collector with the official OpenTelemetry exporter. Each command exports before it exits and reports the exporter&#39;s result; nothing is stored or retried after the process ends.
 
 Usage: sc-otel [OPTIONS] &lt;COMMAND&gt;
 
 Commands:
-  emit      Validate and durably admit telemetry, then attempt delivery
-  validate  Validate input locally without opening a store or contacting a collector
-  flush     Attempt delivery of pending records in the configured durable store
-  status    Inspect the queue summary or selected submissions/record keys
-  help      Print this message or the help of the given subcommand(s)
+  log     Export one log record
+  span    Export one completed span
+  metric  Export one metric measurement
+  help    Print this message or the help of the given subcommand(s)
 
 Options:
-      --config &lt;CONFIG&gt;
-          Read telemetry YAML from this explicit path. No configuration file is auto-discovered. Relative store.path values in YAML are resolved against this file&#39;s directory. validate does not load configuration
+      --endpoint &lt;URL&gt;
+          OTLP/HTTP base URL; /v1/logs, /v1/traces or /v1/metrics is appended. Defaults to `OTEL_EXPORTER_OTLP_ENDPOINT`, then &lt;http://localhost:4318&gt;
 
-      --store &lt;STORE&gt;
-          Use this `SQLite` queue path instead of store.path in YAML. Required for emit, flush, and status unless supplied in the file; no environment fallback. Relative CLI paths use the current directory
+      --header &lt;NAME=VALUE&gt;
+          Send a request header as NAME=VALUE; repeat for more. Replaces a header of the same name from `OTEL_EXPORTER_OTLP_HEADERS`. Prefer that variable for credentials: command lines are visible to other processes
 
-      --endpoint &lt;ENDPOINT&gt;
-          Override the OTLP HTTP base URL. Precedence: this flag, otlp.endpoint in YAML, `OTEL_EXPORTER_OTLP_ENDPOINT`, then &lt;http://localhost:4318&gt;
+      --timeout &lt;SECONDS&gt;
+          Bound connecting, each request and the exporter&#39;s retries, in whole seconds greater than zero. Defaults to 3 seconds
 
-      --output &lt;OUTPUT&gt;
-          Choose machine-readable JSON (default) or one compact text result line. Parser errors and help use Clap&#39;s normal diagnostics regardless of this setting
-          
-          [default: json]
-          [possible values: json, text]
+      --root-certificate &lt;FILE&gt;
+          Trust the CA certificates in this PEM file in addition to the system roots
+
+      --service &lt;NAME&gt;
+          Resource service.name. Defaults to `OTEL_SERVICE_NAME`, then the SDK default `unknown_service`. `OTEL_RESOURCE_ATTRIBUTES` adds further resource attributes
 
   -h, --help
           Print help (see a summary with &#39;-h&#39;)
@@ -59,264 +56,225 @@ Options:
           Print version
 
 QUICK START
-  sc-otel validate --log &#39;{&quot;body&quot;:&quot;started&quot;}&#39;
-  sc-otel --store queue.sqlite emit --log &#39;{&quot;body&quot;:&quot;started&quot;}&#39; --no-flush
-  sc-otel --store queue.sqlite status
-  sc-otel --store queue.sqlite --endpoint http://localhost:4318 flush --timeout 10
+  sc-otel log --body &#39;job started&#39;
+  sc-otel span --name build --start-time-unix-nano 1700000000000000000
+  sc-otel metric --name jobs.completed --kind counter --value 1
 
-  validate is local and needs no store or collector. emit, flush, and status
-  require a store path. Use the same store across invocations to retain queued
-  records. --no-flush reports durable admission, not confirmed delivery.
-
-INPUT
-  Pass --stdin with one complete JSON document, for example event.json:
-    {&quot;version&quot;:1,&quot;logs&quot;:[{&quot;body&quot;:&quot;started&quot;}]}
-  Then run:
-    sc-otel validate --stdin &lt; event.json
-
-  Alternatively use --log, --span, --metric, or --profile with inline JSON or
-  @FILE. Fragment mode supplies version 1. Logs, spans, and metrics accept
-  repeated flags; each argument is one point/stream, not an array. Profiles
-  use one object. --stdin and fragment flags are mutually exclusive.
-  Input follows SubmissionInput, not raw OTLP protobuf JSON. The normalized
-  envelope contains system-generated identifiers and timestamps.
+  Each command builds one native OpenTelemetry record and exports it with the
+  official OTLP/HTTP protobuf exporter before the process exits. No Tokio
+  runtime, local database or background worker is involved.
 
 CONFIGURATION
-  Supply --config telemetry.yaml explicitly; no file is auto-discovered.
-  Minimal example:
-    service: example-service
-    otlp:
-      endpoint: http://localhost:4318
-      timeout_ms: 10000
-    store:
-      path: ./queue.sqlite
+  Endpoint: --endpoint, then OTEL_EXPORTER_OTLP_ENDPOINT, then
+  http://localhost:4318. The signal path (/v1/logs, /v1/traces, /v1/metrics)
+  is appended, so per-signal *_ENDPOINT variables are not consulted.
 
-  CLI --store and --endpoint override YAML. YAML service and otlp.endpoint
-  override OTEL_SERVICE_NAME and OTEL_EXPORTER_OTLP_ENDPOINT respectively.
-  Without either, service is unknown_service and endpoint is
-  http://localhost:4318. SC_OTEL_AUTH_HEADER supplies the authentication header;
-  keep secrets out of command arguments and shell history. No store-path
-  environment fallback exists. YAML store.path is relative to the YAML file;
-  --store and @FILE paths are relative to the current working directory.
+  Headers: OTEL_EXPORTER_OTLP_HEADERS and the per-signal *_HEADERS variables
+  are sent with every request. --header NAME=VALUE replaces a header of the
+  same name. Keep credentials in the environment rather than on the command
+  line. Header values and endpoint user information never appear in errors.
 
-  Additional store YAML keys: max_bytes, disk_bound_policy, and
-  delivered_retention_hours. validate never loads this configuration.
+  Resource: --service sets service.name; otherwise OTEL_SERVICE_NAME and
+  OTEL_RESOURCE_ATTRIBUTES apply as in the OpenTelemetry SDK.
 
-OUTPUT AND AUTOMATION
-  --output json (default) prints one sc-otel.result/v1 object for an executed
-  command. Fields: schema, command, exit_code, state, receipt, flush, status,
-  envelope, error. Non-applicable fields are null. A validation success includes
-  envelope; an admitted emit includes receipt; flush/status include their report.
-  Errors include code, message, cause, and remediation. Use exit_code and error.code
-  for automation rather than parsing human-readable text.
+  TLS: https endpoints verify certificates against the system roots plus any
+  --root-certificate PEM file. Verification cannot be disabled.
 
-  --output text prints: &lt;state&gt; exit=&lt;n&gt; [submission=&lt;id&gt;] [error=&lt;code&gt;].
-  States: validated, status, rejected, admitted_pending, admitted_delivered,
-  admitted_failed. Clap usage errors and --help/--version are exceptions to the
-  JSON result format. Unexpected internal errors may write diagnostics to stderr.
+ATTRIBUTES
+  --attributes takes one JSON object of string, boolean and number values,
+  inline, as @FILE, or as - to read standard input:
+    sc-otel log --body done --attributes &#39;{&quot;job&quot;:&quot;build&quot;,&quot;attempt&quot;:2}&#39;
+  Input is limited to 1 MiB and 10,000 attributes. Null, array and object
+  values are rejected.
 
 EXIT CODES
-  0  Success (with emit --no-flush: admitted, not necessarily delivered).
+  0  The exporter reported success.
   1  Unexpected internal failure.
   2  Command-line usage error; inspect stderr and --help.
-  3  Invalid submission input; inspect error.code and remediation.
-  4  Invalid/missing configuration or an unsupported combination.
-  5  Admission/client failure; inspect receipt to determine whether admission occurred.
-  6  Admitted delivery remains pending; preserve the store and retry flush.
-  7  Terminal delivery failure; inspect the report and retained record.
+  3  Input or configuration rejected; nothing was exported.
+  7  The export failed: the collector was unreachable, timed out or rejected
+     the request. Nothing is retried after the process exits.
 
-DELIVERY AND RECOVERY
-  Delivery is at least once, not exactly once. Use a stable record_key when
-  deduplication is needed. Preserve the durable store after uncertain delivery;
-  deleting it discards pending telemetry. Fix configuration/collector errors
-  before retrying. Do not treat admission or local validation as collector receipt.
+  Success means the collector accepted the request. For metrics, the
+  OpenTelemetry SDK 0.33.0 reports a failed export without the HTTP cause.
 
 DOCUMENTATION
-  Run sc-otel &lt;command&gt; --help for detailed options and examples.
+  Run sc-otel &lt;command&gt; --help for options and examples.
   The Markdown manual and website reference are generated from this same Clap
   help at every release; their version is the CLI package version.</pre></section>
-<section id="sc-otel-emit"><h2>sc-otel emit</h2><pre>Parse and validate the input, open the configured durable store, and admit the submission before delivery. Normally flushes this submission and shuts down the client; --no-flush returns after admission. A receipt identifies admitted records even if delivery later fails.
+<section id="sc-otel-log"><h2>sc-otel log</h2><pre>Export one log record
 
-Usage: sc-otel emit [OPTIONS] &lt;--stdin|--log &lt;JSON|@FILE&gt;|--span &lt;JSON|@FILE&gt;|--metric &lt;JSON|@FILE&gt;|--profile &lt;JSON|@FILE&gt;&gt;
+Usage: sc-otel log [OPTIONS] --body &lt;BODY&gt;
 
 Options:
-      --config &lt;CONFIG&gt;
-          Read telemetry YAML from this explicit path. No configuration file is auto-discovered. Relative store.path values in YAML are resolved against this file&#39;s directory. validate does not load configuration
+      --body &lt;BODY&gt;
+          Log message body
 
-      --stdin
-          Read one complete `SubmissionInput` JSON document from stdin. Cannot combine with fragment flags. Requires version: 1; use `record_key` inside the document for deduplication
+      --endpoint &lt;URL&gt;
+          OTLP/HTTP base URL; /v1/logs, /v1/traces or /v1/metrics is appended. Defaults to `OTEL_EXPORTER_OTLP_ENDPOINT`, then &lt;http://localhost:4318&gt;
 
-      --log &lt;JSON|@FILE&gt;
-          Append one log point as inline JSON or @FILE. Repeat to submit multiple logs; can combine with other fragment types
+      --header &lt;NAME=VALUE&gt;
+          Send a request header as NAME=VALUE; repeat for more. Replaces a header of the same name from `OTEL_EXPORTER_OTLP_HEADERS`. Prefer that variable for credentials: command lines are visible to other processes
 
-      --store &lt;STORE&gt;
-          Use this `SQLite` queue path instead of store.path in YAML. Required for emit, flush, and status unless supplied in the file; no environment fallback. Relative CLI paths use the current directory
-
-      --endpoint &lt;ENDPOINT&gt;
-          Override the OTLP HTTP base URL. Precedence: this flag, otlp.endpoint in YAML, `OTEL_EXPORTER_OTLP_ENDPOINT`, then &lt;http://localhost:4318&gt;
-
-      --span &lt;JSON|@FILE&gt;
-          Append one span point as inline JSON or @FILE. Repeat to submit multiple spans; can combine with other fragment types
-
-      --metric &lt;JSON|@FILE&gt;
-          Append one metric stream as inline JSON or @FILE. Repeat for multiple streams; can combine with other fragment types
-
-      --output &lt;OUTPUT&gt;
-          Choose machine-readable JSON (default) or one compact text result line. Parser errors and help use Clap&#39;s normal diagnostics regardless of this setting
+      --severity &lt;SEVERITY&gt;
+          Log severity
           
-          [default: json]
-          [possible values: json, text]
-
-      --profile &lt;JSON|@FILE&gt;
-          Supply the profiles object as inline JSON or @FILE. May be combined with log, span, and metric fragments
-
-      --record-key &lt;RECORD_KEY&gt;
-          Deduplicate a fragment-mode submission with this caller-owned key. With --stdin, put `record_key` in the JSON document instead
-
-      --no-flush
-          Return after durable admission without initiating a flush. Exit 0 confirms admission only, not delivery; retain the store and later run flush
-
-  -h, --help
-          Print help (see a summary with &#39;-h&#39;)
-
-Examples:
-  sc-otel --store queue.sqlite emit --log &#39;{&quot;body&quot;:&quot;started&quot;}&#39; --no-flush
-  sc-otel --config telemetry.yaml emit --stdin &lt; event.json
-  sc-otel --store queue.sqlite emit --log @log.json --record-key job-42
-
-Use --stdin OR fragment flags; at least one input source is required. With stdin, a record_key belongs inside the input JSON. Keep the store after exit 6 so flush can retry delivery.</pre></section>
-<section id="sc-otel-validate"><h2>sc-otel validate</h2><pre>Parse SubmissionInput and construct a normalized SubmissionEnvelope, including generated identifiers and timestamps. The JSON result includes the normalized envelope. This checks input shape and values, not collector availability or successful delivery; global configuration flags are not loaded.
-
-Usage: sc-otel validate [OPTIONS] &lt;--stdin|--log &lt;JSON|@FILE&gt;|--span &lt;JSON|@FILE&gt;|--metric &lt;JSON|@FILE&gt;|--profile &lt;JSON|@FILE&gt;&gt;
-
-Options:
-      --config &lt;CONFIG&gt;
-          Read telemetry YAML from this explicit path. No configuration file is auto-discovered. Relative store.path values in YAML are resolved against this file&#39;s directory. validate does not load configuration
-
-      --stdin
-          Read one complete `SubmissionInput` JSON document from stdin. Cannot combine with fragment flags. Requires version: 1; use `record_key` inside the document for deduplication
-
-      --log &lt;JSON|@FILE&gt;
-          Append one log point as inline JSON or @FILE. Repeat to submit multiple logs; can combine with other fragment types
-
-      --store &lt;STORE&gt;
-          Use this `SQLite` queue path instead of store.path in YAML. Required for emit, flush, and status unless supplied in the file; no environment fallback. Relative CLI paths use the current directory
-
-      --endpoint &lt;ENDPOINT&gt;
-          Override the OTLP HTTP base URL. Precedence: this flag, otlp.endpoint in YAML, `OTEL_EXPORTER_OTLP_ENDPOINT`, then &lt;http://localhost:4318&gt;
-
-      --span &lt;JSON|@FILE&gt;
-          Append one span point as inline JSON or @FILE. Repeat to submit multiple spans; can combine with other fragment types
-
-      --metric &lt;JSON|@FILE&gt;
-          Append one metric stream as inline JSON or @FILE. Repeat for multiple streams; can combine with other fragment types
-
-      --output &lt;OUTPUT&gt;
-          Choose machine-readable JSON (default) or one compact text result line. Parser errors and help use Clap&#39;s normal diagnostics regardless of this setting
-          
-          [default: json]
-          [possible values: json, text]
-
-      --profile &lt;JSON|@FILE&gt;
-          Supply the profiles object as inline JSON or @FILE. May be combined with log, span, and metric fragments
-
-  -h, --help
-          Print help (see a summary with &#39;-h&#39;)
-
-Examples:
-  sc-otel validate --log &#39;{&quot;body&quot;:&quot;started&quot;}&#39;
-  sc-otel validate --stdin &lt; event.json
-  sc-otel validate --log @log.json --span @span.json
-
-Fragment files are UTF-8 JSON, one signal value per file. Repeating --log, --span, or --metric appends values; --profile accepts one profiles object. Do not supply generated envelope fields such as submission_id in SubmissionInput.</pre></section>
-<section id="sc-otel-flush"><h2>sc-otel flush</h2><pre>Attempt delivery of pending records in the configured durable store
-
-Usage: sc-otel flush [OPTIONS]
-
-Options:
-      --config &lt;CONFIG&gt;
-          Read telemetry YAML from this explicit path. No configuration file is auto-discovered. Relative store.path values in YAML are resolved against this file&#39;s directory. validate does not load configuration
+          [default: info]
+          [possible values: trace, debug, info, warn, error, fatal]
 
       --timeout &lt;SECONDS&gt;
-          Bound this flush in whole, unsigned seconds (including 0). Defaults to the resolved flush deadline, currently 30 seconds. Shutdown uses its own configured deadline
+          Bound connecting, each request and the exporter&#39;s retries, in whole seconds greater than zero. Defaults to 3 seconds
 
-      --store &lt;STORE&gt;
-          Use this `SQLite` queue path instead of store.path in YAML. Required for emit, flush, and status unless supplied in the file; no environment fallback. Relative CLI paths use the current directory
+      --trace-id &lt;HEX&gt;
+          Correlate the record with this trace (32 hex digits). Requires --span-id
 
-      --endpoint &lt;ENDPOINT&gt;
-          Override the OTLP HTTP base URL. Precedence: this flag, otlp.endpoint in YAML, `OTEL_EXPORTER_OTLP_ENDPOINT`, then &lt;http://localhost:4318&gt;
+      --root-certificate &lt;FILE&gt;
+          Trust the CA certificates in this PEM file in addition to the system roots
 
-      --output &lt;OUTPUT&gt;
-          Choose machine-readable JSON (default) or one compact text result line. Parser errors and help use Clap&#39;s normal diagnostics regardless of this setting
-          
-          [default: json]
-          [possible values: json, text]
+      --span-id &lt;HEX&gt;
+          Correlate the record with this span (16 hex digits). Requires --trace-id
+
+      --attributes &lt;JSON|@FILE|-&gt;
+          Attributes as one JSON object of string, boolean or number values: inline JSON, @FILE, or - for standard input. At most 1 MiB and 10,000 attributes
+
+      --service &lt;NAME&gt;
+          Resource service.name. Defaults to `OTEL_SERVICE_NAME`, then the SDK default `unknown_service`. `OTEL_RESOURCE_ATTRIBUTES` adds further resource attributes
 
   -h, --help
           Print help (see a summary with &#39;-h&#39;)
 
 Examples:
-  sc-otel --config telemetry.yaml flush --timeout 10
-  sc-otel --store queue.sqlite --endpoint http://localhost:4318 flush
+  sc-otel log --body &#39;job started&#39;
+  sc-otel log --severity error --body &#39;job failed&#39; --attributes &#39;{&quot;job&quot;:&quot;build&quot;,&quot;attempt&quot;:2}&#39;
+  sc-otel log --body done --trace-id 4bf92f3577b34da6a3ce929d0e0e4736 --span-id 00f067aa0ba902b7</pre></section>
+<section id="sc-otel-span"><h2>sc-otel span</h2><pre>Export one completed span
 
-This command flushes the store, not one selected submission. Exit 6 means records remain pending; retain the queue and retry when the collector is available. Exit 7 means a terminal delivery failure. A flush deadline is not a wall-clock bound for opening and shutting down the process.</pre></section>
-<section id="sc-otel-status"><h2>sc-otel status</h2><pre>Inspect the queue summary or selected submissions/record keys
-
-Usage: sc-otel status [OPTIONS]
+Usage: sc-otel span [OPTIONS] --name &lt;NAME&gt;
 
 Options:
-      --config &lt;CONFIG&gt;
-          Read telemetry YAML from this explicit path. No configuration file is auto-discovered. Relative store.path values in YAML are resolved against this file&#39;s directory. validate does not load configuration
+      --endpoint &lt;URL&gt;
+          OTLP/HTTP base URL; /v1/logs, /v1/traces or /v1/metrics is appended. Defaults to `OTEL_EXPORTER_OTLP_ENDPOINT`, then &lt;http://localhost:4318&gt;
 
-      --submission &lt;SUBMISSION&gt;
-          Select a submission by UUID; repeat for multiple submissions. Mutually exclusive with --record-key. With neither selector, show a queue summary
+      --name &lt;NAME&gt;
+          Span name
 
-      --record-key &lt;RECORD_KEY&gt;
-          Select records by caller-owned key; repeat for multiple keys. Cannot combine with --submission
+      --header &lt;NAME=VALUE&gt;
+          Send a request header as NAME=VALUE; repeat for more. Replaces a header of the same name from `OTEL_EXPORTER_OTLP_HEADERS`. Prefer that variable for credentials: command lines are visible to other processes
 
-      --store &lt;STORE&gt;
-          Use this `SQLite` queue path instead of store.path in YAML. Required for emit, flush, and status unless supplied in the file; no environment fallback. Relative CLI paths use the current directory
+      --trace-id &lt;HEX&gt;
+          Trace id (32 hex digits). Defaults to a new random id
 
-      --endpoint &lt;ENDPOINT&gt;
-          Override the OTLP HTTP base URL. Precedence: this flag, otlp.endpoint in YAML, `OTEL_EXPORTER_OTLP_ENDPOINT`, then &lt;http://localhost:4318&gt;
+      --span-id &lt;HEX&gt;
+          Span id (16 hex digits). Defaults to a new random id
 
-      --output &lt;OUTPUT&gt;
-          Choose machine-readable JSON (default) or one compact text result line. Parser errors and help use Clap&#39;s normal diagnostics regardless of this setting
+      --timeout &lt;SECONDS&gt;
+          Bound connecting, each request and the exporter&#39;s retries, in whole seconds greater than zero. Defaults to 3 seconds
+
+      --parent-span-id &lt;HEX&gt;
+          Parent span id (16 hex digits). Requires --trace-id
+
+      --root-certificate &lt;FILE&gt;
+          Trust the CA certificates in this PEM file in addition to the system roots
+
+      --kind &lt;KIND&gt;
+          Span kind
           
-          [default: json]
-          [possible values: json, text]
+          [default: internal]
+          [possible values: internal, server, client, producer, consumer]
+
+      --service &lt;NAME&gt;
+          Resource service.name. Defaults to `OTEL_SERVICE_NAME`, then the SDK default `unknown_service`. `OTEL_RESOURCE_ATTRIBUTES` adds further resource attributes
+
+      --start-time-unix-nano &lt;NANOS&gt;
+          Start time in nanoseconds since the Unix epoch. Defaults to the end time
+
+      --end-time-unix-nano &lt;NANOS&gt;
+          End time in nanoseconds since the Unix epoch. Defaults to now
+
+      --ok
+          Set the span status to Ok
+
+      --error &lt;DESCRIPTION&gt;
+          Set the span status to Error with this description
+
+      --attributes &lt;JSON|@FILE|-&gt;
+          Attributes as one JSON object of string, boolean or number values: inline JSON, @FILE, or - for standard input. At most 1 MiB and 10,000 attributes
 
   -h, --help
           Print help (see a summary with &#39;-h&#39;)
 
 Examples:
-  sc-otel --store queue.sqlite status
-  sc-otel --store queue.sqlite status --record-key job-42
-  sc-otel --store queue.sqlite status --submission 018f8f5e-5c4c-7abc-8def-0123456789ab
+  sc-otel span --name build --start-time-unix-nano 1700000000000000000 --end-time-unix-nano 1700000005000000000
+  sc-otel span --name deploy --kind client --error &#39;rollout timed out&#39; --attributes @span.json
 
-Repeat one selector kind to query multiple records; do not mix --submission with --record-key. This opens the durable client and runs its normal shutdown; it is not an offline, read-only SQLite inspection.</pre></section>
+Without --trace-id and --span-id the span gets new random ids. Pass the ids of a parent span with --trace-id and --parent-span-id to join an existing trace.</pre></section>
+<section id="sc-otel-metric"><h2>sc-otel metric</h2><pre>Export one metric measurement
+
+Usage: sc-otel metric [OPTIONS] --name &lt;NAME&gt; --kind &lt;KIND&gt; --value &lt;VALUE&gt;
+
+Options:
+      --endpoint &lt;URL&gt;
+          OTLP/HTTP base URL; /v1/logs, /v1/traces or /v1/metrics is appended. Defaults to `OTEL_EXPORTER_OTLP_ENDPOINT`, then &lt;http://localhost:4318&gt;
+
+      --name &lt;NAME&gt;
+          Instrument name
+
+      --header &lt;NAME=VALUE&gt;
+          Send a request header as NAME=VALUE; repeat for more. Replaces a header of the same name from `OTEL_EXPORTER_OTLP_HEADERS`. Prefer that variable for credentials: command lines are visible to other processes
+
+      --kind &lt;KIND&gt;
+          Instrument kind
+          
+          [possible values: counter, up-down-counter, gauge, histogram]
+
+      --timeout &lt;SECONDS&gt;
+          Bound connecting, each request and the exporter&#39;s retries, in whole seconds greater than zero. Defaults to 3 seconds
+
+      --value &lt;VALUE&gt;
+          Measurement value
+
+      --root-certificate &lt;FILE&gt;
+          Trust the CA certificates in this PEM file in addition to the system roots
+
+      --unit &lt;UNIT&gt;
+          Instrument unit, such as s or By
+
+      --description &lt;DESCRIPTION&gt;
+          Instrument description
+
+      --service &lt;NAME&gt;
+          Resource service.name. Defaults to `OTEL_SERVICE_NAME`, then the SDK default `unknown_service`. `OTEL_RESOURCE_ATTRIBUTES` adds further resource attributes
+
+      --attributes &lt;JSON|@FILE|-&gt;
+          Attributes as one JSON object of string, boolean or number values: inline JSON, @FILE, or - for standard input. At most 1 MiB and 10,000 attributes
+
+  -h, --help
+          Print help (see a summary with &#39;-h&#39;)
+
+Examples:
+  sc-otel metric --name jobs.completed --kind counter --value 1
+  sc-otel metric --name queue.depth --kind gauge --value 42 --attributes &#39;{&quot;queue&quot;:&quot;default&quot;}&#39;
+  sc-otel metric --name job.duration --kind histogram --unit s --value 12.5
+
+Counter and histogram values must not be negative. An invalid instrument name records nothing and fails with exit 3.</pre></section>
 <section id="sc-otel-help"><h2>sc-otel help</h2><pre>Print this message or the help of the given subcommand(s)
 
 Usage: sc-otel help [COMMAND]
 
 Commands:
-  emit      Validate and durably admit telemetry, then attempt delivery
-  validate  Validate input locally without opening a store or contacting a collector
-  flush     Attempt delivery of pending records in the configured durable store
-  status    Inspect the queue summary or selected submissions/record keys
-  help      Print this message or the help of the given subcommand(s)</pre></section>
-<section id="sc-otel-help-emit"><h2>sc-otel help emit</h2><pre>Validate and durably admit telemetry, then attempt delivery
+  log     Export one log record
+  span    Export one completed span
+  metric  Export one metric measurement
+  help    Print this message or the help of the given subcommand(s)</pre></section>
+<section id="sc-otel-help-log"><h2>sc-otel help log</h2><pre>Export one log record
 
-Usage: sc-otel help emit</pre></section>
-<section id="sc-otel-help-validate"><h2>sc-otel help validate</h2><pre>Validate input locally without opening a store or contacting a collector
+Usage: sc-otel help log</pre></section>
+<section id="sc-otel-help-span"><h2>sc-otel help span</h2><pre>Export one completed span
 
-Usage: sc-otel help validate</pre></section>
-<section id="sc-otel-help-flush"><h2>sc-otel help flush</h2><pre>Attempt delivery of pending records in the configured durable store
+Usage: sc-otel help span</pre></section>
+<section id="sc-otel-help-metric"><h2>sc-otel help metric</h2><pre>Export one metric measurement
 
-Usage: sc-otel help flush</pre></section>
-<section id="sc-otel-help-status"><h2>sc-otel help status</h2><pre>Inspect the queue summary or selected submissions/record keys
-
-Usage: sc-otel help status</pre></section>
+Usage: sc-otel help metric</pre></section>
 <section id="sc-otel-help-help"><h2>sc-otel help help</h2><pre>Print this message or the help of the given subcommand(s)
 
 Usage: sc-otel help help</pre></section>

@@ -155,16 +155,33 @@ fn public_options_have_explanations() {
 fn website_escapes_help_and_matches_markdown_commands() {
     assert_eq!(escape("<&\"'>"), "&lt;&amp;&quot;&#39;&gt;");
     let (markdown, html) = reference();
-    for command in [
-        "sc-otel",
+    for command in ["sc-otel", "sc-otel log", "sc-otel span", "sc-otel metric"] {
+        assert!(markdown.contains(&format!("## {command}\n")));
+        assert!(html.contains(&format!("<h2>{command}</h2>")));
+    }
+    assert!(!html.contains("<URL>"));
+    assert!(html.contains("&lt;URL&gt;"));
+}
+
+#[test]
+fn help_names_no_retired_store_command() {
+    let (markdown, html) = reference();
+    for retired in [
         "sc-otel emit",
         "sc-otel validate",
         "sc-otel flush",
         "sc-otel status",
+        "--store",
+        "--config",
+        "--record-key",
+        "--no-flush",
+        "SQLite",
+        "durable",
     ] {
-        assert!(markdown.contains(&format!("## {command}\n")));
-        assert!(html.contains(&format!("<h2>{command}</h2>")));
+        assert!(
+            !markdown.contains(retired),
+            "{retired} remains in the manual"
+        );
+        assert!(!html.contains(retired), "{retired} remains on the website");
     }
-    assert!(!html.contains("<state>"));
-    assert!(html.contains("&lt;state&gt;"));
 }
