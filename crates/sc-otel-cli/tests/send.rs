@@ -14,6 +14,18 @@ const FIXTURE_WATCHDOG: Duration = Duration::from_secs(20);
 const TRACE_ID: &str = "4bf92f3577b34da6a3ce929d0e0e4736";
 const SPAN_ID: &str = "00f067aa0ba902b7";
 const SECRET: &str = "s3cret-token-value";
+const PROXY_AND_TRUST_ENV: [&str; 10] = [
+    "HTTP_PROXY",
+    "http_proxy",
+    "HTTPS_PROXY",
+    "https_proxy",
+    "ALL_PROXY",
+    "all_proxy",
+    "NO_PROXY",
+    "no_proxy",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+];
 
 struct Captured {
     path: String,
@@ -115,7 +127,7 @@ fn handle(mut stream: TcpStream, status: &str) -> Captured {
     }
 }
 
-/// The binary with every ambient `OTEL_*` setting removed and an empty
+/// The binary with ambient OTel, proxy and trust settings removed and an empty
 /// working directory, so a test sees only the configuration it sets.
 fn sc_otel(directory: &tempfile::TempDir) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_sc-otel"));
@@ -125,7 +137,25 @@ fn sc_otel(directory: &tempfile::TempDir) -> Command {
             command.env_remove(key);
         }
     }
+    for key in PROXY_AND_TRUST_ENV {
+        command.env_remove(key);
+    }
     command
+}
+
+#[test]
+fn sc_otel_removes_ambient_proxy_and_trust_settings() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let command = sc_otel(&directory);
+    let removed = command.get_envs().collect::<Vec<_>>();
+    for key in PROXY_AND_TRUST_ENV {
+        assert!(
+            removed
+                .iter()
+                .any(|(name, value)| *name == key && value.is_none()),
+            "{key} was not removed from the spawned CLI environment"
+        );
+    }
 }
 
 fn run(command: &mut Command) -> Output {
