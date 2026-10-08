@@ -83,9 +83,10 @@ class Telemetry:
                attributes: Mapping[str, AttributeValue] | None = None) -> Result[None]:
         """Export one measurement.
 
-        The SDK ignores negative counter measurements; if no valid measurement
-        is recorded, this returns a tagged validation failure. Histograms may
-        contain negative values.
+        Counter measurements are expected to be non-negative increments. This
+        wrapper does not reject a negative value: the current SDK records and
+        exports it. Use ``up_down_counter`` for signed changes. Histograms may
+        contain negative observations.
         """
         return self._send("send_metric", {
             "name": name, "kind": kind, "value": value, "unit": unit, "description": description,

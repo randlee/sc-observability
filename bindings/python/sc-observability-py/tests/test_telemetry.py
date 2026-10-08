@@ -182,10 +182,11 @@ def test_invalid_instrument_name_records_nothing(collector: Collector) -> None:
     assert collector.requests == []
 
 
-def test_negative_counter_is_ignored_and_returns_tagged_validation(collector: Collector) -> None:
+def test_negative_counter_is_exported_by_the_sdk(collector: Collector) -> None:
     result = Telemetry(collector.endpoint).metric("jobs", "counter", -1)
-    _failure(result, "validation", INVALID_RECORD)
-    assert collector.requests == []
+    _ok(result)
+    _, body = collector.only("/v1/metrics")
+    assert struct.pack("<d", -1.0) in body
 
 
 def test_wrong_argument_types_are_programmer_errors() -> None:
