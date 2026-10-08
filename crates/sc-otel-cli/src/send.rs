@@ -51,7 +51,16 @@ pub(crate) const fn exit_code(error: &SyncError) -> u8 {
 fn client(cli: &Cli) -> Result<Client, SyncError> {
     let endpoint = match &cli.endpoint {
         Some(endpoint) => endpoint.clone(),
-        None => std::env::var(ENDPOINT_ENV).unwrap_or_else(|_| DEFAULT_ENDPOINT.to_owned()),
+        None => match std::env::var(ENDPOINT_ENV) {
+            Ok(endpoint) => endpoint,
+            Err(std::env::VarError::NotPresent) => DEFAULT_ENDPOINT.to_owned(),
+            Err(std::env::VarError::NotUnicode(_)) => {
+                return Err(SyncError::validation(
+                    codes::INVALID_CONFIG,
+                    format!("{ENDPOINT_ENV} must be valid UTF-8"),
+                ));
+            }
+        },
     };
     let mut client = Client::new(&endpoint)?;
     for (name, value) in &cli.headers {

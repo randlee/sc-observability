@@ -392,6 +392,34 @@ fn invalid_input_exits_3_and_sends_nothing() {
     assert_no_files(&directory);
 }
 
+#[cfg(unix)]
+#[test]
+fn non_utf8_endpoint_environment_exits_3_without_sending() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let directory = tempfile::tempdir().expect("tempdir");
+    let mut command = sc_otel(&directory);
+    command
+        .env(
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+            std::ffi::OsString::from_vec(vec![0xff]),
+        )
+        .args(["log", "--body", "x"]);
+
+    let output = run(&mut command);
+    assert_eq!(output.status.code(), Some(3), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("SC_OBSERVABILITY_OTLP_SYNC_INVALID_CONFIG"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("OTEL_EXPORTER_OTLP_ENDPOINT must be valid UTF-8"),
+        "{stderr}"
+    );
+    assert_no_files(&directory);
+}
+
 #[test]
 fn invalid_metric_names_exit_3_and_send_nothing_for_every_instrument_kind() {
     let directory = tempfile::tempdir().expect("tempdir");
