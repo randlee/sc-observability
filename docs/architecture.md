@@ -1571,7 +1571,7 @@ was reworded accordingly to describe the remaining validation.
   | Exemplars | supported | typed error |
   | Profiles | supported, `/v1development/profiles` | typed error |
 
-- **Durability and layering**: SQLite via `rusqlite =0.40.2` (`bundled`)
+- **Historical durability and layering (superseded by ADR-023)**: SQLite via `rusqlite =0.40.2` (`bundled`)
   behind `durable-store`. `emit` commits a versioned envelope plus per-signal
   delivery rows (WAL, `synchronous=FULL`) before returning an
   `AdmissionReceipt`. The layering is store → drain worker → the sync-http
@@ -1605,8 +1605,9 @@ was reworded accordingly to describe the remaining validation.
   gains no YAML dependency. `SubmissionId` and the drain lease holder ID
   (`<pid>:<uuid>`) use `uuid =1.26.1` (v7), optional in both crates. The
   `sc-otel` CLI parses arguments with `clap =4.6.7`. The full pin set is in
-  the d-29 sprint doc. The license and advisory audit is cargo-deny with
-  `policy/deny-durable-store.toml`. The platform matrix is linux
+  the d-29 sprint doc. The durable-store-specific
+  `policy/deny-durable-store.toml` was retired and replaced by `policy/deny.toml`.
+  The platform matrix is linux
   x86_64/aarch64, macOS x86_64/arm64, windows x86_64/arm64 and abi3-py310
   wheels on each. It is proven by the dispatched `telemetry-platforms.yml`
   run (d-33, re-run by d-32) and the dispatched `b4a-python-distributions.yml`
