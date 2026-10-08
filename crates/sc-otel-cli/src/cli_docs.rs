@@ -124,6 +124,37 @@ fn generated_manual_is_current() {
 }
 
 #[test]
+fn documented_input_limits_and_timeout_match_the_registry() {
+    use sc_observability_otlp::constants::{
+        DEFAULT_OTLP_TIMEOUT_MS, MAX_BATCH_RECORDS, MAX_INPUT_BYTES,
+    };
+
+    const MEBIBYTE: usize = 1024 * 1024;
+    assert_eq!(MAX_INPUT_BYTES % MEBIBYTE, 0);
+    assert_eq!(DEFAULT_OTLP_TIMEOUT_MS % 1_000, 0);
+
+    let input_mebibytes = MAX_INPUT_BYTES / MEBIBYTE;
+    let timeout_seconds = DEFAULT_OTLP_TIMEOUT_MS / 1_000;
+    let rendered_help = reference()
+        .0
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .replace(',', "");
+
+    for expected in [
+        format!("At most {input_mebibytes} MiB and {MAX_BATCH_RECORDS} attributes"),
+        format!("Input is limited to {input_mebibytes} MiB and {MAX_BATCH_RECORDS} attributes."),
+        format!("Defaults to {timeout_seconds} seconds"),
+    ] {
+        assert!(
+            rendered_help.contains(&expected.replace(',', "")),
+            "generated CLI help does not match its registry value: {expected}"
+        );
+    }
+}
+
+#[test]
 fn public_options_have_explanations() {
     fn check(command: &Command) {
         for arg in command.get_arguments().filter(|arg| !arg.is_hide_set()) {
