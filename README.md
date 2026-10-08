@@ -8,10 +8,10 @@ high-performance.
 
 | Crate | Purpose |
 | --- | --- |
-| [`sc-observability-types`](./crates/sc-observability-types/) | Shared contracts: identifiers, timestamps, typed spans, logs, metrics, profiles, diagnostics, health reports, query/follow values, and error surfaces. |
+| [`sc-observability-types`](./crates/sc-observability-types/) | Shared contracts: identifiers, timestamps, trace context, logs, profiles, diagnostics, health reports, query/follow values, and error surfaces. |
 | [`sc-observability`](./crates/sc-observability/) | Logging-only runtime: `Logger`, built-in file/console sinks, custom sink registration, redaction, health, query, and follow. |
-| [`sc-observe`](./crates/sc-observe/) | Typed routing over logging and OTLP, including combined health. |
-| [`sc-observability-otlp`](./crates/sc-observability-otlp/) | OTel export layer; choose `otlp-sdk` or `sync-http`. |
+| [`sc-observe`](./crates/sc-observe/) | Typed routing of observations to log projectors and subscribers, including combined health. |
+| [`sc-observability-otlp`](./crates/sc-observability-otlp/) | Native OpenTelemetry: `log-sink` (`OtelLogSink`) and `synchronous-client` (`sync::Client`). |
 | [`sc-observability-log`](./crates/sc-observability-log/) | Additive bridge/logging API and typed error surface. |
 | [`sc-observability-log-macros`](./crates/sc-observability-log-macros/) | Procedural macros used by the bridge/logging API. |
 | [`sc-observability-dto`](./crates/sc-observability-dto/) | Language-neutral wire DTOs and checked conversions. |
@@ -30,9 +30,10 @@ high-performance.
 The three consumer entry points are:
 
 - `sc-observability` for structured logging;
-- `sc-observability-otlp` for OTel export with either `otlp-sdk` or
-  `sync-http`; and
-- `sc-observe` for typed routing over both surfaces and their combined health.
+- `sc-observability-otlp` for OpenTelemetry: the `log-sink` feature maps core
+  logs to the official SDK, and `synchronous-client` exports over OTLP/HTTP
+  without a Tokio runtime; and
+- `sc-observe` for typed routing of observations and their combined health.
 
 The PyO3 extension is a root-workspace crate and is published as a Rust
 support artifact; its Python wheel/sdist, the standalone Tauri host, and the
@@ -47,9 +48,10 @@ default-on `v1` feature and deprecates them; canonical APIs are under `v2`.
 Build with `default-features = false` to check that a consumer uses no `v1`
 surface. See the [Phase F migration guide](./docs/migration/phase-f.md).
 
-The OTLP crate now supports both the async `otlp-sdk` and synchronous
-`sync-http` backends, plus durable telemetry submission for every signal.
-Python telemetry bindings release the GIL around flush, shutdown, and health;
+Tokio hosts use the official `opentelemetry_sdk` and `opentelemetry-otlp`
+crates directly; the OTLP crate adds the `OtelLogSink` bridge and a blocking
+`sync::Client` used by the `sc-otel` CLI and Python `Telemetry`.
+Python bindings release the GIL around flush, shutdown, and health;
 the six-platform wheel matrix includes Windows ARM64 (`win_arm64`). See the
 [Python platform policy](./release/python-platform-policy.json).
 

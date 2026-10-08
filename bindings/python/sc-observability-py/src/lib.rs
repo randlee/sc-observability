@@ -132,41 +132,6 @@ canonical_projection!(v2::LogSinkError, {
     Write => "LogSinkError::Write",
     Flush => "LogSinkError::Flush",
 });
-canonical_projection!(v2::ConfigFailure, {
-    ZeroDuration => "ConfigFailure::ZeroDuration",
-    DurationOverflow => "ConfigFailure::DurationOverflow",
-    InvalidBoundOrdering => "ConfigFailure::InvalidBoundOrdering",
-    InvalidJitterPercent => "ConfigFailure::InvalidJitterPercent",
-    InvalidQueueCapacity => "ConfigFailure::InvalidQueueCapacity",
-    InvalidQueueByteCapacity => "ConfigFailure::InvalidQueueByteCapacity",
-    ConfigFieldNotApplicable => "ConfigFailure::ConfigFieldNotApplicable",
-    InsecureTransportRejected => "ConfigFailure::InsecureTransportRejected",
-    InvalidEndpoint => "ConfigFailure::InvalidEndpoint",
-    InvalidHeader => "ConfigFailure::InvalidHeader",
-    TransportConstructionFailed => "ConfigFailure::TransportConstructionFailed",
-    UnsupportedBackend => "ConfigFailure::UnsupportedBackend",
-    UnsupportedProtocol => "ConfigFailure::UnsupportedProtocol",
-    TokioRuntimeRequired => "ConfigFailure::TokioRuntimeRequired",
-});
-canonical_projection!(v2::MetricModelError, {
-    InvalidHistogram => "MetricModelError::InvalidHistogram",
-    InvalidTemporality => "MetricModelError::InvalidTemporality",
-    InvalidInterval => "MetricModelError::InvalidInterval",
-});
-canonical_projection!(v2::ExportError, {
-    Transport => "ExportError::Transport",
-    BlockingBackendInAsyncContext => "ExportError::BlockingBackendInAsyncContext",
-    AsyncLifecycleRequired => "ExportError::AsyncLifecycleRequired",
-    RuntimeTerminated => "ExportError::RuntimeTerminated",
-    LifecycleTimeout => "ExportError::LifecycleTimeout",
-    QueueFull => "ExportError::QueueFull",
-    WorkerTerminated => "ExportError::WorkerTerminated",
-    ShutdownCancelledRetry => "ExportError::ShutdownCancelledRetry",
-    RetryDeadlineExhausted => "ExportError::RetryDeadlineExhausted",
-    NonRetryableHttpStatus => "ExportError::NonRetryableHttpStatus",
-    RetryAttemptsExhausted => "ExportError::RetryAttemptsExhausted",
-    TerminalExportFailure => "ExportError::TerminalExportFailure",
-});
 
 #[derive(Clone, Copy, Debug)]
 pub enum CanonicalWireKind {

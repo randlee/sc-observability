@@ -1,4 +1,10 @@
-"""Pinned desktop-viewer readback through installed telemetry front ends."""
+"""Pinned desktop-viewer readback through the installed CLI and installed Python wheel.
+
+Both frontends send a correlated log, span and one metric of each viewer-supported
+form (gauge, sum, histogram) to the pinned viewer's OTLP/HTTP port; the viewer's
+RPC API must return the sent values.  This is the viewer coverage for the
+synchronous client.  It runs only with the pinned viewer provided.
+"""
 from __future__ import annotations
 
 import json
@@ -6,25 +12,23 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from conftest import GOLDENS, rpc, run_cli, run_installed_python
+import pytest
+
+from conftest import rpc, run_cli, run_python
 
 
-_TIME = "1970-01-01T00:00:01.000000000Z"
-_TIME_NANOS = "1000000000"
 _TRACE_IDS = {
     "python": "0123456789abcdef0123456789abcdef",
     "cli": "fedcba9876543210fedcba9876543210",
 }
 _SPAN_IDS = {"python": "0123456789abcdef", "cli": "fedcba9876543210"}
+_START, _END = 1_700_000_000_000_000_000, 1_700_000_002_000_000_000
 _LOW, _HIGH = "-1000000000", "1893456000000000000"
-
-
-def _viewer_config(path: Path, endpoint: str, store_name: str, service: str) -> Path:
-    path.write_text(
-        "\n".join((f"service: {service}", "otlp:", f"  endpoint: {endpoint}",
-                   "  timeout_ms: 1000", "store:", f"  path: {store_name}",
-                   "  max_bytes: 10485760", "")), encoding="utf-8")
-    return path
+_METRICS = (  # (kind, value, viewer metricType)
+    ("gauge", 5.5, "Gauge"),
+    ("counter", 7.25, "Sum"),
+    ("histogram", 20.0, "Histogram"),
+)
 
 
 def _wait_for(
@@ -67,67 +71,37 @@ def _row(rows: object, expected_name: str) -> dict[str, object] | None:
                  and isinstance(row.get("id") or row.get("streamID") or row.get("streamId"), str)), None)
 
 
-def _payload(frontend: str) -> dict[str, object]:
-    """Use validated golden shapes, with one explicit correlated viewer record set."""
-    def golden(name: str) -> dict[str, Any]:
-        return json.loads((GOLDENS / name / "input.json").read_text())
-
+def _send(artifacts: dict[str, Path], frontend: str, endpoint: str, cwd: Path) -> None:
+    """Send the log, the span and the three metrics through one installed frontend."""
     service = f"telemetry-e2e-viewer-{frontend}"
     trace_id, span_id = _TRACE_IDS[frontend], _SPAN_IDS[frontend]
-    payload = golden("logs")
-    payload["resource"] = {
-        "attributes": {"service.name": service, "test.frontend": frontend},
-        "dropped_attributes_count": 0,
-        "entity_refs": [],
-        "schema_url": None,
-    }
-    payload["record_key"] = f"viewer-readback-{frontend}"
-    payload["logs"][0].update({
-        "body": f"viewer-log-{frontend}", "time": _TIME, "observed_time": _TIME,
-        "attributes": {"test.frontend": frontend}, "trace_id": trace_id, "span_id": span_id,
-        "correlation_id": f"viewer-{frontend}",
-    })
-    span = golden("traces")["spans"][0]
-    span.update({
-        "name": f"viewer-span-{frontend}", "trace_id": trace_id, "span_id": span_id,
-        "start_time": _TIME,
-        "attributes": {"test.frontend": frontend}, "correlation_id": f"viewer-{frontend}",
-    })
-    payload["spans"] = [span]
-    metrics = []
-    for fixture, name, value in (
-        ("metric_gauge", f"viewer.gauge.{frontend}", 5.5),
-        ("metric_sum", f"viewer.sum.{frontend}", 7.25),
-        ("metric_histogram", f"viewer.histogram.{frontend}", None),
-    ):
-        metric = golden(fixture)["metrics"][0]
-        metric["name"] = name
-        point = metric["data"]["data"]["points"][0]
-        point["attributes"] = {"test.frontend": frontend}
-        if value is not None:
-            point["value"] = {"kind": "double", "data": value}
-        else:
-            point.update({"sum": 20.0, "count": 3, "bucket_counts": [1, 2], "explicit_bounds": [5.0]})
-        metrics.append(metric)
-    payload["metrics"] = metrics
-    return payload
-
-
-def _python_emit_script(config: Path) -> str:
-    return f"""\
-import json
-import sys
-from sc_observability import Ok
-from sc_observability.telemetry import Telemetry
-
-opened = Telemetry.open(config={str(config)!r})
-assert isinstance(opened, Ok), opened
-with opened.value as telemetry:
-    submitted = telemetry.emit(json.load(sys.stdin))
-    assert isinstance(submitted, Ok), submitted
-    delivered = telemetry.flush_submission(submitted.value.submission_id, timeout_s=10)
-    assert isinstance(delivered, Ok), delivered
-"""
+    attrs = {"test.frontend": frontend}
+    metric_args = [(f"viewer.{kind}.{frontend}", kind, value) for kind, value, _ in _METRICS]
+    if frontend == "python":
+        def call(operation: str, args: list[Any], kwargs: dict[str, Any]) -> None:
+            result = run_python(artifacts, cwd, {"endpoint": endpoint, "service": service, "timeout_s": 10,
+                                                 "operation": operation, "args": args, "kwargs": kwargs})
+            assert result["ok"], result
+        call("log", [f"viewer-log-{frontend}"], {"trace_id": trace_id, "span_id": span_id, "attributes": attrs})
+        call("span", [f"viewer-span-{frontend}"], {
+            "trace_id": trace_id, "span_id": span_id, "start_time_unix_nano": _START,
+            "end_time_unix_nano": _END, "attributes": attrs})
+        for name, kind, value in metric_args:
+            call("metric", [name, kind, value], {"attributes": attrs})
+        return
+    base = ["--endpoint", endpoint, "--service", service, "--timeout", "10"]
+    commands = [
+        ["log", "--body", f"viewer-log-{frontend}", "--trace-id", trace_id, "--span-id", span_id,
+         "--attributes", json.dumps(attrs)],
+        ["span", "--name", f"viewer-span-{frontend}", "--trace-id", trace_id, "--span-id", span_id,
+         "--start-time-unix-nano", str(_START), "--end-time-unix-nano", str(_END),
+         "--attributes", json.dumps(attrs)],
+        *(["metric", "--name", name, "--kind", kind, "--value", str(value), "--attributes", json.dumps(attrs)]
+          for name, kind, value in metric_args),
+    ]
+    for command in commands:
+        done = run_cli(artifacts, *base, *command, cwd=cwd)
+        assert done.returncode == 0, done.stdout + done.stderr
 
 
 def _assert_frontend_readback(viewer: dict[str, str], frontend: str) -> None:
@@ -138,15 +112,14 @@ def _assert_frontend_readback(viewer: dict[str, str], frontend: str) -> None:
     logs = _wait_for(viewer, "searchLogs", [_LOW, _HIGH], lambda result: _row(result, body) is not None)
     log_row = _row(logs, body)
     assert log_row is not None
-    log_id = log_row["id"]
-    detail = _wait_for(viewer, "getLog", [log_id], lambda result: isinstance(result, dict) and result.get("body") == body)
+    detail = _wait_for(viewer, "getLog", [log_row["id"]],
+                       lambda result: isinstance(result, dict) and result.get("body") == body)
     assert isinstance(detail, dict)
     assert detail["body"] == body
-    assert detail["timestamp"] == _TIME_NANOS
-    assert detail["observedTimestamp"] == _TIME_NANOS
+    assert int(detail["timestamp"]) > 0
     assert detail["traceID"] == trace_id
     assert detail["spanID"] == span_id
-    _attributes(detail["resource"], {"service.name": service, "test.frontend": frontend}, "log resource")
+    _attributes(detail["resource"], {"service.name": service}, "log resource")
     _attributes(detail, {"test.frontend": frontend}, "log")
 
     spans = _wait_for(
@@ -158,23 +131,20 @@ def _assert_frontend_readback(viewer: dict[str, str], frontend: str) -> None:
     )
     assert isinstance(spans, dict)
     assert spans["traceID"] == trace_id
-    assert spans["traceStart"] == _TIME_NANOS
+    assert spans["traceStart"] == str(_START)
     span = next(row["spanData"] for row in spans["spans"]
                 if row.get("spanData", {}).get("name") == span_name)
     assert span["spanID"] == span_id
     assert span["start"] == 0
-    assert span["dur"] == 1_000_000_000
-    assert int(spans["traceStart"]) + span["start"] + span["dur"] == 2_000_000_000
+    assert span["dur"] == _END - _START
     _attributes(spans["resources"][str(span["r"])],
-                {"service.name": service, "test.frontend": frontend}, "span resource")
+                {"service.name": service}, "span resource")
     _attributes(span, {"test.frontend": frontend}, "span")
 
     expected = {
         f"viewer.gauge.{frontend}": ("Gauge", {"doubleValue": 5.5}),
-        f"viewer.sum.{frontend}": ("Sum", {"doubleValue": 7.25}),
-        f"viewer.histogram.{frontend}": (
-            "Histogram", {"count": 3, "sum": 20.0, "explicitBounds": [5.0], "bucketCounts": [1, 2]},
-        ),
+        f"viewer.counter.{frontend}": ("Sum", {"doubleValue": 7.25}),
+        f"viewer.histogram.{frontend}": ("Histogram", {"count": 1, "sum": 20.0}),
     }
     summaries = _wait_for(
         viewer, "searchMetricSummaries", [_LOW, _HIGH],
@@ -193,24 +163,15 @@ def _assert_frontend_readback(viewer: dict[str, str], frontend: str) -> None:
         )
         assert isinstance(metric, dict)
         point = metric["timeseries"][0]["datapoints"][0]
-        assert point["timestamp"] == _TIME_NANOS
+        assert int(point["timestamp"]) > 0
         for field, value in fields.items():
             assert point[field] == value, f"{name} {field} was {point[field]!r}, expected {value!r}"
 
 
+@pytest.mark.parametrize("frontend", ("python", "cli"))
 def test_installed_frontends_read_back_supported_viewer_signal_forms(
-    installed_artifacts: dict[str, Path], pinned_viewer: dict[str, str], tmp_path: Path,
+    installed_artifacts: dict[str, Path], pinned_viewer: dict[str, str], tmp_path: Path, frontend: str,
 ) -> None:
-    """Viewer v0.5.0 reads logs, spans, Gauge, Sum, and explicit Histogram."""
-    for frontend in ("python", "cli"):
-        payload = json.dumps(_payload(frontend))
-        service = f"telemetry-e2e-viewer-{frontend}"
-        config = _viewer_config(tmp_path / f"{frontend}-viewer.yaml", pinned_viewer["otlp"],
-                                f"viewer-{frontend}.sqlite", service)
-        if frontend == "python":
-            emitted = run_installed_python(installed_artifacts, _python_emit_script(config), cwd=tmp_path, input=payload)
-        else:
-            emitted = run_cli(installed_artifacts, "--config", str(config), "emit", "--stdin",
-                              cwd=tmp_path, input=payload)
-        assert emitted.returncode == 0, emitted.stdout + emitted.stderr
-        _assert_frontend_readback(pinned_viewer, frontend)
+    """Viewer reads logs, spans, Gauge, Sum and explicit Histogram sent by the installed frontend."""
+    _send(installed_artifacts, frontend, pinned_viewer["otlp"], tmp_path)
+    _assert_frontend_readback(pinned_viewer, frontend)

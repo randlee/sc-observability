@@ -117,9 +117,9 @@ import json
 import pathlib
 import sys
 from sc_observability import (
+    Err,
     Ok,
     Telemetry,
-    TelemetryErr,
 )
 import sc_observability
 import sc_observability._native as native
@@ -131,52 +131,22 @@ origins = {
 
 # The candidate wheel is built with ``otlp-telemetry``.  Exercise that
 # feature through its installed public facade rather than test-only hooks.
-if not callable(getattr(native, "open", None)):
-    raise SystemExit("candidate wheel omitted the otlp-telemetry native factory")
-opened = Telemetry.open(
-    store_path="telemetry-store",
-    endpoint="http://127.0.0.1:9",
-    service_name="e5-installed-wheel-telemetry",
-)
-if not isinstance(opened, Ok):
-    raise SystemExit(f"installed telemetry did not return a tagged Ok: {opened!r}")
-telemetry = opened.value
-submission = {
-    "version": 1,
-    "record_key": "e5-installed-wheel-telemetry",
-    "resource": {
-        "attributes": {"service.name": "e5-installed-wheel-telemetry"},
-        "dropped_attributes_count": 0,
-        "entity_refs": [],
-        "schema_url": None,
-    },
-    "scope": {
-        "name": "e5.wheels",
-        "version": None,
-        "attributes": {},
-        "dropped_attributes_count": 0,
-        "schema_url": None,
-    },
-    "logs": [{
-        "time": "2026-10-04T00:00:00Z",
-        "body": "installed telemetry",
-        "attributes": {},
-    }],
-    "spans": [],
-    "metrics": [],
-}
-receipt = telemetry.emit(submission)
-if not isinstance(receipt, Ok):
-    raise SystemExit(f"installed telemetry submit did not return a tagged Ok: {receipt!r}")
+for function in ("send_log", "send_span", "send_metric"):
+    if not callable(getattr(native, function, None)):
+        raise SystemExit(f"candidate wheel omitted the otlp-telemetry native function {function}")
+# An unused loopback port: each call returns a tagged result, whatever the network does.
+telemetry = Telemetry("http://127.0.0.1:9", service_name="e5-installed-wheel-telemetry", timeout_s=1)
 for operation, result in (
-    ("flush", telemetry.flush(timeout_s=0.1)),
-    ("status", telemetry.status()),
-    ("shutdown", telemetry.shutdown(timeout_s=0.1)),
+    ("log", telemetry.log("installed telemetry")),
+    ("span", telemetry.span("installed telemetry")),
+    ("metric", telemetry.metric("installed.telemetry", "counter", 1.0)),
 ):
-    if not isinstance(result, (Ok, TelemetryErr)):
+    if not isinstance(result, (Ok, Err)):
         raise SystemExit(f"installed telemetry {operation} returned an untyped outcome: {result!r}")
-if not isinstance(telemetry.flush(timeout_s=float("nan")), TelemetryErr):
-    raise SystemExit("installed telemetry invalid timeout did not return TelemetryErr")
+# Validation fails before any network use, so this outcome never depends on the host.
+rejected = telemetry.log("installed telemetry", severity="loud")
+if not isinstance(rejected, Err) or rejected.error.kind != "validation":
+    raise SystemExit(f"installed telemetry invalid severity did not return a validation Err: {rejected!r}")
 print(json.dumps({"prefix": sys.prefix, **{key: str(value) for key, value in origins.items()}}, sort_keys=True))
 '''
 

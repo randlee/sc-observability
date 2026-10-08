@@ -4,23 +4,19 @@
     reason = "routing integration compatibility fixtures exercise the retained trait errors"
 )]
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use sc_observability_types::v2::{
-    AggregationTemporality, Attributes, FiniteF64, LogProjector, MetricProjector, MetricRecord,
-    MetricValue, ObservationSubscriber, ProjectionError, ProjectionRegistration, SpanProjector,
-    SpanRecord, SpanSignal, SubscriberError, SubscriberRegistration, TraceContext, TraceFlags,
+    LogProjector, ObservationSubscriber, ProjectionError, ProjectionRegistration, SubscriberError,
+    SubscriberRegistration,
 };
 use sc_observability_types::{
     ActionName, Diagnostic, ErrorCode, ErrorContext, Level, LogEvent,
-    LogProjector as LegacyLogProjector, MetricName, MetricProjector as LegacyMetricProjector,
-    MetricRecord as LegacyMetricRecord, MetricUnit, Observation,
+    LogProjector as LegacyLogProjector, Observation,
     ObservationSubscriber as LegacyObservationSubscriber, OutcomeLabel, ProcessIdentity,
     ProjectionRegistration as LegacyProjectionRegistration, Remediation, SchemaVersion,
-    ServiceName, SpanId, SpanProjector as LegacySpanProjector, SpanSignal as LegacySpanSignal,
-    SpanStarted, SubscriberRegistration as LegacySubscriberRegistration, TargetCategory, Timestamp,
-    TraceContext as LegacyTraceContext, TraceId,
+    ServiceName, SpanId, SubscriberRegistration as LegacySubscriberRegistration, TargetCategory,
+    Timestamp, TraceContext as LegacyTraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 use serde_json::Map;
@@ -103,40 +99,6 @@ impl LegacyLogProjector<AgentEvent> for RecordingLogProjector {
     }
 }
 
-struct RecordingSpanProjector {
-    count: Arc<AtomicU64>,
-}
-
-impl SpanProjector<AgentEvent> for RecordingSpanProjector {
-    fn project_spans(
-        &self,
-        observation: &Observation<AgentEvent>,
-    ) -> Result<Vec<SpanSignal>, ProjectionError> {
-        self.count.fetch_add(1, Ordering::SeqCst);
-        Ok(vec![SpanSignal::Started(SpanRecord::<SpanStarted>::new(
-            Timestamp::UNIX_EPOCH,
-            observation.service.clone(),
-            ActionName::new("span.started").expect("valid action"),
-            v2_trace_context(),
-            Attributes::new(),
-        ))])
-    }
-}
-
-impl LegacySpanProjector<AgentEvent> for RecordingSpanProjector {
-    fn project_spans(
-        &self,
-        _observation: &Observation<AgentEvent>,
-    ) -> Result<Vec<LegacySpanSignal>, ProjectionError> {
-        self.count.fetch_add(1, Ordering::SeqCst);
-        Ok(Vec::new())
-    }
-}
-
-struct RecordingMetricProjector {
-    count: Arc<AtomicU64>,
-}
-
 struct FailingSubscriber {
     context: Mutex<Option<Box<ErrorContext>>>,
 }
@@ -170,50 +132,8 @@ impl LegacyLogProjector<AgentEvent> for FailingLogProjector {
     }
 }
 
-impl MetricProjector<AgentEvent> for RecordingMetricProjector {
-    fn project_metrics(
-        &self,
-        observation: &Observation<AgentEvent>,
-    ) -> Result<Vec<MetricRecord>, ProjectionError> {
-        self.count.fetch_add(1, Ordering::SeqCst);
-        Ok(vec![
-            MetricRecord::try_new(
-                Timestamp::UNIX_EPOCH,
-                observation.service.clone(),
-                MetricName::new("obs.events_total").expect("valid metric"),
-                MetricValue::Sum {
-                    value: FiniteF64::new(1.0).expect("finite metric value"),
-                    monotonic: true,
-                    temporality: AggregationTemporality::Cumulative,
-                    start_time: Timestamp::UNIX_EPOCH,
-                },
-            )
-            .expect("valid cumulative metric")
-            .with_unit(Some(MetricUnit::new("1").expect("valid metric unit"))),
-        ])
-    }
-}
-
-impl LegacyMetricProjector<AgentEvent> for RecordingMetricProjector {
-    fn project_metrics(
-        &self,
-        _observation: &Observation<AgentEvent>,
-    ) -> Result<Vec<LegacyMetricRecord>, ProjectionError> {
-        self.count.fetch_add(1, Ordering::SeqCst);
-        Ok(Vec::new())
-    }
-}
-
 fn tool_name() -> sc_observability_types::ToolName {
     sc_observability_types::ToolName::new("obs-app").expect("valid tool name")
-}
-
-fn v2_trace_context() -> TraceContext {
-    TraceContext::new(
-        TraceId::new("0123456789abcdef0123456789abcdef").expect("valid trace id"),
-        SpanId::new("0123456789abcdef").expect("valid span id"),
-        TraceFlags::new(0),
-    )
 }
 
 fn observation() -> Observation<AgentEvent> {
@@ -248,11 +168,9 @@ fn routing_failure_context(cause: &'static str) -> Box<ErrorContext> {
 }
 
 #[test]
-fn one_observation_can_fan_out_to_subscribers_logs_spans_and_metrics() {
+fn one_observation_can_fan_out_to_subscribers_and_logs() {
     let subscriber_calls = Arc::new(Mutex::new(Vec::new()));
     let log_calls = Arc::new(Mutex::new(Vec::new()));
-    let span_count = Arc::new(AtomicU64::new(0));
-    let metric_count = Arc::new(AtomicU64::new(0));
     let legacy_root = temp_path("fanout-legacy");
     let legacy_config =
         ObservabilityConfig::default_for(tool_name(), legacy_root.clone()).expect("config");
@@ -264,17 +182,12 @@ fn one_observation_can_fan_out_to_subscribers_logs_spans_and_metrics() {
             },
         )))
         .register_projection(
-            LegacyProjectionRegistration::new()
-                .with_log_projector(Arc::new(RecordingLogProjector {
+            LegacyProjectionRegistration::new().with_log_projector(Arc::new(
+                RecordingLogProjector {
                     calls: log_calls.clone(),
                     id: "log",
-                }))
-                .with_span_projector(Arc::new(RecordingSpanProjector {
-                    count: span_count.clone(),
-                }))
-                .with_metric_projector(Arc::new(RecordingMetricProjector {
-                    count: metric_count.clone(),
-                })),
+                },
+            )),
         )
         .build()
         .expect("legacy runtime");
@@ -288,19 +201,12 @@ fn one_observation_can_fan_out_to_subscribers_logs_spans_and_metrics() {
             id: "subscriber",
             calls: subscriber_calls.clone(),
         })))
-        .register_projection(
-            ProjectionRegistration::new()
-                .with_log_projector(Arc::new(RecordingLogProjector {
-                    calls: log_calls.clone(),
-                    id: "log",
-                }))
-                .with_span_projector(Arc::new(RecordingSpanProjector {
-                    count: span_count.clone(),
-                }))
-                .with_metric_projector(Arc::new(RecordingMetricProjector {
-                    count: metric_count.clone(),
-                })),
-        )
+        .register_projection(ProjectionRegistration::new().with_log_projector(Arc::new(
+            RecordingLogProjector {
+                calls: log_calls.clone(),
+                id: "log",
+            },
+        )))
         .build()
         .expect("typed runtime");
 
@@ -332,8 +238,6 @@ fn one_observation_can_fan_out_to_subscribers_logs_spans_and_metrics() {
         *log_calls.lock().expect("log calls poisoned"),
         vec!["log", "log"]
     );
-    assert_eq!(span_count.load(Ordering::SeqCst), 2);
-    assert_eq!(metric_count.load(Ordering::SeqCst), 2);
     assert!(legacy_contents.contains("\"action\":\"observation.received\""));
     assert!(typed_contents.contains("\"action\":\"observation.received\""));
     legacy.shutdown().expect("legacy shutdown");

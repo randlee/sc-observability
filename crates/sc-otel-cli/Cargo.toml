@@ -15,14 +15,17 @@ name = "sc-otel"
 path = "src/main.rs"
 
 [dependencies]
-sc-observability-types.workspace = true
-sc-observability-otlp = { workspace = true, features = ["durable-store"] }
+sc-observability-otlp = { workspace = true, features = ["synchronous-client"] }
 clap.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-sc-observability-types = { workspace = true, features = ["test-double"] }
+# Loopback TLS collector and its in-process certificate for the trusted-root
+# export test.
+rcgen = "=0.14.10"
+rustls = { version = "=0.23.45", features = ["ring"] }
+time.workspace = true
 
 [lints]
 workspace = true

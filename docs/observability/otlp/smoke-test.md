@@ -1,22 +1,20 @@
 # OTLP smoke test
 
-This is the current, repository-local smoke path. It supersedes only the
+This is the current, repository-local smoke path (H-008). It supersedes only the
 historical plan's external operational instructions.
 
-Run the canonical ingress corpus through both supported production backends:
+`tests/telemetry-e2e` is a pytest suite (not a Cargo package). It starts the
+pinned official OpenTelemetry Collector recorded in
+`tests/telemetry-e2e/collector-release.json` with an OTLP HTTP receiver and a
+file exporter, then reads the exported logs, spans and metrics back:
 
 ```sh
-cargo test --locked -p sc-observability-otlp --test canonical_ingress \
-  --features otlp-sdk,sync-http
+TELEMETRY_E2E_COLLECTOR_BINARY=/path/to/otelcol-contrib \
+  python3 -m pytest -q tests/telemetry-e2e
 ```
 
-The corpus sends logs, completed spans, and metrics through the public
-configuration. It checks `service.name`, signal values, and the neutral OTLP
-wire representations at a loopback collector. This check does not configure
-or query any external observability service.
-
-For the focused synchronous HTTP public-factory smoke, run:
-
-```sh
-python3 scripts/ci/otlp_dev_install_smoke.py
-```
+It covers synchronous and Tokio export through `examples/otlp-native`,
+file-only, OTel-only and both logging modes with sc macro and tracing inputs,
+and equivalent operations from the installed `sc-otel` CLI and Python wheel.
+It does not configure or query any external observability service. Without the
+Collector binary the suite skips locally and fails under CI.

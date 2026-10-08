@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 
 from scripts.ci.boundary_policy import (
+    discovers_home_paths,
     is_first_party_dependency,
     validate_allowed_dependents,
     validate_first_party_dependencies,
@@ -20,7 +21,7 @@ CORE_MANIFESTS = {
     "sc-observability-log-consumer-check": "crates/sc-observability-log-consumer-check/Cargo.toml",
     "sc-otel-cli": "crates/sc-otel-cli/Cargo.toml",
 }
-SC_OTEL_CLI_EDGES = {"sc-observability-types", "sc-observability-otlp"}
+SC_OTEL_CLI_EDGES = {"sc-observability-otlp"}
 
 
 class BoundaryPolicyTests(unittest.TestCase):
@@ -62,6 +63,22 @@ class BoundaryPolicyTests(unittest.TestCase):
                 SC_OTEL_CLI_EDGES | {"sc-observe"},
             )
 
+    def test_sc_otel_cli_forbids_durable_store_dependencies(self):
+        import tomllib
+
+        manifest = tomllib.loads(
+            (ROOT / "boundaries/sc-otel-cli/cli.toml").read_text(encoding="utf-8")
+        )
+        self.assertEqual(manifest["enforcement"]["lint_rules"], [])
+        for dependency in ("rusqlite", "uuid"):
+            with self.subTest(dependency=dependency):
+                with self.assertRaisesRegex(ValueError, rf"forbidden edge.*{dependency}"):
+                    validate_first_party_dependencies(
+                        ROOT,
+                        "sc-otel-cli",
+                        SC_OTEL_CLI_EDGES | {dependency},
+                    )
+
     def test_sc_otel_cli_has_no_allowed_dependents(self):
         # cli.toml allowed_dependents = [].
         with self.assertRaisesRegex(
@@ -84,3 +101,53 @@ class BoundaryPolicyTests(unittest.TestCase):
                 "sc-observability",
                 {"sc-observability-types", "sc-observability-otlp"},
             )
+
+    def test_home_discovery_is_rejected_in_production_source(self):
+        for path, text in [
+            ("crates/sc-otel-cli/src/send.rs", 'std::env::var("HOME")'),
+            ("crates/sc-observability/src/lib.rs", 'std::env::var_os("XDG_DATA_HOME")'),
+            ("crates/sc-observability-log/src/tests.rs", '"XDG_CONFIG_HOME"'),
+            ("crates/sc-observe/build.rs", "dirs::home_dir()"),
+        ]:
+            with self.subTest(path=path):
+                self.assertTrue(discovers_home_paths(Path(path), text))
+
+    def test_home_discovery_is_rejected_in_integration_tests(self):
+        for token in (
+            "dirs::home_dir",
+            "dirs_next::home_dir",
+            "home_dir()",
+            'var("HOME")',
+            'var_os("HOME")',
+        ):
+            with self.subTest(token=token):
+                self.assertTrue(
+                    discovers_home_paths(
+                        Path("crates/sc-otel-cli/tests/send.rs"), token
+                    )
+                )
+
+    def test_integration_test_environment_isolation_is_accepted(self):
+        isolation = 'for key in ["HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME"] { command.env(key, dir); }'
+        self.assertFalse(
+            discovers_home_paths(Path("crates/sc-otel-cli/tests/send.rs"), isolation)
+        )
+        self.assertFalse(
+            discovers_home_paths(
+                Path("crates/sc-otel-cli/tests/nested/send.rs"),
+                'command.env("XDG_CONFIG_HOME", dir); command.env("XDG_DATA_HOME", dir);',
+            )
+        )
+        self.assertFalse(
+            discovers_home_paths(
+                Path("crates/sc-otel-cli/tests"), 'command.env("XDG_CONFIG_HOME", dir);'
+            )
+        )
+        self.assertTrue(
+            discovers_home_paths(
+                Path("crates/sc-otel-cli/tests"), 'std::env::var("HOME")'
+            )
+        )
+        self.assertFalse(
+            discovers_home_paths(Path("crates/sc-otel-cli/src/send.rs"), "let endpoint = 1;")
+        )

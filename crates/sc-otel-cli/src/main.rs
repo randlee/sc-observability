@@ -1,19 +1,14 @@
-//! `sc-otel` submits and inspects durable telemetry envelopes.
+//! `sc-otel` sends OpenTelemetry logs, spans and metrics over OTLP/HTTP.
 
 mod cli;
 #[cfg(test)]
 mod cli_docs;
-mod client;
-mod config;
 mod constants;
-mod error;
 mod error_codes;
-mod exit;
-mod input;
-mod output;
-mod run;
+mod send;
 
 use clap::Parser;
+use sc_observability_otlp::{error_codes::TELEMETRY_EXPORT_FAILED, sync::SyncError};
 use std::{panic::AssertUnwindSafe, process::ExitCode};
 
 fn main() -> ExitCode {
@@ -24,13 +19,28 @@ fn main() -> ExitCode {
     match result {
         Ok(exit) => ExitCode::from(exit),
         Err(payload) => {
-            eprintln!(
-                "sc-otel: unexpected internal error: {}",
-                panic_message(&*payload)
-            );
-            ExitCode::from(constants::EXIT_INTERNAL)
+            let include_payload =
+                panic_details_enabled(std::env::var(constants::PANIC_DETAILS_ENV).ok().as_deref());
+            eprintln!("{}", panic_diagnostic(&*payload, include_payload));
+            ExitCode::from(error_codes::EXIT_INTERNAL)
         }
     }
+}
+
+fn panic_details_enabled(setting: Option<&str>) -> bool {
+    setting == Some("1")
+}
+
+fn panic_diagnostic(payload: &(dyn std::any::Any + Send), include_payload: bool) -> String {
+    let mut diagnostic = format!(
+        "sc-otel: unexpected internal error [{}].\nRecovery: Retry the command; if the error persists, report this code and the sc-otel version. Set SC_OTEL_DEBUG_PANIC=1 to include local diagnostic details.",
+        constants::INTERNAL_ERROR_CODE
+    );
+    if include_payload {
+        diagnostic.push_str("\nDiagnostic: panic payload (shown because SC_OTEL_DEBUG_PANIC=1): ");
+        diagnostic.push_str(panic_message(payload));
+    }
+    diagnostic
 }
 
 fn panic_message(payload: &(dyn std::any::Any + Send)) -> &str {
@@ -45,24 +55,67 @@ fn run() -> u8 {
     let cli = match cli::Cli::try_parse() {
         Ok(cli) => cli,
         Err(error) => {
-            let exit = exit::parser_exit(&error);
+            let exit = if error.use_stderr() {
+                error_codes::EXIT_USAGE
+            } else {
+                error_codes::EXIT_OK
+            };
             if let Err(print_error) = error.print() {
                 eprintln!("sc-otel: unable to render usage error: {print_error}");
             }
             return exit;
         }
     };
-    run::run(&cli)
+    match send::run(&cli) {
+        Ok(()) => error_codes::EXIT_OK,
+        Err(error) => {
+            // Display only: the client redacts header values and URL userinfo there.
+            match &error {
+                SyncError::Export(_) => eprintln!(
+                    "sc-otel: {TELEMETRY_EXPORT_FAILED}: {error}; \
+                     check the endpoint and --root-certificate; raise --timeout if needed"
+                ),
+                SyncError::Validation { .. } => eprintln!("sc-otel: {error}"),
+            }
+            send::exit_code(&error)
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::panic_message;
+    use super::{panic_details_enabled, panic_diagnostic};
 
     #[test]
-    fn panic_message_preserves_string_payloads_and_bounds_other_payloads() {
-        assert_eq!(panic_message(&"expected panic"), "expected panic");
-        assert_eq!(panic_message(&String::from("owned panic")), "owned panic");
-        assert_eq!(panic_message(&42_u8), "non-string panic payload");
+    fn panic_payload_requires_the_exact_opt_in_value() {
+        assert!(!panic_details_enabled(None));
+        assert!(!panic_details_enabled(Some("0")));
+        assert!(!panic_details_enabled(Some("true")));
+        assert!(panic_details_enabled(Some("1")));
+    }
+
+    #[test]
+    fn panic_diagnostic_hides_payload_by_default_and_gives_recovery_guidance() {
+        let diagnostic = panic_diagnostic(&"Authorization: Bearer secret", false);
+
+        assert!(
+            diagnostic.starts_with("sc-otel: unexpected internal error [SC_OTEL_CLI_INTERNAL].")
+        );
+        assert!(diagnostic.contains(
+            "Recovery: Retry the command; if the error persists, report this code and the sc-otel version."
+        ));
+        assert!(
+            diagnostic.contains("Set SC_OTEL_DEBUG_PANIC=1 to include local diagnostic details.")
+        );
+        assert!(!diagnostic.contains("Authorization"));
+        assert!(!diagnostic.contains("secret"));
+    }
+
+    #[test]
+    fn panic_diagnostic_shows_payload_only_when_explicitly_enabled() {
+        let diagnostic = panic_diagnostic(&"Authorization: Bearer secret", true);
+
+        assert!(diagnostic.contains("SC_OTEL_DEBUG_PANIC=1"));
+        assert!(diagnostic.contains("Authorization: Bearer secret"));
     }
 }

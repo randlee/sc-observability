@@ -12,7 +12,11 @@ import sys
 import tomllib
 sys.path.insert(0, str(Path('.github/scripts').resolve()))
 sys.path.insert(0, str(Path('scripts/ci').resolve()))
-from boundary_policy import is_first_party_dependency, validate_first_party_dependencies
+from boundary_policy import (
+    discovers_home_paths,
+    is_first_party_dependency,
+    validate_first_party_dependencies,
+)
 from release_manifest import workspace_members
 from compatibility_registry import (
     validate_compatibility_source_boundary,
@@ -94,7 +98,7 @@ if "sc-observability-otlp" in obs_deps or "sc-observe" in obs_deps:
     raise SystemExit("sc-observability must not depend on sc-observe or sc-observability-otlp")
 if "sc-observability-otlp" in observe_runtime_deps:
     raise SystemExit("sc-observe must not depend on sc-observability-otlp")
-required_otlp = {"serde_json", "thiserror", "sc-lint-attributes"}
+required_otlp = {"serde_json"}
 # ADR-019's machine allowlist is owned by policy/otlp-transport.toml.
 sys.path.insert(0, str(root / "scripts/ci"))
 from otlp_dependencies import validate_transport_dependencies
@@ -176,21 +180,21 @@ required_record_fields = {
     "removable_paths",
 }
 required_symbol_fields = {"area", "kind", "status", "canonical"} | required_record_fields
-if len(symbols) != 58 or len({row.get("symbol") for row in symbols}) != 58:
-    raise SystemExit("compatibility registry must contain each of the 58 audited symbols once")
+if len(symbols) != 41 or len({row.get("symbol") for row in symbols}) != 41:
+    raise SystemExit("compatibility registry must contain each of the 41 audited symbols once")
 if any(not required_symbol_fields.issubset(row) for row in symbols):
     raise SystemExit("compatibility registry has an incomplete symbol row")
 if {row["status"] for row in symbols} - {"restored_root", "canonical_routed", "pending_d23_wrapper"}:
     raise SystemExit("compatibility registry has an unknown disposition")
 allowed_treatments = {"unchanged_alias", "existing_pair", "new_adapter", "restoration"}
 all_contract_rows = symbols + registry.get("method_contracts", []) + registry.get("trait_slot_contracts", [])
-if len(registry.get("method_contracts", [])) != 143:
-    raise SystemExit("compatibility registry must contain all 143 audited inherent/free callables")
-if len({row.get("symbol") for row in registry["method_contracts"]}) != 143:
+if len(registry.get("method_contracts", [])) != 96:
+    raise SystemExit("compatibility registry must contain all 96 audited inherent/free callables")
+if len({row.get("symbol") for row in registry["method_contracts"]}) != 96:
     raise SystemExit("compatibility callable records must have unique symbols")
-if len(registry.get("trait_slot_contracts", [])) != 12:
-    raise SystemExit("compatibility registry must contain all 12 audited trait slots")
-if len({row.get("symbol") for row in registry["trait_slot_contracts"]}) != 12:
+if len(registry.get("trait_slot_contracts", [])) != 10:
+    raise SystemExit("compatibility registry must contain all 10 audited trait slots")
+if len({row.get("symbol") for row in registry["trait_slot_contracts"]}) != 10:
     raise SystemExit("compatibility trait-slot records must have unique symbols")
 if any(not required_record_fields.issubset(row) for row in all_contract_rows):
     raise SystemExit("compatibility registry has an incomplete contract record")
@@ -217,18 +221,7 @@ for path in source_files:
     if re.search(r"\bATM_[A-Z0-9_]+\b", text):
         raise SystemExit(f"ATM-prefixed env/config reference found in shared crate source: {path}")
     # Enforce the shared-repo boundary: no home/path discovery in shared crates.
-    if any(
-        token in text
-        for token in [
-            "dirs::home_dir",
-            "dirs_next::home_dir",
-            "home_dir()",
-            'var(\"HOME\")',
-            "var_os(\"HOME\")",
-            "XDG_CONFIG_HOME",
-            "XDG_DATA_HOME",
-        ]
-    ):
+    if discovers_home_paths(path.relative_to(root), text):
         raise SystemExit(f"home/path discovery reference found in shared crate source: {path}")
 
 for path in [

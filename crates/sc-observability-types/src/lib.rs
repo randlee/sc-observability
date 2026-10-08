@@ -1,6 +1,6 @@
 //! Shared neutral contracts for the `sc-observability` workspace.
 //!
-//! This crate defines the reusable value types, diagnostics, typestate span
+//! This crate defines the reusable value types, diagnostics, error
 //! contracts, health reports, and open extension traits consumed by the higher
 //! layers in the workspace. It intentionally avoids owning sinks, routing
 //! runtimes, exporter behavior, or application-specific payload types.
@@ -14,12 +14,9 @@ mod events;
 mod health;
 mod level;
 mod observation_v2;
-pub mod otlp;
 mod primitives;
 mod process;
 mod query;
-mod signals_v2;
-mod span;
 mod tracing;
 #[cfg(feature = "v1")]
 mod v1;
@@ -34,11 +31,7 @@ pub use v1::typed;
     reason = "released v1 compatibility paths remain feature-gated"
 )]
 #[doc(inline)]
-pub use v1::{
-    LogProjector, MetricKind, MetricProjector, MetricRecord, ObservationSubscriber,
-    ProjectionRegistration, SpanEvent, SpanProjector, SpanRecord, SpanSignal,
-    SubscriberRegistration,
-};
+pub use v1::{LogProjector, ObservationSubscriber, ProjectionRegistration, SubscriberRegistration};
 
 mod sealed {
     pub trait Sealed {}
@@ -78,9 +71,9 @@ pub use errors::ObservationError;
 #[cfg(feature = "v1")]
 #[doc(inline)]
 #[allow(deprecated, reason = "released v1 wrappers remain feature-gated")]
-pub use errors::{EventError, IdentityError, InitError, LogSinkError, TelemetryError};
+pub use errors::{EventError, IdentityError, InitError, LogSinkError};
 #[doc(inline)]
-pub use errors_v2::{ConfigFailure, FailureClassification, MetricModelError};
+pub use errors_v2::FailureClassification;
 #[doc(inline)]
 pub use events::{LogEvent, Observable, Observation};
 #[doc(inline)]
@@ -102,8 +95,6 @@ pub use process::{ProcessIdentity, ProcessIdentityPolicy, ProcessIdentityResolve
 #[doc(inline)]
 pub use query::{LogFieldMatch, LogOrder, LogQuery, LogSnapshot, QueryError};
 #[doc(inline)]
-pub use span::{SpanEnded, SpanStarted, SpanStatus};
-#[doc(inline)]
 pub use tracing::{SpanId, StateTransition, TraceContext, TraceId};
 #[doc(inline)]
 pub use validation::{
@@ -112,30 +103,19 @@ pub use validation::{
     ValueValidationError,
 };
 
-/// Canonical error contracts and neutral signal models.
+/// Canonical error and observation extension contracts.
 ///
-/// The package remains at the workspace version until the atomic D.21 bump.
-/// ADR-017 authorizes integration's canonical error migration. Canonical
-/// metric, trace, and span models live under `v2`; released 1.x counterparts
-/// are retained only through the default-on `v1` compatibility feature.
+/// Released 1.x counterparts are retained only through the default-on `v1`
+/// compatibility feature.
 pub mod v2 {
     #[doc(inline)]
     pub use crate::errors_v2::{
-        ConfigFailure, EventError, ExportError, FailureClassification, FlushError, IdentityError,
-        InitError, LogSinkError, MetricModelError, ProjectionError, ShutdownError, SubscriberError,
-        TelemetryError,
+        EventError, FailureClassification, FlushError, IdentityError, InitError, LogSinkError,
+        ProjectionError, ShutdownError, SubscriberError,
     };
     #[doc(inline)]
     pub use crate::observation_v2::{
-        LogProjector, MetricProjector, ObservationFilter, ObservationSubscriber,
-        ProcessIdentityResolver, ProjectionRegistration, SpanProjector, SubscriberRegistration,
+        LogProjector, ObservationFilter, ObservationSubscriber, ProcessIdentityResolver,
+        ProjectionRegistration, SubscriberRegistration,
     };
-    #[doc(inline)]
-    pub use crate::signals_v2::{
-        AggregationTemporality, AttributeValue, Attributes, FiniteF64, HistogramPoint,
-        MetricRecord, MetricValue, SpanEvent, SpanKind, SpanLink, SpanRecord, SpanSignal,
-        SpanState, TraceContext, TraceFlags,
-    };
-    #[doc(inline)]
-    pub use crate::{SpanEnded, SpanStarted, SpanStatus};
 }

@@ -1,8 +1,13 @@
-"""Import the repository's sanity and QA JSONL histories through Telemetry.
+"""Import the repository's sanity and QA JSONL histories as OpenTelemetry signals.
 
-The importer deliberately owns no transport policy.  It translates source rows into
-the neutral submission document accepted by the installed Python facade, and only
-advances a source cursor after its admission receipt is returned.
+Each source row becomes OTLP/HTTP log, span and gauge exports made through the
+synchronous ``sc_observability.telemetry.Telemetry`` client.  Every call exports
+before it returns; nothing is stored, retried or deduplicated by the client.  The
+importer advances a source's file checkpoint only after every export for a row
+returned ``Ok``, or after the row was rejected as invalid, so the checkpoint is
+the only guard against sending a row twice.  An export or internal failure stops
+that source without advancing its checkpoint, so the row is sent again by the
+next run.
 
 Exit status is 0 for a clean import, 1 for counted failures, and 2 for
 configuration or command-usage failures.
@@ -10,20 +15,22 @@ configuration or command-usage failures.
 from __future__ import annotations
 
 import argparse
+import calendar
 import hashlib
 import json
 import os
 import re
 import tempfile
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from time import sleep
 from typing import Any, Iterable, Mapping
 
 import yaml
 
-from sc_observability import Ok
-from sc_observability.telemetry import Telemetry, TelemetryErr
+from sc_observability import Err, Ok
+from sc_observability.telemetry import Telemetry
 
 SOURCE_KINDS = ("sanity", "qa", "finding-counts")
 
@@ -42,45 +49,21 @@ def _timestamp(value: object) -> str | None:
     try:
         # fromisoformat validates calendar and clock ranges; the regex preserves
         # all nine fractional digits instead of silently truncating nanoseconds.
-        from datetime import datetime
-
         datetime.fromisoformat(head + "+00:00")
     except ValueError:
         return None
     return f"{head}.{(fraction or '').ljust(9, '0')}Z"
 
 
+def _unix_nanos(canonical: str) -> int:
+    """Convert a ``_timestamp`` result to exact integer nanoseconds since the epoch."""
+    head, fraction = canonical[:-1].split(".")
+    seconds = calendar.timegm(datetime.fromisoformat(head).timetuple())
+    return seconds * 1_000_000_000 + int(fraction)
+
+
 def _attrs(**values: object) -> dict[str, object]:
     return {name: value for name, value in values.items() if value is not None}
-
-
-def _resource(config: Mapping[str, object]) -> dict[str, object]:
-    return {
-        "attributes": _attrs(**{"service.name": config.get("service"), "team": config.get("team")}),
-        "dropped_attributes_count": 0,
-        "entity_refs": [],
-        "schema_url": None,
-    }
-
-
-def _scope() -> dict[str, object]:
-    return {
-        "name": "sc-observability.sanity",
-        "version": None,
-        "attributes": {},
-        "dropped_attributes_count": 0,
-        "schema_url": None,
-    }
-
-
-def _stable_row(row: Mapping[str, object]) -> str:
-    return hashlib.sha256(json.dumps(row, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-
-
-def _record_key(source: "Source", row: Mapping[str, object]) -> str:
-    identity = row.get("run_id") if isinstance(row.get("run_id"), str) else _stable_row(row)
-    reviewer = _reviewer(source, row) or ""
-    return f"{source.kind}:{source.path}:{identity}:{reviewer}"
 
 
 def _reviewer(source: "Source", row: Mapping[str, object]) -> str | None:
@@ -98,9 +81,11 @@ def _checkpoint_key(source: "Source") -> str:
 
 
 def _trace_id(run_id: object) -> str | None:
-    if not isinstance(run_id, str):
+    """Derive one shared 32-digit lowercase hex trace id per non-empty run id."""
+    if not isinstance(run_id, str) or not run_id:
         return None
-    return hashlib.sha256(run_id.encode()).hexdigest()[:32]
+    trace = hashlib.sha256(run_id.encode()).hexdigest()[:32]
+    return None if trace == "0" * 32 else trace
 
 
 @dataclass(frozen=True)
@@ -111,12 +96,25 @@ class Source:
     reviewer: str | None = None
 
 
+@dataclass(frozen=True)
+class Call:
+    """One ``Telemetry`` method call: ``method`` is ``log``, ``span`` or ``metric``."""
+
+    method: str
+    args: tuple[Any, ...]
+    kwargs: dict[str, Any]
+
+
 @dataclass
 class Report:
-    admitted: int = 0
-    duplicates: int = 0
+    exported: int = 0
     skipped_invalid: int = 0
     failures: list[tuple[str, str]] = field(default_factory=list)
+
+
+def _summary(report: Report) -> str:
+    return json.dumps({"exported": report.exported, "skipped_invalid": report.skipped_invalid,
+                       "failures": report.failures})
 
 
 def load_config(path: Path) -> dict[str, object]:
@@ -126,8 +124,24 @@ def load_config(path: Path) -> dict[str, object]:
         raise ValueError("could not read importer configuration") from error
     if not isinstance(value, dict):
         raise ValueError("importer configuration must be a mapping")
+    if "service" in value and value["service"] is not None and not isinstance(value["service"], str):
+        raise ValueError("service must be a string")
+    _endpoint(value)
     sources(value)
     return value
+
+
+def _endpoint(config: Mapping[str, object]) -> str | None:
+    """Return the configured OTLP/HTTP base URL; absent means the client's default."""
+    otlp = config.get("otlp")
+    if otlp is None:
+        return None
+    if not isinstance(otlp, Mapping):
+        raise ValueError("otlp must be a mapping")
+    endpoint = otlp.get("endpoint")
+    if endpoint is not None and (not isinstance(endpoint, str) or not endpoint):
+        raise ValueError("otlp.endpoint must be a non-empty string")
+    return endpoint
 
 
 def sources(config: Mapping[str, object]) -> list[Source]:
@@ -157,8 +171,10 @@ def sources(config: Mapping[str, object]) -> list[Source]:
 
 def _common(source: Source, row: Mapping[str, object], config: Mapping[str, object]) -> dict[str, object]:
     reviewer = _reviewer(source, row)
+    error = row.get("error") if isinstance(row.get("error"), Mapping) else None
     attrs = _attrs(
         **{
+            "team": config.get("team"),
             "phase": row.get("phase") or source.phase,
             "review.reviewer": reviewer,
             "review.verdict": row.get("verdict"),
@@ -175,8 +191,8 @@ def _common(source: Source, row: Mapping[str, object], config: Mapping[str, obje
             "qa.minor": row.get("min"),
             "qa.correction": True if row.get("correction") else None,
             "qa.corrects": row.get("corrects"),
-            "review.error.code": row.get("error", {}).get("code") if isinstance(row.get("error"), Mapping) else None,
-            "review.error.message": row.get("error", {}).get("message") if isinstance(row.get("error"), Mapping) else None,
+            "review.error.code": error.get("code") if error is not None else None,
+            "review.error.message": error.get("message") if error is not None else None,
         }
     )
     pr = row.get("pr_number")
@@ -189,8 +205,13 @@ def _common(source: Source, row: Mapping[str, object], config: Mapping[str, obje
     return attrs
 
 
-def map_row(source: Source, row: Mapping[str, object], config: Mapping[str, object]) -> dict[str, object] | None:
-    """Map one source row. Invalid mandatory source fields produce no submission."""
+def map_row(source: Source, row: Mapping[str, object], config: Mapping[str, object]) -> list[Call] | None:
+    """Map one source row to its ``Telemetry`` calls; invalid mandatory fields produce none.
+
+    Every row yields one log whose ``event.time`` attribute carries the source
+    time.  A sanity row with ``started_at`` also yields a ``sanity.review`` span;
+    a finding-counts row yields ``sc.qa.findings.open``/``total`` gauges.
+    """
     if source.kind not in SOURCE_KINDS:
         return None
     time = _timestamp(row.get("completed_at") or row.get("snapshot_at"))
@@ -198,26 +219,30 @@ def map_row(source: Source, row: Mapping[str, object], config: Mapping[str, obje
     if time is None or (source.kind != "finding-counts" and not isinstance(verdict, str)):
         return None
     attrs = _common(source, row, config)
-    input: dict[str, object] = {"version": 1, "record_key": _record_key(source, row), "resource": _resource(config), "scope": _scope(), "logs": [], "spans": [], "metrics": []}
+    body = "finding-counts" if source.kind == "finding-counts" else str(verdict)
+    calls = [Call("log", (body,), {"attributes": {**attrs, "event.time": time}})]
     if source.kind == "finding-counts":
-        input["logs"] = [{"time": time, "body": "finding-counts", "attributes": attrs}]
-        metrics = []
-        for field, name in (("open", "sc.qa.findings.open"), ("tot", "sc.qa.findings.total")):
-            if isinstance(row.get(field), int):
-                metrics.append({"name": name, "description": None, "unit": None, "metadata": [], "data": {"kind": "gauge", "data": {"points": [{"attributes": attrs, "start_time": None, "time": time, "value": {"kind": "int", "data": row[field]}, "exemplars": [], "flags": 0}]}}})
-        input["metrics"] = metrics
-        return input
-    input["logs"] = [{"time": time, "body": str(verdict), "attributes": attrs}]
+        for name, metric in (("open", "sc.qa.findings.open"), ("tot", "sc.qa.findings.total")):
+            value = row.get(name)
+            if isinstance(value, int) and not isinstance(value, bool):
+                calls.append(Call("metric", (metric, "gauge", float(value)), {"attributes": dict(attrs)}))
+        return calls
     start = _timestamp(row.get("started_at"))
     if source.kind == "sanity" and start is not None:
-        span: dict[str, object] = {"name": "sanity.review", "start_time": start, "end_time": time, "attributes": attrs}
+        span: dict[str, Any] = {
+            "start_time_unix_nano": _unix_nanos(start),
+            "end_time_unix_nano": _unix_nanos(time),
+            "attributes": dict(attrs),
+        }
         trace = _trace_id(row.get("run_id"))
         if trace is not None:
             span["trace_id"] = trace
-        if isinstance(row.get("error"), Mapping):
-            span["status"] = {"code": "error", "message": str(row["error"].get("message", ""))}
-        input["spans"] = [span]
-    return input
+        error = row.get("error")
+        if isinstance(error, Mapping):
+            span["ok"] = False
+            span["error"] = str(error.get("message", ""))
+        calls.append(Call("span", ("sanity.review",), span))
+    return calls
 
 
 class Importer:
@@ -311,6 +336,19 @@ class Importer:
             return "CHECKPOINT_WRITE"
         return None
 
+    def _export(self, calls: list[Call]) -> tuple[str, str] | None:
+        """Make a row's calls in order; return the first failure as ``(kind, code)``."""
+        for call in calls:
+            try:
+                result = getattr(self.telemetry, call.method)(*call.args, **call.kwargs)
+            except Exception:
+                return ("telemetry", "EXPORT_EXCEPTION")
+            if isinstance(result, Err):
+                return (result.error.kind, result.error.code)
+            if not isinstance(result, Ok):
+                return ("telemetry", "UNEXPECTED_RESULT")
+        return None
+
     def import_source(self, source: Source) -> Report:
         report = Report()
         state, state_error = self._state()
@@ -355,50 +393,15 @@ class Importer:
                         row = json.loads(raw)
                     except (json.JSONDecodeError, UnicodeError):
                         row = None
-                    submission = map_row(source, row, self.config) if isinstance(row, Mapping) else None
-                    if submission is None:
+                    calls = map_row(source, row, self.config) if isinstance(row, Mapping) else None
+                    failure = None if calls is None else self._export(calls)
+                    if calls is None or (failure is not None and failure[0] == "validation"):
                         report.skipped_invalid += 1
-                        checkpoint_error = self._save_checkpoint(
-                            state, key, next_offset, fingerprint, source_stat.st_ino
-                        )
-                        if checkpoint_error:
-                            report.failures.append(("checkpoint", checkpoint_error))
-                            break
-                        continue
-                    try:
-                        result = self.telemetry.emit(submission)
-                    except Exception:
-                        report.failures.append(("telemetry", "EMIT_EXCEPTION"))
+                    elif failure is not None:
+                        report.failures.append(failure)
                         break
-                    if isinstance(result, TelemetryErr):
-                        if result.error.kind == "submission":
-                            report.skipped_invalid += 1
-                            checkpoint_error = self._save_checkpoint(
-                                state, key, next_offset, fingerprint, source_stat.st_ino
-                            )
-                            if checkpoint_error:
-                                report.failures.append(("checkpoint", checkpoint_error))
-                                break
-                            continue
-                        report.failures.append((result.error.kind, result.error.code))
-                        remediation = result.error.remediation
-                        retryable = isinstance(remediation, Mapping) and remediation.get("kind") == "recoverable"
-                        if retryable:
-                            break
-                        checkpoint_error = self._save_checkpoint(
-                            state, key, next_offset, fingerprint, source_stat.st_ino
-                        )
-                        if checkpoint_error:
-                            report.failures.append(("checkpoint", checkpoint_error))
-                            break
-                        continue
-                    if not isinstance(result, Ok):
-                        report.failures.append(("telemetry", "UNEXPECTED_RESULT"))
-                        break
-                    if result.value.duplicate:
-                        report.duplicates += 1
                     else:
-                        report.admitted += 1
+                        report.exported += 1
                     checkpoint_error = self._save_checkpoint(
                         state, key, next_offset, fingerprint, source_stat.st_ino
                     )
@@ -421,8 +424,7 @@ class Importer:
             return result
         for source in configured_sources:
             one = self.import_source(source)
-            result.admitted += one.admitted
-            result.duplicates += one.duplicates
+            result.exported += one.exported
             result.skipped_invalid += one.skipped_invalid
             result.failures.extend(one.failures)
         return result
@@ -437,26 +439,16 @@ def main(argv: Iterable[str] | None = None) -> int:
     try:
         config = load_config(Path(args.config))
     except ValueError:
-        report = Report(failures=[("config", "CONFIG_LOAD")])
-        print(json.dumps({"admitted": report.admitted, "duplicates": report.duplicates,
-                          "skipped_invalid": report.skipped_invalid, "failures": report.failures}))
+        print(_summary(Report(failures=[("config", "CONFIG_LOAD")])))
         return 2
-    opened = Telemetry.open(config=args.config)
-    if isinstance(opened, TelemetryErr):
-        print(json.dumps({"admitted": 0, "duplicates": 0, "skipped_invalid": 0,
-                          "failures": [[opened.error.kind, opened.error.code]]}))
-        return 2 if opened.error.kind == "config" else 1
-    importer = Importer(Path(args.config), opened.value, config=config)
+    service = config.get("service")
+    telemetry = Telemetry(endpoint=_endpoint(config), service_name=service if isinstance(service, str) else None)
+    importer = Importer(Path(args.config), telemetry, config=config)
     failed = False
     try:
         while True:
             report = importer.run_once()
-            if args.mode == "import":
-                flushed = opened.value.flush()
-                if isinstance(flushed, TelemetryErr):
-                    report.failures.append((flushed.error.kind, flushed.error.code))
-            print(json.dumps({"admitted": report.admitted, "duplicates": report.duplicates,
-                              "skipped_invalid": report.skipped_invalid, "failures": report.failures}))
+            print(_summary(report))
             failed = failed or bool(report.failures)
             if args.mode == "import":
                 return 1 if report.failures else 0

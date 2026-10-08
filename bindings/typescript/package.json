@@ -1,6 +1,6 @@
 {
   "name": "@synaptic-canvas/sc-observability",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Nonthrowing TypeScript client for sc-observability host bindings",
   "type": "commonjs",
   "main": "dist/index.js",
@@ -10,7 +10,7 @@
     "build": "tsc --project tsconfig.json",
     "test": "npm run build && npm run test:built",
     "test:built": "node dist/test.js && node --test ../../scripts/api/test_typescript.mjs && node ../../scripts/ci/public_api_typescript.mjs",
-    "check-generated": "python3 ../../scripts/generate_typescript_bindings.py --schema ../schema/v1.json --output-dir src/generated --check"
+    "check-generated": "python3 ../../scripts/generate_typescript_bindings.py --schema ../schema/v2.json --output-dir src/generated --check"
   },
   "engines": { "node": ">=20" },
   "license": "MIT",

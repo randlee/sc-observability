@@ -14,7 +14,7 @@ class EvidenceTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        fixture = Path(gate.__file__).resolve().parents[2] / 'bindings/conformance/v1/schema-cases.json'
+        fixture = Path(gate.__file__).resolve().parents[2] / 'bindings/conformance/v2/schema-cases.json'
         canonical = json.loads(fixture.read_text(encoding='utf-8'))
         for name in ('Darwin', 'Linux', 'Windows'):
             directory = self.root / name

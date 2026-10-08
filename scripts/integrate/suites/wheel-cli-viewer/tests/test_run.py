@@ -67,6 +67,29 @@ class RunnerTimeoutTests(unittest.TestCase):
             cleanup.assert_called_once()
             self.assertEqual(output / "pytest-state", cleanup.call_args.args[0])
 
+    def test_runs_only_viewer_files_and_never_requires_the_collector(self) -> None:
+        receipt = json.dumps({"binary": "viewer", "binary_sha256": "a" * 64, "platform": "linux_amd64"})
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "evidence"
+            calls: list[tuple[list[str], dict[str, str]]] = []
+
+            def record(command, *, timeout, env, log):
+                calls.append((command, env))
+                stdout = receipt if "download_pinned_release.py" in " ".join(command) else ""
+                return subprocess.CompletedProcess(command, 0, stdout, "")
+
+            with patch.object(runner, "run", side_effect=record):
+                self.assertEqual(0, runner.main(["--source-sha", "a" * 40, "--output-dir", str(output)]))
+            command, env = calls[-1]
+            files = [argument for argument in command if argument.endswith(".py")]
+            self.assertEqual(
+                [str(runner.TESTS / "test_viewer_readback.py"), str(runner.TESTS / "test_harness_timeouts.py")],
+                files,
+            )
+            self.assertEqual("viewer", env["TELEMETRY_E2E_VIEWER_BINARY"])
+            self.assertNotIn("TELEMETRY_E2E_COLLECTOR_BINARY", env)
+            self.assertNotIn(str(runner.TESTS), command)
+
 
 if __name__ == "__main__":
     unittest.main()

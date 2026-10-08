@@ -101,13 +101,15 @@ class WheelsRunnerTests(unittest.TestCase):
 
     def test_installed_probe_exercises_the_enabled_telemetry_lifecycle(self) -> None:
         probe = run.IMPORT_AND_TELEMETRY_PROBE
-        self.assertIn('getattr(native, "open", None)', probe)
-        self.assertIn("Telemetry.open(", probe)
-        self.assertIn("telemetry.emit(submission)", probe)
-        self.assertIn("telemetry.flush(timeout_s=0.1)", probe)
-        self.assertIn("telemetry.status()", probe)
-        self.assertIn("telemetry.shutdown(timeout_s=0.1)", probe)
-        self.assertIn("TelemetryErr", probe)
+        for function in ("send_log", "send_span", "send_metric"):
+            self.assertIn(function, probe)
+        self.assertNotIn("Telemetry.open", probe)
+        self.assertIn('Telemetry("http://127.0.0.1:9"', probe)
+        self.assertIn("telemetry.log(", probe)
+        self.assertIn("telemetry.span(", probe)
+        self.assertIn("telemetry.metric(", probe)
+        self.assertIn('rejected.error.kind != "validation"', probe)
+        self.assertIn("isinstance(rejected, Err)", probe)
 
     @mock.patch.object(run, "run_checked")
     def test_installed_runtime_tests_use_the_real_owned_and_async_suites_under_strict_diagnostics(

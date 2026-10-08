@@ -1,6 +1,6 @@
 [package]
 name = "sc-observability-static-level-cap-fixture"
-version = "1.5.0"
+version = "1.6.0"
 edition = "2024"
 publish = false
 

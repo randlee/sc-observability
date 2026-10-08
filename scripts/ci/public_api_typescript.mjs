@@ -75,7 +75,7 @@ function main() {
   const rows = projectApi(resolve(project, manifest.types), require(resolve(project, manifest.main)));
   const snapshot = { format: 'typescript-declarations/v1', package: manifest.name, version: manifest.version, rows };
   if (process.argv.includes('--capture')) {
-    if (accepted.includes(relative)) throw new Error('accepted history is immutable; increment package version');
+    if (accepted.has(relative)) throw new Error('accepted history is immutable; increment package version');
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, JSON.stringify(snapshot, null, 2) + '\n');
   } else {

@@ -2,6 +2,8 @@
 import io
 import json
 import os
+import platform
+import shutil
 import sys
 import tarfile
 import tempfile
@@ -20,6 +22,24 @@ from python_test_fixtures import pe
 
 
 class DistributionTests(unittest.TestCase):
+    @unittest.skipUnless(platform.system() == 'Darwin' and shutil.which('rustup')
+                         and Path('/usr/bin/sandbox-exec').exists(),
+                         'requires the Darwin sandbox and pinned Rust toolchain')
+    def test_darwin_sandbox_allows_loopback_but_keeps_denials(self):
+        from _python_sandbox import Sandbox
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scratch = root / 'scratch'
+            scratch.mkdir()
+            checkout = Path(__file__).resolve().parents[3]
+            with Sandbox(scratch, [checkout]) as sandbox:
+                proof = sandbox.prove_denials(sys.executable, checkout)
+        self.assertTrue(proof['loopback'])
+        self.assertTrue(proof['network'])
+        self.assertTrue(proof['checkout'])
+        self.assertTrue(proof['cargo_cache'])
+
     def test_source_python_contract_reads_utf8_independent_of_locale(self):
         import io
 
@@ -132,7 +152,7 @@ class DistributionTests(unittest.TestCase):
     def test_relocated_conformance_corpus_is_an_exact_source_input(self):
         from stage_python_conformance import stage_conformance
         source = Path(__file__).resolve().parents[3]
-        corpus = source / 'bindings/conformance/v1/conversion-cases.json'
+        corpus = source / 'bindings/conformance/v2/conversion-cases.json'
         with tempfile.TemporaryDirectory() as temporary:
             tests = Path(temporary) / 'tests'
             # This fixture proves relocation only. Production staging retains
@@ -140,7 +160,7 @@ class DistributionTests(unittest.TestCase):
             # accepted base from its workflow caller.
             staged = stage_conformance(source, tests, verify_accepted_history=False)
             self.assertEqual(staged.relative_to(tests).as_posix(),
-                             'conformance/v1/conversion-cases.json')
+                             'conformance/v2/conversion-cases.json')
             self.assertEqual(staged.read_bytes(), corpus.read_bytes())
             cases = json.loads(staged.read_text(encoding='utf-8'))
             self.assertTrue(any(case.get('operation') == 'canonical_envelope' for case in cases))

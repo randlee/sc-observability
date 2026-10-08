@@ -639,14 +639,14 @@ fn diagnostic_string_and_step_bounds_are_exact_and_never_truncate() {
     validate_diagnostic(&diagnostic, "response.error").unwrap();
 }
 #[test]
-fn telemetry_event_error_projects_as_validation_not_internal() {
-    let error = core::v2::TelemetryError::Event(core::v2::EventError::Validation {
+fn event_error_projects_as_validation_not_internal() {
+    let error = core::v2::EventError::Validation {
         context: Box::new(core::ErrorContext::new(
             core::error_codes::DIAGNOSTIC_INVALID,
             "entity id rejected",
             core::Remediation::recoverable("fix the id", ["rebuild the event"]),
         )),
-    });
+    };
     let projected = CanonicalFailureDto::try_from(&error).expect("projection succeeds");
     match projected {
         CanonicalFailureDto::Validation { diagnostic, field } => {

@@ -25,8 +25,8 @@ class TransportPolicyTests(unittest.TestCase):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, target)
 
-    def replace(self, before, after):
-        path = self.root / MANIFEST
+    def replace(self, before, after, relative=MANIFEST):
+        path = self.root / relative
         text = path.read_text(encoding="utf-8")
         self.assertIn(before, text)
         path.write_text(text.replace(before, after), encoding="utf-8")
@@ -41,7 +41,7 @@ class TransportPolicyTests(unittest.TestCase):
     def test_sc_observe_regular_dependency_is_rejected(self):
         self.replace(
             """[dependencies]
-sc-lint-attributes""",
+serde_json""",
             """[dependencies]
 sc-observe.workspace = true
 sc-lint-attributes""",
@@ -51,34 +51,65 @@ sc-lint-attributes""",
     def test_renamed_sc_observe_regular_dependency_is_rejected(self):
         self.replace(
             """[dependencies]
-sc-lint-attributes""",
+serde_json""",
             """[dependencies]
 observe_alias = { package = "sc-observe", workspace = true }
 sc-lint-attributes""",
         )
         self.rejects(r"sc-observe: dev-only; it must not appear in \[dependencies\]")
 
-    def test_router_feature_is_rejected_in_production_transport(self):
+    def test_extra_feature_is_rejected_in_production_transport(self):
         self.replace(
-            'tonic = { workspace = true, optional = true }',
-            'tonic = { workspace = true, optional = true, features = ["router"] }',
+            'otel-reqwest = { workspace = true, optional = true }',
+            'otel-reqwest = { workspace = true, optional = true, features = ["json"] }',
         )
-        self.rejects("tonic: effective dependency features differ")
+        self.rejects("otel-reqwest: effective dependency features differ")
 
-    def test_sync_http_cannot_enable_tonic(self):
+    def test_log_sink_cannot_enable_otlp_exporter(self):
         self.replace(
-            'sync-http = ["dep:reqwest",',
-            'sync-http = ["dep:tonic", "dep:reqwest",',
+            'log-sink = ["native",',
+            'log-sink = ["dep:opentelemetry-otlp", "native",',
         )
-        self.rejects("tonic: incorrect binding to sync-http")
+        self.rejects("opentelemetry-otlp: incorrect binding to log-sink")
 
     def test_transport_dependency_must_be_optional(self):
-        self.replace('reqwest = { workspace = true, optional = true }', 'reqwest.workspace = true')
-        self.rejects("reqwest: must be optional")
+        self.replace('futures-executor = { workspace = true, optional = true }', 'futures-executor.workspace = true')
+        self.rejects("futures-executor: must be optional")
 
     def test_transport_dependency_must_be_feature_bound(self):
         self.replace('"dep:opentelemetry", ', '')
         self.rejects("opentelemetry: incorrect binding")
+
+    def test_every_policy_backend_is_checked(self):
+        self.replace(
+            "\n[dependencies]",
+            '\nexporter = ["dep:opentelemetry-http"]\n\n[dependencies]',
+        )
+        self.replace(
+            'backends = ["synchronous-client"]\nfeatures = []\ndefault_features = true',
+            'backends = ["synchronous-client", "exporter"]\nfeatures = []\ndefault_features = true',
+            "policy/otlp-transport.toml",
+        )
+        self.rejects("opentelemetry-http: incorrect binding to exporter")
+
+    def test_policy_backend_must_be_a_feature(self):
+        self.replace(
+            '[transport.tokio]\nversion = "=1.53.1"\nbackends = ["synchronous-client"]',
+            '[transport.tokio]\nversion = "=1.53.1"\nbackends = ["sync-client"]',
+            "policy/otlp-transport.toml",
+        )
+        self.rejects("backend sync-client is not a feature")
+
+    def test_core_logger_must_be_optional(self):
+        self.replace(
+            "sc-observability = { workspace = true, optional = true }",
+            "sc-observability.workspace = true",
+        )
+        self.rejects("sc-observability: must be optional")
+
+    def test_core_logger_is_activated_only_by_log_sink(self):
+        self.replace('"dep:tokio"]', '"dep:tokio", "dep:sc-observability"]')
+        self.rejects(r"sc-observability: must be activated only by log-sink, found \['log-sink', 'synchronous-client'\]")
 
     def test_transport_workspace_pin_must_match_policy(self):
         cargo = self.root / "Cargo.toml"
@@ -87,11 +118,11 @@ sc-lint-attributes""",
         cargo.write_text(text.replace('opentelemetry = "=0.33.0"', 'opentelemetry = "0.33"'), encoding="utf-8")
         self.rejects("opentelemetry: workspace/lock pin differs")
 
-    def test_sdk_transitive_lock_pin_is_required(self):
+    def test_transitive_lock_pin_is_required(self):
         lock = self.root / "Cargo.lock"
         text = lock.read_text(encoding="utf-8")
-        self.assertIn('name = "tonic"\nversion = "0.14.6"', text)
-        lock.write_text(text.replace('name = "tonic"\nversion = "0.14.6"', 'name = "tonic"\nversion = "0.14.5"'), encoding="utf-8")
+        self.assertIn('name = "prost"\nversion = "0.14.4"', text)
+        lock.write_text(text.replace('name = "prost"\nversion = "0.14.4"', 'name = "prost"\nversion = "0.14.3"'), encoding="utf-8")
         self.rejects("reviewed lock pin .* missing")
 
 

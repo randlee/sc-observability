@@ -7,45 +7,40 @@ license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Standalone OTLP export adapter for sc-observability."
+description = "Native OpenTelemetry log sink and synchronous OTLP client for sc-observability."
 
 [features]
-durable-store = ["sync-http", "dep:rusqlite", "dep:serde-saphyr", "dep:uuid"]
-default = ["v1"]
-v1 = ["sc-observability-types/v1"]
-otlp-sdk = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp", "dep:opentelemetry-proto", "dep:tokio", "dep:tonic", "dep:prost", "dep:reqwest"]
-sync-http = ["dep:reqwest", "dep:httpdate", "dep:getrandom", "dep:bytes", "dep:tokio"]
+default = []
+# Official OpenTelemetry API/SDK re-exports (`api`, `sdk`) only (ADR-023).
+native = ["dep:opentelemetry", "dep:opentelemetry_sdk"]
+# Native OpenTelemetry log sink for the core logger (ADR-023); no OTLP transport.
+log-sink = ["native", "dep:sc-observability", "dep:serde_json"]
+# Blocking OTLP/HTTP protobuf client for CLI and Python frontends (ADR-023).
+synchronous-client = ["native", "dep:opentelemetry-otlp", "opentelemetry-otlp/http-proto", "opentelemetry-otlp/reqwest-blocking-client", "opentelemetry-otlp/reqwest-rustls", "dep:opentelemetry-http", "dep:otel-reqwest", "dep:futures-executor", "dep:tokio"]
 
 [dependencies]
-sc-lint-attributes = "=0.4.0"
-rusqlite = { workspace = true, optional = true }
-serde-saphyr = { workspace = true, optional = true }
-uuid = { workspace = true, optional = true }
-serde_json.workspace = true
-thiserror.workspace = true
+serde_json = { workspace = true, optional = true }
 sc-observability-types.workspace = true
+sc-observability = { workspace = true, optional = true }
 opentelemetry = { workspace = true, optional = true }
 opentelemetry_sdk = { workspace = true, optional = true }
+opentelemetry-http = { workspace = true, optional = true }
 opentelemetry-otlp = { workspace = true, optional = true }
-opentelemetry-proto = { workspace = true, optional = true }
-tonic = { workspace = true, optional = true }
-prost = { workspace = true, optional = true }
-reqwest = { workspace = true, optional = true }
-httpdate = { workspace = true, optional = true }
-getrandom = { workspace = true, optional = true }
-bytes = { workspace = true, optional = true }
+futures-executor = { workspace = true, optional = true }
+otel-reqwest = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["rt", "sync"], optional = true }
 
 [dev-dependencies]
-sc-observability-types = { workspace = true, features = ["test-double"] }
+time.workspace = true
 tempfile.workspace = true
 sc-observability.workspace = true
-sc-observe.workspace = true
-tokio = { workspace = true, features = ["test-util"] }
-# The hermetic conformance collector routes the three generated OTLP services
-# in integration tests only; production SDK transport keeps its pinned features.
-tonic = { workspace = true, features = ["router"] }
+tokio = { workspace = true }
 rustls = { version = "=0.23.45", features = ["ring"] }
+rcgen = "=0.14.10"
+# Decode the OTLP protobuf requests the synchronous client sends to the
+# loopback test collector.
+opentelemetry-proto = { workspace = true }
+prost = { workspace = true }
 
 [lints]
 workspace = true

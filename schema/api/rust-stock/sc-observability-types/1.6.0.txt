@@ -1,0 +1,1154 @@
+pub mod sc_observability_types
+pub mod sc_observability_types::constants
+pub const sc_observability_types::constants::DEFAULT_ENV_PREFIX_SEPARATOR: char
+pub const sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION: &str
+pub const sc_observability_types::constants::OTLP_EXPONENTIAL_SCALE_MAX: i32
+pub const sc_observability_types::constants::OTLP_EXPONENTIAL_SCALE_MIN: i32
+pub const sc_observability_types::constants::OTLP_SEVERITY_MAX: u8
+pub const sc_observability_types::constants::SPAN_ID_LEN: usize
+pub const sc_observability_types::constants::TRACE_ID_LEN: usize
+pub const sc_observability_types::constants::TRACE_STATE_MAX_BYTES: usize
+pub const sc_observability_types::constants::TRACE_STATE_MAX_MEMBERS: usize
+pub const sc_observability_types::constants::TRACE_STATE_MEMBER_MAX_BYTES: usize
+pub const sc_observability_types::constants::TRACE_STATE_SYSTEM_MAX_BYTES: usize
+pub const sc_observability_types::constants::TRACE_STATE_TENANT_MAX_BYTES: usize
+pub static sc_observability_types::constants::OBSERVATION_SCHEMA_VERSION: std::sync::lazy_lock::LazyLock<sc_observability_types::SchemaVersion>
+pub mod sc_observability_types::error_codes
+pub mod sc_observability_types::error_codes::v1
+pub const sc_observability_types::error_codes::v1::ALL: &[sc_observability_types::ErrorCode]
+pub const sc_observability_types::error_codes::ALL: &[sc_observability_types::ErrorCode]
+pub const sc_observability_types::error_codes::DIAGNOSTIC_INVALID: sc_observability_types::ErrorCode
+pub const sc_observability_types::error_codes::IDENTITY_RESOLUTION_FAILED: sc_observability_types::ErrorCode
+pub const sc_observability_types::error_codes::LEVEL_BELOW_BASELINE: sc_observability_types::ErrorCode
+pub const sc_observability_types::error_codes::LEVEL_REVISION_EXHAUSTED: sc_observability_types::ErrorCode
+pub const sc_observability_types::error_codes::LEVEL_STATE_UNAVAILABLE: sc_observability_types::ErrorCode
+pub const sc_observability_types::error_codes::LEVEL_STOPPED: sc_observability_types::ErrorCode
+pub const sc_observability_types::error_codes::LEVEL_STOPPING: sc_observability_types::ErrorCode
+pub const sc_observability_types::error_codes::LEVEL_UNSUPPORTED: sc_observability_types::ErrorCode
+pub const sc_observability_types::error_codes::SC_LOG_QUERY_DECODE: sc_observability_types::ErrorCode
+pub const sc_observability_types::error_codes::SC_LOG_QUERY_INVALID_QUERY: sc_observability_types::ErrorCode
+pub const sc_observability_types::error_codes::SC_LOG_QUERY_IO: sc_observability_types::ErrorCode
+pub const sc_observability_types::error_codes::SC_LOG_QUERY_SHUTDOWN: sc_observability_types::ErrorCode
+pub const sc_observability_types::error_codes::SC_LOG_QUERY_UNAVAILABLE: sc_observability_types::ErrorCode
+pub const sc_observability_types::error_codes::SPAN_ID_INVALID: sc_observability_types::ErrorCode
+pub const sc_observability_types::error_codes::TRACE_ID_INVALID: sc_observability_types::ErrorCode
+pub const sc_observability_types::error_codes::VALUE_VALIDATION_FAILED: sc_observability_types::ErrorCode
+pub mod sc_observability_types::typed
+#[non_exhaustive] pub enum sc_observability_types::typed::EventFailureKind
+pub sc_observability_types::typed::EventFailureKind::Closed
+pub sc_observability_types::typed::EventFailureKind::InvalidEvent
+pub sc_observability_types::typed::EventFailureKind::QueueFull
+pub sc_observability_types::typed::EventFailureKind::ShutdownTimedOut
+pub sc_observability_types::typed::EventFailureKind::SpanAssembly
+pub sc_observability_types::typed::EventFailureKind::Unclassified
+pub sc_observability_types::typed::EventFailureKind::WriterDegraded
+#[non_exhaustive] pub enum sc_observability_types::typed::ExportFailureKind
+pub sc_observability_types::typed::ExportFailureKind::Export
+pub sc_observability_types::typed::ExportFailureKind::Unclassified
+#[non_exhaustive] pub enum sc_observability_types::typed::FlushFailureKind
+pub sc_observability_types::typed::FlushFailureKind::Closed
+pub sc_observability_types::typed::FlushFailureKind::LoggerFlush
+pub sc_observability_types::typed::FlushFailureKind::ObservationFlush
+pub sc_observability_types::typed::FlushFailureKind::TelemetryFlush
+pub sc_observability_types::typed::FlushFailureKind::Unclassified
+pub sc_observability_types::typed::FlushFailureKind::WriterDegraded
+#[non_exhaustive] pub enum sc_observability_types::typed::IdentityFailureKind
+pub sc_observability_types::typed::IdentityFailureKind::ResolutionFailed
+pub sc_observability_types::typed::IdentityFailureKind::Unclassified
+#[non_exhaustive] pub enum sc_observability_types::typed::InitFailureKind
+pub sc_observability_types::typed::InitFailureKind::ExporterInitialization
+pub sc_observability_types::typed::InitFailureKind::IdentityResolution
+pub sc_observability_types::typed::InitFailureKind::InvalidProtocol
+pub sc_observability_types::typed::InitFailureKind::InvalidTelemetryConfig
+pub sc_observability_types::typed::InitFailureKind::LoggerInitialization
+pub sc_observability_types::typed::InitFailureKind::ObservationInitialization
+pub sc_observability_types::typed::InitFailureKind::Unclassified
+#[non_exhaustive] pub enum sc_observability_types::typed::LogFailure
+pub sc_observability_types::typed::LogFailure::InvalidEvent(sc_observability_types::typed::EventFailure)
+pub sc_observability_types::typed::LogFailure::ShutdownTimedOut(alloc::boxed::Box<sc_observability_types::ErrorContext>)
+pub sc_observability_types::typed::LogFailure::WriterDegraded(alloc::boxed::Box<sc_observability_types::ErrorContext>)
+#[non_exhaustive] pub enum sc_observability_types::typed::LogSinkFailureKind
+pub sc_observability_types::typed::LogSinkFailureKind::FaultInjected
+pub sc_observability_types::typed::LogSinkFailureKind::Maintenance
+pub sc_observability_types::typed::LogSinkFailureKind::Unclassified
+pub sc_observability_types::typed::LogSinkFailureKind::Write
+#[non_exhaustive] pub enum sc_observability_types::typed::ProjectionFailureKind
+pub sc_observability_types::typed::ProjectionFailureKind::Routing
+pub sc_observability_types::typed::ProjectionFailureKind::SpanAssembly
+pub sc_observability_types::typed::ProjectionFailureKind::TelemetryClosed
+pub sc_observability_types::typed::ProjectionFailureKind::TelemetryExport
+pub sc_observability_types::typed::ProjectionFailureKind::Unclassified
+#[non_exhaustive] pub enum sc_observability_types::typed::ShutdownFailureKind
+pub sc_observability_types::typed::ShutdownFailureKind::IncompleteSpans
+pub sc_observability_types::typed::ShutdownFailureKind::TelemetryFlush
+pub sc_observability_types::typed::ShutdownFailureKind::TimedOut
+pub sc_observability_types::typed::ShutdownFailureKind::Unclassified
+pub sc_observability_types::typed::ShutdownFailureKind::WriterDegraded
+#[non_exhaustive] pub enum sc_observability_types::typed::SubscriberFailureKind
+pub sc_observability_types::typed::SubscriberFailureKind::Routing
+pub sc_observability_types::typed::SubscriberFailureKind::Unclassified
+#[non_exhaustive] pub enum sc_observability_types::typed::TryLogFailure
+pub sc_observability_types::typed::TryLogFailure::InvalidEvent(sc_observability_types::typed::EventFailure)
+pub sc_observability_types::typed::TryLogFailure::QueueFull(alloc::boxed::Box<sc_observability_types::ErrorContext>)
+pub sc_observability_types::typed::TryLogFailure::ShutdownTimedOut(alloc::boxed::Box<sc_observability_types::ErrorContext>)
+pub sc_observability_types::typed::TryLogFailure::WriterDegraded(alloc::boxed::Box<sc_observability_types::ErrorContext>)
+pub struct sc_observability_types::typed::EventFailure
+impl sc_observability_types::typed::EventFailure
+pub fn sc_observability_types::typed::EventFailure::cause(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::typed::EventFailure::detail(self, impl core::convert::Into<alloc::string::String>, serde_json::value::Value) -> Self
+pub fn sc_observability_types::typed::EventFailure::docs(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::typed::EventFailure::source(self, alloc::boxed::Box<(dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static)>) -> Self
+impl sc_observability_types::typed::EventFailure
+pub fn sc_observability_types::typed::EventFailure::closed(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::EventFailure::from_context(alloc::boxed::Box<sc_observability_types::ErrorContext>) -> Self
+pub fn sc_observability_types::typed::EventFailure::into_context(self) -> alloc::boxed::Box<sc_observability_types::ErrorContext>
+pub fn sc_observability_types::typed::EventFailure::invalid_event(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::EventFailure::queue_full(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::EventFailure::shutdown_timed_out(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::EventFailure::span_assembly(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::EventFailure::writer_degraded(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+impl core::convert::From<sc_observability_types::EventError> for sc_observability_types::typed::EventFailure
+pub fn sc_observability_types::typed::EventFailure::from(sc_observability_types::EventError) -> Self
+impl core::convert::From<sc_observability_types::typed::EventFailure> for sc_observability_types::EventError
+pub fn sc_observability_types::EventError::from(sc_observability_types::typed::EventFailure) -> Self
+impl core::error::Error for sc_observability_types::typed::EventFailure
+pub fn sc_observability_types::typed::EventFailure::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for sc_observability_types::typed::EventFailure
+pub fn sc_observability_types::typed::EventFailure::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::typed::EventFailure
+pub fn sc_observability_types::typed::EventFailure::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::typed::EventFailure
+pub type sc_observability_types::typed::EventFailure::Kind = sc_observability_types::typed::EventFailureKind
+pub fn sc_observability_types::typed::EventFailure::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::typed::EventFailure::kind(&self) -> Self::Kind
+pub struct sc_observability_types::typed::ExportFailure
+impl sc_observability_types::typed::ExportFailure
+pub fn sc_observability_types::typed::ExportFailure::cause(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::typed::ExportFailure::detail(self, impl core::convert::Into<alloc::string::String>, serde_json::value::Value) -> Self
+pub fn sc_observability_types::typed::ExportFailure::docs(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::typed::ExportFailure::source(self, alloc::boxed::Box<(dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static)>) -> Self
+impl sc_observability_types::typed::ExportFailure
+pub fn sc_observability_types::typed::ExportFailure::export(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::ExportFailure::from_context(alloc::boxed::Box<sc_observability_types::ErrorContext>) -> Self
+pub fn sc_observability_types::typed::ExportFailure::into_context(self) -> alloc::boxed::Box<sc_observability_types::ErrorContext>
+impl core::error::Error for sc_observability_types::typed::ExportFailure
+pub fn sc_observability_types::typed::ExportFailure::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for sc_observability_types::typed::ExportFailure
+pub fn sc_observability_types::typed::ExportFailure::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::typed::ExportFailure
+pub fn sc_observability_types::typed::ExportFailure::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::typed::ExportFailure
+pub type sc_observability_types::typed::ExportFailure::Kind = sc_observability_types::typed::ExportFailureKind
+pub fn sc_observability_types::typed::ExportFailure::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::typed::ExportFailure::kind(&self) -> Self::Kind
+pub struct sc_observability_types::typed::FlushFailure
+impl sc_observability_types::typed::FlushFailure
+pub fn sc_observability_types::typed::FlushFailure::cause(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::typed::FlushFailure::detail(self, impl core::convert::Into<alloc::string::String>, serde_json::value::Value) -> Self
+pub fn sc_observability_types::typed::FlushFailure::docs(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::typed::FlushFailure::source(self, alloc::boxed::Box<(dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static)>) -> Self
+impl sc_observability_types::typed::FlushFailure
+pub fn sc_observability_types::typed::FlushFailure::closed(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::FlushFailure::from_context(alloc::boxed::Box<sc_observability_types::ErrorContext>) -> Self
+pub fn sc_observability_types::typed::FlushFailure::into_context(self) -> alloc::boxed::Box<sc_observability_types::ErrorContext>
+pub fn sc_observability_types::typed::FlushFailure::logger_flush(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::FlushFailure::observation_flush(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::FlushFailure::telemetry_flush(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::FlushFailure::writer_degraded(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+impl core::convert::From<sc_observability_types::v2::FlushError> for sc_observability_types::typed::FlushFailure
+pub fn sc_observability_types::typed::FlushFailure::from(sc_observability_types::v2::FlushError) -> Self
+impl core::error::Error for sc_observability_types::typed::FlushFailure
+pub fn sc_observability_types::typed::FlushFailure::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for sc_observability_types::typed::FlushFailure
+pub fn sc_observability_types::typed::FlushFailure::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::typed::FlushFailure
+pub fn sc_observability_types::typed::FlushFailure::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::typed::FlushFailure
+pub type sc_observability_types::typed::FlushFailure::Kind = sc_observability_types::typed::FlushFailureKind
+pub fn sc_observability_types::typed::FlushFailure::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::typed::FlushFailure::kind(&self) -> Self::Kind
+pub struct sc_observability_types::typed::IdentityFailure
+impl sc_observability_types::typed::IdentityFailure
+pub fn sc_observability_types::typed::IdentityFailure::cause(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::typed::IdentityFailure::detail(self, impl core::convert::Into<alloc::string::String>, serde_json::value::Value) -> Self
+pub fn sc_observability_types::typed::IdentityFailure::docs(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::typed::IdentityFailure::source(self, alloc::boxed::Box<(dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static)>) -> Self
+impl sc_observability_types::typed::IdentityFailure
+pub fn sc_observability_types::typed::IdentityFailure::from_context(alloc::boxed::Box<sc_observability_types::ErrorContext>) -> Self
+pub fn sc_observability_types::typed::IdentityFailure::into_context(self) -> alloc::boxed::Box<sc_observability_types::ErrorContext>
+pub fn sc_observability_types::typed::IdentityFailure::resolution_failed(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+impl core::convert::From<sc_observability_types::IdentityError> for sc_observability_types::typed::IdentityFailure
+pub fn sc_observability_types::typed::IdentityFailure::from(sc_observability_types::IdentityError) -> Self
+impl core::convert::From<sc_observability_types::typed::IdentityFailure> for sc_observability_types::IdentityError
+pub fn sc_observability_types::IdentityError::from(sc_observability_types::typed::IdentityFailure) -> Self
+impl core::error::Error for sc_observability_types::typed::IdentityFailure
+pub fn sc_observability_types::typed::IdentityFailure::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for sc_observability_types::typed::IdentityFailure
+pub fn sc_observability_types::typed::IdentityFailure::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::typed::IdentityFailure
+pub fn sc_observability_types::typed::IdentityFailure::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::typed::IdentityFailure
+pub type sc_observability_types::typed::IdentityFailure::Kind = sc_observability_types::typed::IdentityFailureKind
+pub fn sc_observability_types::typed::IdentityFailure::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::typed::IdentityFailure::kind(&self) -> Self::Kind
+pub struct sc_observability_types::typed::InitFailure
+impl sc_observability_types::typed::InitFailure
+pub fn sc_observability_types::typed::InitFailure::cause(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::typed::InitFailure::detail(self, impl core::convert::Into<alloc::string::String>, serde_json::value::Value) -> Self
+pub fn sc_observability_types::typed::InitFailure::docs(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::typed::InitFailure::source(self, alloc::boxed::Box<(dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static)>) -> Self
+impl sc_observability_types::typed::InitFailure
+pub fn sc_observability_types::typed::InitFailure::exporter_initialization(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::InitFailure::from_context(alloc::boxed::Box<sc_observability_types::ErrorContext>) -> Self
+pub fn sc_observability_types::typed::InitFailure::identity_resolution(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::InitFailure::into_context(self) -> alloc::boxed::Box<sc_observability_types::ErrorContext>
+pub fn sc_observability_types::typed::InitFailure::invalid_protocol(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::InitFailure::invalid_telemetry_config(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::InitFailure::logger_initialization(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::InitFailure::observation_initialization(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+impl core::convert::From<sc_observability_types::InitError> for sc_observability_types::typed::InitFailure
+pub fn sc_observability_types::typed::InitFailure::from(sc_observability_types::InitError) -> Self
+impl core::convert::From<sc_observability_types::typed::InitFailure> for sc_observability_types::InitError
+pub fn sc_observability_types::InitError::from(sc_observability_types::typed::InitFailure) -> Self
+impl core::convert::From<sc_observability_types::v2::InitError> for sc_observability_types::typed::InitFailure
+pub fn sc_observability_types::typed::InitFailure::from(sc_observability_types::v2::InitError) -> Self
+impl core::error::Error for sc_observability_types::typed::InitFailure
+pub fn sc_observability_types::typed::InitFailure::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for sc_observability_types::typed::InitFailure
+pub fn sc_observability_types::typed::InitFailure::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::typed::InitFailure
+pub fn sc_observability_types::typed::InitFailure::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::typed::InitFailure
+pub type sc_observability_types::typed::InitFailure::Kind = sc_observability_types::typed::InitFailureKind
+pub fn sc_observability_types::typed::InitFailure::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::typed::InitFailure::kind(&self) -> Self::Kind
+pub struct sc_observability_types::typed::LogSinkFailure
+impl sc_observability_types::typed::LogSinkFailure
+pub fn sc_observability_types::typed::LogSinkFailure::cause(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::typed::LogSinkFailure::detail(self, impl core::convert::Into<alloc::string::String>, serde_json::value::Value) -> Self
+pub fn sc_observability_types::typed::LogSinkFailure::docs(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::typed::LogSinkFailure::source(self, alloc::boxed::Box<(dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static)>) -> Self
+impl sc_observability_types::typed::LogSinkFailure
+pub fn sc_observability_types::typed::LogSinkFailure::fault_injected(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::LogSinkFailure::from_context(alloc::boxed::Box<sc_observability_types::ErrorContext>) -> Self
+pub fn sc_observability_types::typed::LogSinkFailure::into_context(self) -> alloc::boxed::Box<sc_observability_types::ErrorContext>
+pub fn sc_observability_types::typed::LogSinkFailure::maintenance(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::LogSinkFailure::write(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+impl core::convert::From<sc_observability_types::LogSinkError> for sc_observability_types::typed::LogSinkFailure
+pub fn sc_observability_types::typed::LogSinkFailure::from(sc_observability_types::LogSinkError) -> Self
+impl core::convert::From<sc_observability_types::typed::LogSinkFailure> for sc_observability_types::LogSinkError
+pub fn sc_observability_types::LogSinkError::from(sc_observability_types::typed::LogSinkFailure) -> Self
+impl core::error::Error for sc_observability_types::typed::LogSinkFailure
+pub fn sc_observability_types::typed::LogSinkFailure::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for sc_observability_types::typed::LogSinkFailure
+pub fn sc_observability_types::typed::LogSinkFailure::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::typed::LogSinkFailure
+pub fn sc_observability_types::typed::LogSinkFailure::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::typed::LogSinkFailure
+pub type sc_observability_types::typed::LogSinkFailure::Kind = sc_observability_types::typed::LogSinkFailureKind
+pub fn sc_observability_types::typed::LogSinkFailure::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::typed::LogSinkFailure::kind(&self) -> Self::Kind
+pub struct sc_observability_types::typed::ProjectionFailure
+impl sc_observability_types::typed::ProjectionFailure
+pub fn sc_observability_types::typed::ProjectionFailure::cause(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::typed::ProjectionFailure::detail(self, impl core::convert::Into<alloc::string::String>, serde_json::value::Value) -> Self
+pub fn sc_observability_types::typed::ProjectionFailure::docs(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::typed::ProjectionFailure::source(self, alloc::boxed::Box<(dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static)>) -> Self
+impl sc_observability_types::typed::ProjectionFailure
+pub fn sc_observability_types::typed::ProjectionFailure::from_context(alloc::boxed::Box<sc_observability_types::ErrorContext>) -> Self
+pub fn sc_observability_types::typed::ProjectionFailure::into_context(self) -> alloc::boxed::Box<sc_observability_types::ErrorContext>
+pub fn sc_observability_types::typed::ProjectionFailure::routing(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::ProjectionFailure::span_assembly(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::ProjectionFailure::telemetry_closed(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::ProjectionFailure::telemetry_export(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+impl core::error::Error for sc_observability_types::typed::ProjectionFailure
+pub fn sc_observability_types::typed::ProjectionFailure::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for sc_observability_types::typed::ProjectionFailure
+pub fn sc_observability_types::typed::ProjectionFailure::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::typed::ProjectionFailure
+pub fn sc_observability_types::typed::ProjectionFailure::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::typed::ProjectionFailure
+pub type sc_observability_types::typed::ProjectionFailure::Kind = sc_observability_types::typed::ProjectionFailureKind
+pub fn sc_observability_types::typed::ProjectionFailure::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::typed::ProjectionFailure::kind(&self) -> Self::Kind
+pub struct sc_observability_types::typed::ShutdownFailure
+impl sc_observability_types::typed::ShutdownFailure
+pub fn sc_observability_types::typed::ShutdownFailure::cause(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::typed::ShutdownFailure::detail(self, impl core::convert::Into<alloc::string::String>, serde_json::value::Value) -> Self
+pub fn sc_observability_types::typed::ShutdownFailure::docs(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::typed::ShutdownFailure::source(self, alloc::boxed::Box<(dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static)>) -> Self
+impl sc_observability_types::typed::ShutdownFailure
+pub fn sc_observability_types::typed::ShutdownFailure::from_context(alloc::boxed::Box<sc_observability_types::ErrorContext>) -> Self
+pub fn sc_observability_types::typed::ShutdownFailure::incomplete_spans(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::ShutdownFailure::into_context(self) -> alloc::boxed::Box<sc_observability_types::ErrorContext>
+pub fn sc_observability_types::typed::ShutdownFailure::telemetry_flush(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::ShutdownFailure::timed_out(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::typed::ShutdownFailure::writer_degraded(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+impl core::convert::From<sc_observability_types::v2::ShutdownError> for sc_observability_types::typed::ShutdownFailure
+pub fn sc_observability_types::typed::ShutdownFailure::from(sc_observability_types::v2::ShutdownError) -> Self
+impl core::error::Error for sc_observability_types::typed::ShutdownFailure
+pub fn sc_observability_types::typed::ShutdownFailure::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for sc_observability_types::typed::ShutdownFailure
+pub fn sc_observability_types::typed::ShutdownFailure::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::typed::ShutdownFailure
+pub fn sc_observability_types::typed::ShutdownFailure::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::typed::ShutdownFailure
+pub type sc_observability_types::typed::ShutdownFailure::Kind = sc_observability_types::typed::ShutdownFailureKind
+pub fn sc_observability_types::typed::ShutdownFailure::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::typed::ShutdownFailure::kind(&self) -> Self::Kind
+pub struct sc_observability_types::typed::SubscriberFailure
+impl sc_observability_types::typed::SubscriberFailure
+pub fn sc_observability_types::typed::SubscriberFailure::cause(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::typed::SubscriberFailure::detail(self, impl core::convert::Into<alloc::string::String>, serde_json::value::Value) -> Self
+pub fn sc_observability_types::typed::SubscriberFailure::docs(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::typed::SubscriberFailure::source(self, alloc::boxed::Box<(dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static)>) -> Self
+impl sc_observability_types::typed::SubscriberFailure
+pub fn sc_observability_types::typed::SubscriberFailure::from_context(alloc::boxed::Box<sc_observability_types::ErrorContext>) -> Self
+pub fn sc_observability_types::typed::SubscriberFailure::into_context(self) -> alloc::boxed::Box<sc_observability_types::ErrorContext>
+pub fn sc_observability_types::typed::SubscriberFailure::routing(impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+impl core::error::Error for sc_observability_types::typed::SubscriberFailure
+pub fn sc_observability_types::typed::SubscriberFailure::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for sc_observability_types::typed::SubscriberFailure
+pub fn sc_observability_types::typed::SubscriberFailure::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::typed::SubscriberFailure
+pub fn sc_observability_types::typed::SubscriberFailure::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::typed::SubscriberFailure
+pub type sc_observability_types::typed::SubscriberFailure::Kind = sc_observability_types::typed::SubscriberFailureKind
+pub fn sc_observability_types::typed::SubscriberFailure::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::typed::SubscriberFailure::kind(&self) -> Self::Kind
+pub trait sc_observability_types::typed::ClassifiedError: sc_observability_types::DiagnosticInfo
+pub type sc_observability_types::typed::ClassifiedError::Kind: core::marker::Copy + core::cmp::Eq
+pub fn sc_observability_types::typed::ClassifiedError::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::typed::ClassifiedError::kind(&self) -> Self::Kind
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::EventError
+pub type sc_observability_types::EventError::Kind = sc_observability_types::typed::EventFailureKind
+pub fn sc_observability_types::EventError::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::EventError::kind(&self) -> Self::Kind
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::IdentityError
+pub type sc_observability_types::IdentityError::Kind = sc_observability_types::typed::IdentityFailureKind
+pub fn sc_observability_types::IdentityError::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::IdentityError::kind(&self) -> Self::Kind
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::InitError
+pub type sc_observability_types::InitError::Kind = sc_observability_types::typed::InitFailureKind
+pub fn sc_observability_types::InitError::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::InitError::kind(&self) -> Self::Kind
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::LogSinkError
+pub type sc_observability_types::LogSinkError::Kind = sc_observability_types::typed::LogSinkFailureKind
+pub fn sc_observability_types::LogSinkError::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::LogSinkError::kind(&self) -> Self::Kind
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::typed::EventFailure
+pub type sc_observability_types::typed::EventFailure::Kind = sc_observability_types::typed::EventFailureKind
+pub fn sc_observability_types::typed::EventFailure::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::typed::EventFailure::kind(&self) -> Self::Kind
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::typed::ExportFailure
+pub type sc_observability_types::typed::ExportFailure::Kind = sc_observability_types::typed::ExportFailureKind
+pub fn sc_observability_types::typed::ExportFailure::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::typed::ExportFailure::kind(&self) -> Self::Kind
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::typed::FlushFailure
+pub type sc_observability_types::typed::FlushFailure::Kind = sc_observability_types::typed::FlushFailureKind
+pub fn sc_observability_types::typed::FlushFailure::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::typed::FlushFailure::kind(&self) -> Self::Kind
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::typed::IdentityFailure
+pub type sc_observability_types::typed::IdentityFailure::Kind = sc_observability_types::typed::IdentityFailureKind
+pub fn sc_observability_types::typed::IdentityFailure::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::typed::IdentityFailure::kind(&self) -> Self::Kind
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::typed::InitFailure
+pub type sc_observability_types::typed::InitFailure::Kind = sc_observability_types::typed::InitFailureKind
+pub fn sc_observability_types::typed::InitFailure::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::typed::InitFailure::kind(&self) -> Self::Kind
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::typed::LogSinkFailure
+pub type sc_observability_types::typed::LogSinkFailure::Kind = sc_observability_types::typed::LogSinkFailureKind
+pub fn sc_observability_types::typed::LogSinkFailure::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::typed::LogSinkFailure::kind(&self) -> Self::Kind
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::typed::ProjectionFailure
+pub type sc_observability_types::typed::ProjectionFailure::Kind = sc_observability_types::typed::ProjectionFailureKind
+pub fn sc_observability_types::typed::ProjectionFailure::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::typed::ProjectionFailure::kind(&self) -> Self::Kind
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::typed::ShutdownFailure
+pub type sc_observability_types::typed::ShutdownFailure::Kind = sc_observability_types::typed::ShutdownFailureKind
+pub fn sc_observability_types::typed::ShutdownFailure::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::typed::ShutdownFailure::kind(&self) -> Self::Kind
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::typed::SubscriberFailure
+pub type sc_observability_types::typed::SubscriberFailure::Kind = sc_observability_types::typed::SubscriberFailureKind
+pub fn sc_observability_types::typed::SubscriberFailure::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::typed::SubscriberFailure::kind(&self) -> Self::Kind
+pub trait sc_observability_types::typed::TypedLogProjector<T: sc_observability_types::Observable>: core::marker::Send + core::marker::Sync
+pub fn sc_observability_types::typed::TypedLogProjector::project_logs(&self, &sc_observability_types::Observation<T>) -> core::result::Result<alloc::vec::Vec<sc_observability_types::LogEvent>, sc_observability_types::typed::ProjectionFailure>
+pub trait sc_observability_types::typed::TypedObservationSubscriber<T: sc_observability_types::Observable>: core::marker::Send + core::marker::Sync
+pub fn sc_observability_types::typed::TypedObservationSubscriber::observe(&self, &sc_observability_types::Observation<T>) -> core::result::Result<(), sc_observability_types::typed::SubscriberFailure>
+pub trait sc_observability_types::typed::TypedProcessIdentityResolver: core::marker::Send + core::marker::Sync
+pub fn sc_observability_types::typed::TypedProcessIdentityResolver::resolve(&self) -> core::result::Result<sc_observability_types::ProcessIdentity, sc_observability_types::typed::IdentityFailure>
+pub mod sc_observability_types::v2
+#[non_exhaustive] pub enum sc_observability_types::v2::EventError
+pub sc_observability_types::v2::EventError::Routing
+pub sc_observability_types::v2::EventError::Routing::context: alloc::boxed::Box<sc_observability_types::ErrorContext>
+pub sc_observability_types::v2::EventError::Validation
+pub sc_observability_types::v2::EventError::Validation::context: alloc::boxed::Box<sc_observability_types::ErrorContext>
+impl sc_observability_types::v2::EventError
+pub fn sc_observability_types::v2::EventError::classified_routing(alloc::boxed::Box<sc_observability_types::ErrorContext>, sc_observability_types::FailureClassification) -> Self
+pub fn sc_observability_types::v2::EventError::failure_classification(&self) -> sc_observability_types::FailureClassification
+impl sc_observability_types::v2::EventError
+pub fn sc_observability_types::v2::EventError::code(&self) -> sc_observability_types::ErrorCode
+pub fn sc_observability_types::v2::EventError::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::v2::EventError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+pub fn sc_observability_types::v2::EventError::into_context(self) -> alloc::boxed::Box<sc_observability_types::ErrorContext>
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::v2::EventError
+pub fn sc_observability_types::v2::EventError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+pub enum sc_observability_types::v2::FailureClassification
+pub sc_observability_types::v2::FailureClassification::Cancelled
+pub sc_observability_types::v2::FailureClassification::Cancelled::operation: &'static str
+pub sc_observability_types::v2::FailureClassification::Closed
+pub sc_observability_types::v2::FailureClassification::Internal
+pub sc_observability_types::v2::FailureClassification::Io
+pub sc_observability_types::v2::FailureClassification::QueueFull
+pub sc_observability_types::v2::FailureClassification::Timeout
+pub sc_observability_types::v2::FailureClassification::Timeout::operation: &'static str
+pub sc_observability_types::v2::FailureClassification::Unavailable
+pub sc_observability_types::v2::FailureClassification::Validation
+pub sc_observability_types::v2::FailureClassification::Validation::field: &'static str
+impl sc_observability_types::FailureClassification
+pub const fn sc_observability_types::FailureClassification::timeout(&'static str) -> Self
+pub const fn sc_observability_types::FailureClassification::validation(&'static str) -> Self
+#[non_exhaustive] pub enum sc_observability_types::v2::FlushError
+pub sc_observability_types::v2::FlushError::Drain
+pub sc_observability_types::v2::FlushError::Drain::context: alloc::boxed::Box<sc_observability_types::ErrorContext>
+impl sc_observability_types::v2::FlushError
+pub fn sc_observability_types::v2::FlushError::classified_drain(alloc::boxed::Box<sc_observability_types::ErrorContext>, sc_observability_types::FailureClassification) -> Self
+pub fn sc_observability_types::v2::FlushError::failure_classification(&self) -> sc_observability_types::FailureClassification
+impl sc_observability_types::v2::FlushError
+pub fn sc_observability_types::v2::FlushError::code(&self) -> sc_observability_types::ErrorCode
+pub fn sc_observability_types::v2::FlushError::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::v2::FlushError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+pub fn sc_observability_types::v2::FlushError::into_context(self) -> alloc::boxed::Box<sc_observability_types::ErrorContext>
+impl core::convert::From<sc_observability_types::v2::FlushError> for sc_observability_types::typed::FlushFailure
+pub fn sc_observability_types::typed::FlushFailure::from(sc_observability_types::v2::FlushError) -> Self
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::v2::FlushError
+pub fn sc_observability_types::v2::FlushError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+#[non_exhaustive] pub enum sc_observability_types::v2::IdentityError
+pub sc_observability_types::v2::IdentityError::Process
+pub sc_observability_types::v2::IdentityError::Process::context: alloc::boxed::Box<sc_observability_types::ErrorContext>
+impl sc_observability_types::v2::IdentityError
+pub fn sc_observability_types::v2::IdentityError::code(&self) -> sc_observability_types::ErrorCode
+pub fn sc_observability_types::v2::IdentityError::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::v2::IdentityError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+pub fn sc_observability_types::v2::IdentityError::into_context(self) -> alloc::boxed::Box<sc_observability_types::ErrorContext>
+impl sc_observability_types::v2::IdentityError
+pub const fn sc_observability_types::v2::IdentityError::failure_classification(&self) -> sc_observability_types::FailureClassification
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::v2::IdentityError
+pub fn sc_observability_types::v2::IdentityError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+#[non_exhaustive] pub enum sc_observability_types::v2::InitError
+pub sc_observability_types::v2::InitError::Configuration
+pub sc_observability_types::v2::InitError::Configuration::context: alloc::boxed::Box<sc_observability_types::ErrorContext>
+pub sc_observability_types::v2::InitError::Runtime
+pub sc_observability_types::v2::InitError::Runtime::context: alloc::boxed::Box<sc_observability_types::ErrorContext>
+impl sc_observability_types::v2::InitError
+pub fn sc_observability_types::v2::InitError::code(&self) -> sc_observability_types::ErrorCode
+pub fn sc_observability_types::v2::InitError::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::v2::InitError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+pub fn sc_observability_types::v2::InitError::into_context(self) -> alloc::boxed::Box<sc_observability_types::ErrorContext>
+impl sc_observability_types::v2::InitError
+pub const fn sc_observability_types::v2::InitError::failure_classification(&self) -> sc_observability_types::FailureClassification
+impl core::convert::From<sc_observability_types::v2::InitError> for sc_observability_types::typed::InitFailure
+pub fn sc_observability_types::typed::InitFailure::from(sc_observability_types::v2::InitError) -> Self
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::v2::InitError
+pub fn sc_observability_types::v2::InitError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+#[non_exhaustive] pub enum sc_observability_types::v2::LogSinkError
+pub sc_observability_types::v2::LogSinkError::Flush
+pub sc_observability_types::v2::LogSinkError::Flush::context: alloc::boxed::Box<sc_observability_types::ErrorContext>
+pub sc_observability_types::v2::LogSinkError::Write
+pub sc_observability_types::v2::LogSinkError::Write::context: alloc::boxed::Box<sc_observability_types::ErrorContext>
+impl sc_observability_types::v2::LogSinkError
+pub fn sc_observability_types::v2::LogSinkError::code(&self) -> sc_observability_types::ErrorCode
+pub fn sc_observability_types::v2::LogSinkError::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::v2::LogSinkError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+pub fn sc_observability_types::v2::LogSinkError::into_context(self) -> alloc::boxed::Box<sc_observability_types::ErrorContext>
+impl sc_observability_types::v2::LogSinkError
+pub const fn sc_observability_types::v2::LogSinkError::failure_classification(&self) -> sc_observability_types::FailureClassification
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::v2::LogSinkError
+pub fn sc_observability_types::v2::LogSinkError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+#[non_exhaustive] pub enum sc_observability_types::v2::ProjectionError
+pub sc_observability_types::v2::ProjectionError::Projection
+pub sc_observability_types::v2::ProjectionError::Projection::context: alloc::boxed::Box<sc_observability_types::ErrorContext>
+impl sc_observability_types::v2::ProjectionError
+pub fn sc_observability_types::v2::ProjectionError::code(&self) -> sc_observability_types::ErrorCode
+pub fn sc_observability_types::v2::ProjectionError::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::v2::ProjectionError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+pub fn sc_observability_types::v2::ProjectionError::into_context(self) -> alloc::boxed::Box<sc_observability_types::ErrorContext>
+impl sc_observability_types::v2::ProjectionError
+pub const fn sc_observability_types::v2::ProjectionError::failure_classification(&self) -> sc_observability_types::FailureClassification
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::v2::ProjectionError
+pub fn sc_observability_types::v2::ProjectionError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+#[non_exhaustive] pub enum sc_observability_types::v2::ShutdownError
+pub sc_observability_types::v2::ShutdownError::Drain
+pub sc_observability_types::v2::ShutdownError::Drain::context: alloc::boxed::Box<sc_observability_types::ErrorContext>
+pub sc_observability_types::v2::ShutdownError::Timeout
+pub sc_observability_types::v2::ShutdownError::Timeout::context: alloc::boxed::Box<sc_observability_types::ErrorContext>
+impl sc_observability_types::v2::ShutdownError
+pub fn sc_observability_types::v2::ShutdownError::classified_drain(alloc::boxed::Box<sc_observability_types::ErrorContext>, sc_observability_types::FailureClassification) -> Self
+pub fn sc_observability_types::v2::ShutdownError::failure_classification(&self) -> sc_observability_types::FailureClassification
+impl sc_observability_types::v2::ShutdownError
+pub fn sc_observability_types::v2::ShutdownError::code(&self) -> sc_observability_types::ErrorCode
+pub fn sc_observability_types::v2::ShutdownError::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::v2::ShutdownError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+pub fn sc_observability_types::v2::ShutdownError::into_context(self) -> alloc::boxed::Box<sc_observability_types::ErrorContext>
+impl core::convert::From<sc_observability_types::v2::ShutdownError> for sc_observability_types::typed::ShutdownFailure
+pub fn sc_observability_types::typed::ShutdownFailure::from(sc_observability_types::v2::ShutdownError) -> Self
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::v2::ShutdownError
+pub fn sc_observability_types::v2::ShutdownError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+#[non_exhaustive] pub enum sc_observability_types::v2::SubscriberError
+pub sc_observability_types::v2::SubscriberError::Subscriber
+pub sc_observability_types::v2::SubscriberError::Subscriber::context: alloc::boxed::Box<sc_observability_types::ErrorContext>
+impl sc_observability_types::v2::SubscriberError
+pub fn sc_observability_types::v2::SubscriberError::classified_subscriber(alloc::boxed::Box<sc_observability_types::ErrorContext>, sc_observability_types::FailureClassification) -> Self
+pub const fn sc_observability_types::v2::SubscriberError::failure_classification(&self) -> sc_observability_types::FailureClassification
+impl sc_observability_types::v2::SubscriberError
+pub fn sc_observability_types::v2::SubscriberError::code(&self) -> sc_observability_types::ErrorCode
+pub fn sc_observability_types::v2::SubscriberError::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::v2::SubscriberError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+pub fn sc_observability_types::v2::SubscriberError::into_context(self) -> alloc::boxed::Box<sc_observability_types::ErrorContext>
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::v2::SubscriberError
+pub fn sc_observability_types::v2::SubscriberError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+pub struct sc_observability_types::v2::ProjectionRegistration<T> where T: sc_observability_types::Observable
+impl<T> sc_observability_types::v2::ProjectionRegistration<T> where T: sc_observability_types::Observable
+pub fn sc_observability_types::v2::ProjectionRegistration<T>::into_parts(self) -> (core::option::Option<alloc::sync::Arc<dyn sc_observability_types::v2::LogProjector<T>>>, core::option::Option<alloc::sync::Arc<dyn sc_observability_types::v2::ObservationFilter<T>>>)
+pub fn sc_observability_types::v2::ProjectionRegistration<T>::new() -> Self
+pub fn sc_observability_types::v2::ProjectionRegistration<T>::with_filter(self, alloc::sync::Arc<dyn sc_observability_types::v2::ObservationFilter<T>>) -> Self
+pub fn sc_observability_types::v2::ProjectionRegistration<T>::with_log_projector(self, alloc::sync::Arc<dyn sc_observability_types::v2::LogProjector<T>>) -> Self
+impl<T> core::default::Default for sc_observability_types::v2::ProjectionRegistration<T> where T: sc_observability_types::Observable
+pub fn sc_observability_types::v2::ProjectionRegistration<T>::default() -> Self
+pub struct sc_observability_types::v2::SubscriberRegistration<T> where T: sc_observability_types::Observable
+impl<T> sc_observability_types::v2::SubscriberRegistration<T> where T: sc_observability_types::Observable
+pub fn sc_observability_types::v2::SubscriberRegistration<T>::into_parts(self) -> (alloc::sync::Arc<dyn sc_observability_types::v2::ObservationSubscriber<T>>, core::option::Option<alloc::sync::Arc<dyn sc_observability_types::v2::ObservationFilter<T>>>)
+pub fn sc_observability_types::v2::SubscriberRegistration<T>::new(alloc::sync::Arc<dyn sc_observability_types::v2::ObservationSubscriber<T>>) -> Self
+pub fn sc_observability_types::v2::SubscriberRegistration<T>::with_filter(self, alloc::sync::Arc<dyn sc_observability_types::v2::ObservationFilter<T>>) -> Self
+pub trait sc_observability_types::v2::LogProjector<T> where T: sc_observability_types::Observable: core::marker::Send + core::marker::Sync
+pub fn sc_observability_types::v2::LogProjector::project_logs(&self, &sc_observability_types::Observation<T>) -> core::result::Result<alloc::vec::Vec<sc_observability_types::LogEvent>, sc_observability_types::v2::ProjectionError>
+pub trait sc_observability_types::v2::ObservationFilter<T> where T: sc_observability_types::Observable: core::marker::Send + core::marker::Sync
+pub fn sc_observability_types::v2::ObservationFilter::accepts(&self, &sc_observability_types::Observation<T>) -> bool
+pub trait sc_observability_types::v2::ObservationSubscriber<T> where T: sc_observability_types::Observable: core::marker::Send + core::marker::Sync
+pub fn sc_observability_types::v2::ObservationSubscriber::observe(&self, &sc_observability_types::Observation<T>) -> core::result::Result<(), sc_observability_types::v2::SubscriberError>
+pub trait sc_observability_types::v2::ProcessIdentityResolver: core::marker::Send + core::marker::Sync
+pub fn sc_observability_types::v2::ProcessIdentityResolver::resolve(&self) -> core::result::Result<sc_observability_types::ProcessIdentity, sc_observability_types::v2::IdentityError>
+pub enum sc_observability_types::AdmissionOutcome
+pub sc_observability_types::AdmissionOutcome::Accepted
+pub sc_observability_types::AdmissionOutcome::Filtered
+pub enum sc_observability_types::ChangeDiagnostic
+pub sc_observability_types::ChangeDiagnostic::Accepted
+pub sc_observability_types::ChangeDiagnostic::NotAccepted
+pub sc_observability_types::ChangeDiagnostic::NotAccepted::diagnostic: sc_observability_types::OperationDiagnostic
+pub enum sc_observability_types::ExporterHealthState
+pub sc_observability_types::ExporterHealthState::Degraded
+pub sc_observability_types::ExporterHealthState::Healthy
+pub sc_observability_types::ExporterHealthState::Unavailable
+pub enum sc_observability_types::FailureClassification
+pub sc_observability_types::FailureClassification::Cancelled
+pub sc_observability_types::FailureClassification::Cancelled::operation: &'static str
+pub sc_observability_types::FailureClassification::Closed
+pub sc_observability_types::FailureClassification::Internal
+pub sc_observability_types::FailureClassification::Io
+pub sc_observability_types::FailureClassification::QueueFull
+pub sc_observability_types::FailureClassification::Timeout
+pub sc_observability_types::FailureClassification::Timeout::operation: &'static str
+pub sc_observability_types::FailureClassification::Unavailable
+pub sc_observability_types::FailureClassification::Validation
+pub sc_observability_types::FailureClassification::Validation::field: &'static str
+impl sc_observability_types::FailureClassification
+pub const fn sc_observability_types::FailureClassification::timeout(&'static str) -> Self
+pub const fn sc_observability_types::FailureClassification::validation(&'static str) -> Self
+pub enum sc_observability_types::Level
+pub sc_observability_types::Level::Debug
+pub sc_observability_types::Level::Error
+pub sc_observability_types::Level::Info
+pub sc_observability_types::Level::Trace
+pub sc_observability_types::Level::Warn
+pub enum sc_observability_types::LevelChange
+pub sc_observability_types::LevelChange::Changed
+pub sc_observability_types::LevelChange::Changed::current: sc_observability_types::LevelState
+pub sc_observability_types::LevelChange::Changed::diagnostic: sc_observability_types::ChangeDiagnostic
+pub sc_observability_types::LevelChange::Changed::previous: sc_observability_types::LevelState
+pub sc_observability_types::LevelChange::Changed::source: sc_observability_types::LevelChangeSource
+pub sc_observability_types::LevelChange::Unchanged
+pub sc_observability_types::LevelChange::Unchanged::state: sc_observability_types::LevelState
+pub enum sc_observability_types::LevelChangeError
+pub sc_observability_types::LevelChangeError::BelowBaseline
+pub sc_observability_types::LevelChangeError::BelowBaseline::configured: sc_observability_types::LevelFilter
+pub sc_observability_types::LevelChangeError::BelowBaseline::requested: sc_observability_types::LevelFilter
+pub sc_observability_types::LevelChangeError::Stopped
+pub sc_observability_types::LevelChangeError::Stopping
+pub sc_observability_types::LevelChangeError::Unavailable
+pub sc_observability_types::LevelChangeError::Unavailable::diagnostic: sc_observability_types::OperationDiagnostic
+pub sc_observability_types::LevelChangeError::UnsupportedLevel
+pub sc_observability_types::LevelChangeError::UnsupportedLevel::available: sc_observability_types::LevelFilter
+pub sc_observability_types::LevelChangeError::UnsupportedLevel::requested: sc_observability_types::LevelFilter
+impl sc_observability_types::LevelChangeError
+pub fn sc_observability_types::LevelChangeError::code(&self) -> sc_observability_types::ErrorCode
+pub fn sc_observability_types::LevelChangeError::remediation(&self) -> sc_observability_types::Remediation
+pub enum sc_observability_types::LevelChangeSource
+pub sc_observability_types::LevelChangeSource::Application
+pub sc_observability_types::LevelChangeSource::DiagnosticSession
+pub sc_observability_types::LevelChangeSource::UserRequest
+pub enum sc_observability_types::LevelFilter
+pub sc_observability_types::LevelFilter::Debug
+pub sc_observability_types::LevelFilter::Error
+pub sc_observability_types::LevelFilter::Info
+pub sc_observability_types::LevelFilter::Off
+pub sc_observability_types::LevelFilter::Trace
+pub sc_observability_types::LevelFilter::Warn
+pub enum sc_observability_types::LogOrder
+pub sc_observability_types::LogOrder::NewestFirst
+pub sc_observability_types::LogOrder::OldestFirst
+pub enum sc_observability_types::LoggingHealthState
+pub sc_observability_types::LoggingHealthState::DegradedDropping
+pub sc_observability_types::LoggingHealthState::Healthy
+pub sc_observability_types::LoggingHealthState::Unavailable
+pub enum sc_observability_types::MaintenanceWorkerState
+pub sc_observability_types::MaintenanceWorkerState::Degraded
+pub sc_observability_types::MaintenanceWorkerState::Running
+pub sc_observability_types::MaintenanceWorkerState::Stopped
+pub enum sc_observability_types::ObservationError
+pub sc_observability_types::ObservationError::QueueFull(alloc::boxed::Box<sc_observability_types::ErrorContext>)
+pub sc_observability_types::ObservationError::RoutingFailure(alloc::boxed::Box<sc_observability_types::ErrorContext>)
+pub sc_observability_types::ObservationError::Shutdown
+pub enum sc_observability_types::ObservationHealthState
+pub sc_observability_types::ObservationHealthState::Degraded
+pub sc_observability_types::ObservationHealthState::Healthy
+pub sc_observability_types::ObservationHealthState::Unavailable
+pub enum sc_observability_types::ProcessIdentityPolicy
+pub sc_observability_types::ProcessIdentityPolicy::Auto
+pub sc_observability_types::ProcessIdentityPolicy::Fixed
+pub sc_observability_types::ProcessIdentityPolicy::Fixed::hostname: core::option::Option<alloc::string::String>
+pub sc_observability_types::ProcessIdentityPolicy::Fixed::pid: core::option::Option<u32>
+pub sc_observability_types::ProcessIdentityPolicy::Resolver(alloc::sync::Arc<dyn sc_observability_types::ProcessIdentityResolver>)
+impl core::fmt::Debug for sc_observability_types::ProcessIdentityPolicy
+pub fn sc_observability_types::ProcessIdentityPolicy::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum sc_observability_types::QueryError
+pub sc_observability_types::QueryError::Decode(alloc::boxed::Box<sc_observability_types::ErrorContext>)
+pub sc_observability_types::QueryError::InvalidQuery(alloc::boxed::Box<sc_observability_types::ErrorContext>)
+pub sc_observability_types::QueryError::Io(alloc::boxed::Box<sc_observability_types::ErrorContext>)
+pub sc_observability_types::QueryError::Shutdown
+pub sc_observability_types::QueryError::Unavailable(alloc::boxed::Box<sc_observability_types::ErrorContext>)
+impl sc_observability_types::QueryError
+pub fn sc_observability_types::QueryError::code(&self) -> sc_observability_types::ErrorCode
+pub fn sc_observability_types::QueryError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+pub fn sc_observability_types::QueryError::invalid_query(impl core::convert::Into<alloc::string::String>) -> Self
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::QueryError
+pub fn sc_observability_types::QueryError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+pub enum sc_observability_types::QueryHealthState
+pub sc_observability_types::QueryHealthState::Degraded
+pub sc_observability_types::QueryHealthState::Healthy
+pub sc_observability_types::QueryHealthState::Unavailable
+pub enum sc_observability_types::Remediation
+pub sc_observability_types::Remediation::NotRecoverable
+pub sc_observability_types::Remediation::NotRecoverable::justification: alloc::string::String
+pub sc_observability_types::Remediation::Recoverable
+pub sc_observability_types::Remediation::Recoverable::steps: sc_observability_types::RecoverableSteps
+impl sc_observability_types::Remediation
+pub fn sc_observability_types::Remediation::not_recoverable(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::Remediation::recoverable(impl core::convert::Into<alloc::string::String>, impl core::iter::traits::collect::IntoIterator<Item = impl core::convert::Into<alloc::string::String>>) -> Self
+pub enum sc_observability_types::SinkHealthState
+pub sc_observability_types::SinkHealthState::DegradedDropping
+pub sc_observability_types::SinkHealthState::Healthy
+pub sc_observability_types::SinkHealthState::Unavailable
+pub enum sc_observability_types::TelemetryHealthState
+pub sc_observability_types::TelemetryHealthState::Degraded
+pub sc_observability_types::TelemetryHealthState::Disabled
+pub sc_observability_types::TelemetryHealthState::Healthy
+pub sc_observability_types::TelemetryHealthState::Unavailable
+pub enum sc_observability_types::WriterState
+pub sc_observability_types::WriterState::Degraded
+pub sc_observability_types::WriterState::Running
+pub sc_observability_types::WriterState::Stopped
+pub struct sc_observability_types::ActionName(_)
+impl sc_observability_types::ActionName
+pub fn sc_observability_types::ActionName::as_str(&self) -> &str
+pub fn sc_observability_types::ActionName::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::ValueValidationError>
+impl core::convert::AsRef<str> for sc_observability_types::ActionName
+pub fn sc_observability_types::ActionName::as_ref(&self) -> &str
+impl core::convert::TryFrom<alloc::string::String> for sc_observability_types::ActionName
+pub type sc_observability_types::ActionName::Error = sc_observability_types::ValueValidationError
+pub fn sc_observability_types::ActionName::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for sc_observability_types::ActionName
+pub fn sc_observability_types::ActionName::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::CorrelationId(_)
+impl sc_observability_types::CorrelationId
+pub fn sc_observability_types::CorrelationId::as_str(&self) -> &str
+pub fn sc_observability_types::CorrelationId::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::ValueValidationError>
+impl core::convert::AsRef<str> for sc_observability_types::CorrelationId
+pub fn sc_observability_types::CorrelationId::as_ref(&self) -> &str
+impl core::convert::TryFrom<alloc::string::String> for sc_observability_types::CorrelationId
+pub type sc_observability_types::CorrelationId::Error = sc_observability_types::ValueValidationError
+pub fn sc_observability_types::CorrelationId::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for sc_observability_types::CorrelationId
+pub fn sc_observability_types::CorrelationId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::Diagnostic
+pub sc_observability_types::Diagnostic::cause: core::option::Option<alloc::string::String>
+pub sc_observability_types::Diagnostic::code: sc_observability_types::ErrorCode
+pub sc_observability_types::Diagnostic::details: serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub sc_observability_types::Diagnostic::docs: core::option::Option<alloc::string::String>
+pub sc_observability_types::Diagnostic::message: alloc::string::String
+pub sc_observability_types::Diagnostic::remediation: sc_observability_types::Remediation
+pub sc_observability_types::Diagnostic::timestamp: sc_observability_types::Timestamp
+impl core::convert::From<&sc_observability_types::Diagnostic> for sc_observability_types::DiagnosticSummary
+pub fn sc_observability_types::DiagnosticSummary::from(&sc_observability_types::Diagnostic) -> Self
+pub struct sc_observability_types::DiagnosticSummary
+pub sc_observability_types::DiagnosticSummary::at: sc_observability_types::Timestamp
+pub sc_observability_types::DiagnosticSummary::code: core::option::Option<sc_observability_types::ErrorCode>
+pub sc_observability_types::DiagnosticSummary::message: alloc::string::String
+impl core::convert::From<&sc_observability_types::Diagnostic> for sc_observability_types::DiagnosticSummary
+pub fn sc_observability_types::DiagnosticSummary::from(&sc_observability_types::Diagnostic) -> Self
+pub struct sc_observability_types::DurationMs(_)
+impl sc_observability_types::DurationMs
+pub const fn sc_observability_types::DurationMs::as_u64(self) -> u64
+impl core::convert::From<sc_observability_types::DurationMs> for u64
+pub fn u64::from(sc_observability_types::DurationMs) -> Self
+impl core::convert::From<u64> for sc_observability_types::DurationMs
+pub fn sc_observability_types::DurationMs::from(u64) -> Self
+impl core::fmt::Display for sc_observability_types::DurationMs
+pub fn sc_observability_types::DurationMs::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::EntityId(_)
+impl sc_observability_types::EntityId
+pub fn sc_observability_types::EntityId::as_str(&self) -> &str
+pub fn sc_observability_types::EntityId::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::ValueValidationError>
+impl core::convert::AsRef<str> for sc_observability_types::EntityId
+pub fn sc_observability_types::EntityId::as_ref(&self) -> &str
+impl core::convert::TryFrom<alloc::string::String> for sc_observability_types::EntityId
+pub type sc_observability_types::EntityId::Error = sc_observability_types::ValueValidationError
+pub fn sc_observability_types::EntityId::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for sc_observability_types::EntityId
+pub fn sc_observability_types::EntityId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::EnvPrefix(_)
+impl sc_observability_types::EnvPrefix
+pub fn sc_observability_types::EnvPrefix::as_str(&self) -> &str
+pub fn sc_observability_types::EnvPrefix::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::ValueValidationError>
+impl core::convert::AsRef<str> for sc_observability_types::EnvPrefix
+pub fn sc_observability_types::EnvPrefix::as_ref(&self) -> &str
+impl core::convert::TryFrom<alloc::string::String> for sc_observability_types::EnvPrefix
+pub type sc_observability_types::EnvPrefix::Error = sc_observability_types::ValueValidationError
+pub fn sc_observability_types::EnvPrefix::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for sc_observability_types::EnvPrefix
+pub fn sc_observability_types::EnvPrefix::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::ErrorCode(_)
+impl sc_observability_types::ErrorCode
+pub fn sc_observability_types::ErrorCode::as_str(&self) -> &str
+pub fn sc_observability_types::ErrorCode::new_owned(impl core::convert::Into<alloc::string::String>) -> Self
+pub const fn sc_observability_types::ErrorCode::new_static(&'static str) -> Self
+impl core::fmt::Display for sc_observability_types::ErrorCode
+pub fn sc_observability_types::ErrorCode::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::ErrorContext
+impl sc_observability_types::ErrorContext
+pub fn sc_observability_types::ErrorContext::backtrace(&self) -> &std::backtrace::Backtrace
+pub fn sc_observability_types::ErrorContext::cause(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::ErrorContext::detail(self, impl core::convert::Into<alloc::string::String>, serde_json::value::Value) -> Self
+pub fn sc_observability_types::ErrorContext::diagnostic(&self) -> &sc_observability_types::Diagnostic
+pub fn sc_observability_types::ErrorContext::docs(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::ErrorContext::new(sc_observability_types::ErrorCode, impl core::convert::Into<alloc::string::String>, sc_observability_types::Remediation) -> Self
+pub fn sc_observability_types::ErrorContext::source(self, alloc::boxed::Box<(dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static)>) -> Self
+impl core::clone::Clone for sc_observability_types::ErrorContext
+pub fn sc_observability_types::ErrorContext::clone(&self) -> Self
+impl core::cmp::PartialEq for sc_observability_types::ErrorContext
+pub fn sc_observability_types::ErrorContext::eq(&self, &Self) -> bool
+impl core::error::Error for sc_observability_types::ErrorContext
+pub fn sc_observability_types::ErrorContext::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for sc_observability_types::ErrorContext
+pub fn sc_observability_types::ErrorContext::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::EventError(pub alloc::boxed::Box<sc_observability_types::ErrorContext>)
+impl core::convert::From<sc_observability_types::EventError> for sc_observability_types::typed::EventFailure
+pub fn sc_observability_types::typed::EventFailure::from(sc_observability_types::EventError) -> Self
+impl core::convert::From<sc_observability_types::typed::EventFailure> for sc_observability_types::EventError
+pub fn sc_observability_types::EventError::from(sc_observability_types::typed::EventFailure) -> Self
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::EventError
+pub fn sc_observability_types::EventError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::EventError
+pub type sc_observability_types::EventError::Kind = sc_observability_types::typed::EventFailureKind
+pub fn sc_observability_types::EventError::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::EventError::kind(&self) -> Self::Kind
+pub struct sc_observability_types::ExporterHealth
+pub sc_observability_types::ExporterHealth::last_error: core::option::Option<sc_observability_types::DiagnosticSummary>
+pub sc_observability_types::ExporterHealth::name: sc_observability_types::SinkName
+pub sc_observability_types::ExporterHealth::state: sc_observability_types::ExporterHealthState
+pub struct sc_observability_types::FileCount(_)
+impl sc_observability_types::FileCount
+pub fn sc_observability_types::FileCount::as_u64(self) -> u64
+pub const fn sc_observability_types::FileCount::as_usize(self) -> usize
+pub const fn sc_observability_types::FileCount::from_usize(usize) -> Self
+pub fn sc_observability_types::FileCount::try_from_u64(u64) -> core::result::Result<Self, core::num::error::TryFromIntError>
+impl core::fmt::Display for sc_observability_types::FileCount
+pub fn sc_observability_types::FileCount::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::IdentityError(pub alloc::boxed::Box<sc_observability_types::ErrorContext>)
+impl core::convert::From<sc_observability_types::IdentityError> for sc_observability_types::typed::IdentityFailure
+pub fn sc_observability_types::typed::IdentityFailure::from(sc_observability_types::IdentityError) -> Self
+impl core::convert::From<sc_observability_types::typed::IdentityFailure> for sc_observability_types::IdentityError
+pub fn sc_observability_types::IdentityError::from(sc_observability_types::typed::IdentityFailure) -> Self
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::IdentityError
+pub fn sc_observability_types::IdentityError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::IdentityError
+pub type sc_observability_types::IdentityError::Kind = sc_observability_types::typed::IdentityFailureKind
+pub fn sc_observability_types::IdentityError::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::IdentityError::kind(&self) -> Self::Kind
+pub struct sc_observability_types::InitError(pub alloc::boxed::Box<sc_observability_types::ErrorContext>)
+impl core::convert::From<sc_observability_types::InitError> for sc_observability_types::typed::InitFailure
+pub fn sc_observability_types::typed::InitFailure::from(sc_observability_types::InitError) -> Self
+impl core::convert::From<sc_observability_types::typed::InitFailure> for sc_observability_types::InitError
+pub fn sc_observability_types::InitError::from(sc_observability_types::typed::InitFailure) -> Self
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::InitError
+pub fn sc_observability_types::InitError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::InitError
+pub type sc_observability_types::InitError::Kind = sc_observability_types::typed::InitFailureKind
+pub fn sc_observability_types::InitError::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::InitError::kind(&self) -> Self::Kind
+pub struct sc_observability_types::LevelState
+pub sc_observability_types::LevelState::configured_level: sc_observability_types::LevelFilter
+pub sc_observability_types::LevelState::effective_level: sc_observability_types::LevelFilter
+pub sc_observability_types::LevelState::revision: u64
+pub struct sc_observability_types::LogEvent
+pub sc_observability_types::LogEvent::action: sc_observability_types::ActionName
+pub sc_observability_types::LogEvent::correlation_id: core::option::Option<sc_observability_types::CorrelationId>
+pub sc_observability_types::LogEvent::diagnostic: core::option::Option<sc_observability_types::Diagnostic>
+pub sc_observability_types::LogEvent::fields: serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub sc_observability_types::LogEvent::identity: sc_observability_types::ProcessIdentity
+pub sc_observability_types::LogEvent::level: sc_observability_types::Level
+pub sc_observability_types::LogEvent::message: core::option::Option<alloc::string::String>
+pub sc_observability_types::LogEvent::outcome: core::option::Option<sc_observability_types::OutcomeLabel>
+pub sc_observability_types::LogEvent::request_id: core::option::Option<sc_observability_types::CorrelationId>
+pub sc_observability_types::LogEvent::service: sc_observability_types::ServiceName
+pub sc_observability_types::LogEvent::state_transition: core::option::Option<sc_observability_types::StateTransition>
+pub sc_observability_types::LogEvent::target: sc_observability_types::TargetCategory
+pub sc_observability_types::LogEvent::timestamp: sc_observability_types::Timestamp
+pub sc_observability_types::LogEvent::trace: core::option::Option<sc_observability_types::TraceContext>
+pub sc_observability_types::LogEvent::version: sc_observability_types::SchemaVersion
+pub struct sc_observability_types::LogFieldMatch
+pub sc_observability_types::LogFieldMatch::field: alloc::string::String
+pub sc_observability_types::LogFieldMatch::value: serde_json::value::Value
+impl sc_observability_types::LogFieldMatch
+pub fn sc_observability_types::LogFieldMatch::equals(impl core::convert::Into<alloc::string::String>, serde_json::value::Value) -> Self
+pub struct sc_observability_types::LogQuery
+pub sc_observability_types::LogQuery::action: core::option::Option<sc_observability_types::ActionName>
+pub sc_observability_types::LogQuery::correlation_id: core::option::Option<sc_observability_types::CorrelationId>
+pub sc_observability_types::LogQuery::field_matches: alloc::vec::Vec<sc_observability_types::LogFieldMatch>
+pub sc_observability_types::LogQuery::levels: alloc::vec::Vec<sc_observability_types::Level>
+pub sc_observability_types::LogQuery::limit: core::option::Option<usize>
+pub sc_observability_types::LogQuery::order: sc_observability_types::LogOrder
+pub sc_observability_types::LogQuery::request_id: core::option::Option<sc_observability_types::CorrelationId>
+pub sc_observability_types::LogQuery::service: core::option::Option<sc_observability_types::ServiceName>
+pub sc_observability_types::LogQuery::since: core::option::Option<sc_observability_types::Timestamp>
+pub sc_observability_types::LogQuery::target: core::option::Option<sc_observability_types::TargetCategory>
+pub sc_observability_types::LogQuery::until: core::option::Option<sc_observability_types::Timestamp>
+impl sc_observability_types::LogQuery
+pub fn sc_observability_types::LogQuery::validate(&self) -> core::result::Result<(), sc_observability_types::QueryError>
+pub struct sc_observability_types::LogSinkError(pub alloc::boxed::Box<sc_observability_types::ErrorContext>)
+impl core::convert::From<sc_observability_types::LogSinkError> for sc_observability_types::typed::LogSinkFailure
+pub fn sc_observability_types::typed::LogSinkFailure::from(sc_observability_types::LogSinkError) -> Self
+impl core::convert::From<sc_observability_types::typed::LogSinkFailure> for sc_observability_types::LogSinkError
+pub fn sc_observability_types::LogSinkError::from(sc_observability_types::typed::LogSinkFailure) -> Self
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::LogSinkError
+pub fn sc_observability_types::LogSinkError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::typed::ClassifiedError for sc_observability_types::LogSinkError
+pub type sc_observability_types::LogSinkError::Kind = sc_observability_types::typed::LogSinkFailureKind
+pub fn sc_observability_types::LogSinkError::context(&self) -> &sc_observability_types::ErrorContext
+pub fn sc_observability_types::LogSinkError::kind(&self) -> Self::Kind
+pub struct sc_observability_types::LogSnapshot
+pub sc_observability_types::LogSnapshot::events: alloc::vec::Vec<sc_observability_types::LogEvent>
+pub sc_observability_types::LogSnapshot::truncated: bool
+pub struct sc_observability_types::LoggingHealthReport
+pub sc_observability_types::LoggingHealthReport::active_log_path: std::path::PathBuf
+pub sc_observability_types::LoggingHealthReport::dropped_events_total: u64
+pub sc_observability_types::LoggingHealthReport::flush_errors_total: u64
+pub sc_observability_types::LoggingHealthReport::last_error: core::option::Option<sc_observability_types::DiagnosticSummary>
+pub sc_observability_types::LoggingHealthReport::last_writer_error: core::option::Option<sc_observability_types::DiagnosticSummary>
+pub sc_observability_types::LoggingHealthReport::maintenance: core::option::Option<sc_observability_types::MaintenanceHealthReport>
+pub sc_observability_types::LoggingHealthReport::query: core::option::Option<sc_observability_types::QueryHealthReport>
+pub sc_observability_types::LoggingHealthReport::queue_capacity: u64
+pub sc_observability_types::LoggingHealthReport::queue_depth: u64
+pub sc_observability_types::LoggingHealthReport::queue_full_drops_total: u64
+pub sc_observability_types::LoggingHealthReport::queue_high_water_mark: u64
+pub sc_observability_types::LoggingHealthReport::sink_statuses: alloc::vec::Vec<sc_observability_types::SinkHealth>
+pub sc_observability_types::LoggingHealthReport::state: sc_observability_types::LoggingHealthState
+pub sc_observability_types::LoggingHealthReport::writer_state: sc_observability_types::WriterState
+pub struct sc_observability_types::MaintenanceHealthReport
+pub sc_observability_types::MaintenanceHealthReport::last_error: core::option::Option<sc_observability_types::DiagnosticSummary>
+pub sc_observability_types::MaintenanceHealthReport::last_pass_at: core::option::Option<sc_observability_types::Timestamp>
+pub sc_observability_types::MaintenanceHealthReport::pruned_files_total: sc_observability_types::FileCount
+pub sc_observability_types::MaintenanceHealthReport::rotated_files_total: sc_observability_types::FileCount
+pub sc_observability_types::MaintenanceHealthReport::state: sc_observability_types::MaintenanceWorkerState
+pub struct sc_observability_types::MetricName(_)
+impl sc_observability_types::MetricName
+pub fn sc_observability_types::MetricName::as_str(&self) -> &str
+pub fn sc_observability_types::MetricName::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::ValueValidationError>
+impl core::convert::AsRef<str> for sc_observability_types::MetricName
+pub fn sc_observability_types::MetricName::as_ref(&self) -> &str
+impl core::convert::TryFrom<alloc::string::String> for sc_observability_types::MetricName
+pub type sc_observability_types::MetricName::Error = sc_observability_types::ValueValidationError
+pub fn sc_observability_types::MetricName::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for sc_observability_types::MetricName
+pub fn sc_observability_types::MetricName::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::MetricUnit(_)
+impl sc_observability_types::MetricUnit
+pub fn sc_observability_types::MetricUnit::as_str(&self) -> &str
+pub fn sc_observability_types::MetricUnit::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::ValueValidationError>
+impl core::convert::AsRef<str> for sc_observability_types::MetricUnit
+pub fn sc_observability_types::MetricUnit::as_ref(&self) -> &str
+impl core::convert::TryFrom<alloc::string::String> for sc_observability_types::MetricUnit
+pub type sc_observability_types::MetricUnit::Error = sc_observability_types::ValueValidationError
+pub fn sc_observability_types::MetricUnit::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for sc_observability_types::MetricUnit
+pub fn sc_observability_types::MetricUnit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::ObservabilityHealthReport
+pub sc_observability_types::ObservabilityHealthReport::dropped_observations_total: u64
+pub sc_observability_types::ObservabilityHealthReport::last_error: core::option::Option<sc_observability_types::DiagnosticSummary>
+pub sc_observability_types::ObservabilityHealthReport::logging: core::option::Option<sc_observability_types::LoggingHealthReport>
+pub sc_observability_types::ObservabilityHealthReport::projection_failures_total: u64
+pub sc_observability_types::ObservabilityHealthReport::state: sc_observability_types::ObservationHealthState
+pub sc_observability_types::ObservabilityHealthReport::subscriber_failures_total: u64
+pub sc_observability_types::ObservabilityHealthReport::telemetry: core::option::Option<sc_observability_types::TelemetryHealthReport>
+pub struct sc_observability_types::Observation<T> where T: sc_observability_types::Observable
+pub sc_observability_types::Observation::identity: sc_observability_types::ProcessIdentity
+pub sc_observability_types::Observation::payload: T
+pub sc_observability_types::Observation::service: sc_observability_types::ServiceName
+pub sc_observability_types::Observation::timestamp: sc_observability_types::Timestamp
+pub sc_observability_types::Observation::trace: core::option::Option<sc_observability_types::TraceContext>
+pub sc_observability_types::Observation::version: sc_observability_types::SchemaVersion
+impl<T> sc_observability_types::Observation<T> where T: sc_observability_types::Observable
+pub fn sc_observability_types::Observation<T>::new(sc_observability_types::ServiceName, T) -> Self
+pub struct sc_observability_types::OperationDiagnostic
+pub sc_observability_types::OperationDiagnostic::at: sc_observability_types::Timestamp
+pub sc_observability_types::OperationDiagnostic::code: sc_observability_types::ErrorCode
+pub sc_observability_types::OperationDiagnostic::message: alloc::string::String
+pub sc_observability_types::OperationDiagnostic::remediation: sc_observability_types::Remediation
+impl core::fmt::Display for sc_observability_types::OperationDiagnostic
+pub fn sc_observability_types::OperationDiagnostic::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::OutcomeLabel(_)
+impl sc_observability_types::OutcomeLabel
+pub fn sc_observability_types::OutcomeLabel::as_str(&self) -> &str
+pub fn sc_observability_types::OutcomeLabel::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::ValueValidationError>
+impl core::convert::AsRef<str> for sc_observability_types::OutcomeLabel
+pub fn sc_observability_types::OutcomeLabel::as_ref(&self) -> &str
+impl core::convert::TryFrom<alloc::string::String> for sc_observability_types::OutcomeLabel
+pub type sc_observability_types::OutcomeLabel::Error = sc_observability_types::ValueValidationError
+pub fn sc_observability_types::OutcomeLabel::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for sc_observability_types::OutcomeLabel
+pub fn sc_observability_types::OutcomeLabel::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::ProcessIdentity
+pub sc_observability_types::ProcessIdentity::hostname: core::option::Option<alloc::string::String>
+pub sc_observability_types::ProcessIdentity::pid: core::option::Option<u32>
+pub struct sc_observability_types::ProjectionRegistration<T> where T: sc_observability_types::Observable
+impl<T> sc_observability_types::ProjectionRegistration<T> where T: sc_observability_types::Observable
+pub fn sc_observability_types::ProjectionRegistration<T>::into_parts(self) -> (core::option::Option<alloc::sync::Arc<dyn sc_observability_types::LogProjector<T>>>, core::option::Option<alloc::sync::Arc<dyn sc_observability_types::v2::ObservationFilter<T>>>)
+pub fn sc_observability_types::ProjectionRegistration<T>::new() -> Self
+pub fn sc_observability_types::ProjectionRegistration<T>::with_filter(self, alloc::sync::Arc<dyn sc_observability_types::v2::ObservationFilter<T>>) -> Self
+pub fn sc_observability_types::ProjectionRegistration<T>::with_log_projector(self, alloc::sync::Arc<dyn sc_observability_types::LogProjector<T>>) -> Self
+impl<T> core::default::Default for sc_observability_types::ProjectionRegistration<T> where T: sc_observability_types::Observable
+pub fn sc_observability_types::ProjectionRegistration<T>::default() -> Self
+pub struct sc_observability_types::QueryHealthReport
+pub sc_observability_types::QueryHealthReport::last_error: core::option::Option<sc_observability_types::DiagnosticSummary>
+pub sc_observability_types::QueryHealthReport::state: sc_observability_types::QueryHealthState
+pub struct sc_observability_types::RecoverableSteps
+impl sc_observability_types::RecoverableSteps
+pub fn sc_observability_types::RecoverableSteps::all(impl core::iter::traits::collect::IntoIterator<Item = impl core::convert::Into<alloc::string::String>>) -> Self
+pub fn sc_observability_types::RecoverableSteps::first(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::RecoverableSteps::first_step(&self) -> core::option::Option<&str>
+pub fn sc_observability_types::RecoverableSteps::steps(&self) -> &[alloc::string::String]
+pub struct sc_observability_types::SchemaVersion(_)
+impl sc_observability_types::SchemaVersion
+pub fn sc_observability_types::SchemaVersion::as_str(&self) -> &str
+pub fn sc_observability_types::SchemaVersion::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::ValueValidationError>
+impl core::convert::AsRef<str> for sc_observability_types::SchemaVersion
+pub fn sc_observability_types::SchemaVersion::as_ref(&self) -> &str
+impl core::convert::TryFrom<alloc::string::String> for sc_observability_types::SchemaVersion
+pub type sc_observability_types::SchemaVersion::Error = sc_observability_types::ValueValidationError
+pub fn sc_observability_types::SchemaVersion::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for sc_observability_types::SchemaVersion
+pub fn sc_observability_types::SchemaVersion::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::ServiceName(_)
+impl sc_observability_types::ServiceName
+pub fn sc_observability_types::ServiceName::as_str(&self) -> &str
+pub fn sc_observability_types::ServiceName::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::ValueValidationError>
+impl core::convert::AsRef<str> for sc_observability_types::ServiceName
+pub fn sc_observability_types::ServiceName::as_ref(&self) -> &str
+impl core::convert::TryFrom<alloc::string::String> for sc_observability_types::ServiceName
+pub type sc_observability_types::ServiceName::Error = sc_observability_types::ValueValidationError
+pub fn sc_observability_types::ServiceName::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for sc_observability_types::ServiceName
+pub fn sc_observability_types::ServiceName::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::SinkHealth
+pub sc_observability_types::SinkHealth::last_error: core::option::Option<sc_observability_types::DiagnosticSummary>
+pub sc_observability_types::SinkHealth::name: sc_observability_types::SinkName
+pub sc_observability_types::SinkHealth::state: sc_observability_types::SinkHealthState
+pub struct sc_observability_types::SinkName(_)
+impl sc_observability_types::SinkName
+pub fn sc_observability_types::SinkName::as_str(&self) -> &str
+pub fn sc_observability_types::SinkName::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::ValueValidationError>
+impl core::convert::AsRef<str> for sc_observability_types::SinkName
+pub fn sc_observability_types::SinkName::as_ref(&self) -> &str
+impl core::convert::TryFrom<alloc::string::String> for sc_observability_types::SinkName
+pub type sc_observability_types::SinkName::Error = sc_observability_types::ValueValidationError
+pub fn sc_observability_types::SinkName::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for sc_observability_types::SinkName
+pub fn sc_observability_types::SinkName::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::SpanId(_)
+impl sc_observability_types::SpanId
+pub fn sc_observability_types::SpanId::as_str(&self) -> &str
+pub fn sc_observability_types::SpanId::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::ValueValidationError>
+impl core::convert::AsRef<str> for sc_observability_types::SpanId
+pub fn sc_observability_types::SpanId::as_ref(&self) -> &str
+impl core::convert::TryFrom<alloc::string::String> for sc_observability_types::SpanId
+pub type sc_observability_types::SpanId::Error = sc_observability_types::ValueValidationError
+pub fn sc_observability_types::SpanId::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for sc_observability_types::SpanId
+pub fn sc_observability_types::SpanId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::StateName(_)
+impl sc_observability_types::StateName
+pub fn sc_observability_types::StateName::as_str(&self) -> &str
+pub fn sc_observability_types::StateName::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::ValueValidationError>
+impl core::convert::AsRef<str> for sc_observability_types::StateName
+pub fn sc_observability_types::StateName::as_ref(&self) -> &str
+impl core::convert::TryFrom<alloc::string::String> for sc_observability_types::StateName
+pub type sc_observability_types::StateName::Error = sc_observability_types::ValueValidationError
+pub fn sc_observability_types::StateName::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for sc_observability_types::StateName
+pub fn sc_observability_types::StateName::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::StateTransition
+pub sc_observability_types::StateTransition::entity_id: core::option::Option<alloc::string::String>
+pub sc_observability_types::StateTransition::entity_kind: sc_observability_types::TargetCategory
+pub sc_observability_types::StateTransition::from_state: sc_observability_types::StateName
+pub sc_observability_types::StateTransition::reason: core::option::Option<alloc::string::String>
+pub sc_observability_types::StateTransition::to_state: sc_observability_types::StateName
+pub sc_observability_types::StateTransition::trigger: core::option::Option<sc_observability_types::ActionName>
+pub struct sc_observability_types::SubscriberRegistration<T> where T: sc_observability_types::Observable
+impl<T> sc_observability_types::SubscriberRegistration<T> where T: sc_observability_types::Observable
+pub fn sc_observability_types::SubscriberRegistration<T>::into_parts(self) -> (alloc::sync::Arc<dyn sc_observability_types::ObservationSubscriber<T>>, core::option::Option<alloc::sync::Arc<dyn sc_observability_types::v2::ObservationFilter<T>>>)
+pub fn sc_observability_types::SubscriberRegistration<T>::new(alloc::sync::Arc<dyn sc_observability_types::ObservationSubscriber<T>>) -> Self
+pub fn sc_observability_types::SubscriberRegistration<T>::with_filter(self, alloc::sync::Arc<dyn sc_observability_types::v2::ObservationFilter<T>>) -> Self
+pub struct sc_observability_types::TargetCategory(_)
+impl sc_observability_types::TargetCategory
+pub fn sc_observability_types::TargetCategory::as_str(&self) -> &str
+pub fn sc_observability_types::TargetCategory::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::ValueValidationError>
+impl core::convert::AsRef<str> for sc_observability_types::TargetCategory
+pub fn sc_observability_types::TargetCategory::as_ref(&self) -> &str
+impl core::convert::TryFrom<alloc::string::String> for sc_observability_types::TargetCategory
+pub type sc_observability_types::TargetCategory::Error = sc_observability_types::ValueValidationError
+pub fn sc_observability_types::TargetCategory::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for sc_observability_types::TargetCategory
+pub fn sc_observability_types::TargetCategory::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::TelemetryHealthReport
+pub sc_observability_types::TelemetryHealthReport::dropped_exports_total: u64
+pub sc_observability_types::TelemetryHealthReport::exporter_statuses: alloc::vec::Vec<sc_observability_types::ExporterHealth>
+pub sc_observability_types::TelemetryHealthReport::last_error: core::option::Option<sc_observability_types::DiagnosticSummary>
+pub sc_observability_types::TelemetryHealthReport::malformed_spans_total: u64
+pub sc_observability_types::TelemetryHealthReport::state: sc_observability_types::TelemetryHealthState
+pub struct sc_observability_types::Timestamp(_)
+impl sc_observability_types::Timestamp
+pub const sc_observability_types::Timestamp::UNIX_EPOCH: Self
+pub fn sc_observability_types::Timestamp::from_offset_date_time(time::offset_date_time::OffsetDateTime) -> Self
+pub fn sc_observability_types::Timestamp::into_inner(self) -> time::offset_date_time::OffsetDateTime
+pub fn sc_observability_types::Timestamp::now_utc() -> Self
+impl core::convert::From<sc_observability_types::Timestamp> for time::offset_date_time::OffsetDateTime
+pub fn time::offset_date_time::OffsetDateTime::from(sc_observability_types::Timestamp) -> Self
+impl core::convert::From<time::offset_date_time::OffsetDateTime> for sc_observability_types::Timestamp
+pub fn sc_observability_types::Timestamp::from(time::offset_date_time::OffsetDateTime) -> Self
+impl core::fmt::Display for sc_observability_types::Timestamp
+pub fn sc_observability_types::Timestamp::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::ops::arith::Add<time::signed_duration::SignedDuration> for sc_observability_types::Timestamp
+pub type sc_observability_types::Timestamp::Output = sc_observability_types::Timestamp
+pub fn sc_observability_types::Timestamp::add(self, time::Duration) -> Self::Output
+impl core::ops::arith::Sub for sc_observability_types::Timestamp
+pub type sc_observability_types::Timestamp::Output = time::signed_duration::SignedDuration
+pub fn sc_observability_types::Timestamp::sub(self, Self) -> Self::Output
+impl core::ops::arith::Sub<time::signed_duration::SignedDuration> for sc_observability_types::Timestamp
+pub type sc_observability_types::Timestamp::Output = sc_observability_types::Timestamp
+pub fn sc_observability_types::Timestamp::sub(self, time::Duration) -> Self::Output
+impl serde_core::ser::Serialize for sc_observability_types::Timestamp
+pub fn sc_observability_types::Timestamp::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for sc_observability_types::Timestamp
+pub fn sc_observability_types::Timestamp::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct sc_observability_types::ToolName(_)
+impl sc_observability_types::ToolName
+pub fn sc_observability_types::ToolName::as_str(&self) -> &str
+pub fn sc_observability_types::ToolName::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::ValueValidationError>
+impl core::convert::AsRef<str> for sc_observability_types::ToolName
+pub fn sc_observability_types::ToolName::as_ref(&self) -> &str
+impl core::convert::TryFrom<alloc::string::String> for sc_observability_types::ToolName
+pub type sc_observability_types::ToolName::Error = sc_observability_types::ValueValidationError
+pub fn sc_observability_types::ToolName::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for sc_observability_types::ToolName
+pub fn sc_observability_types::ToolName::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::TraceContext
+pub sc_observability_types::TraceContext::parent_span_id: core::option::Option<sc_observability_types::SpanId>
+pub sc_observability_types::TraceContext::span_id: sc_observability_types::SpanId
+pub sc_observability_types::TraceContext::trace_id: sc_observability_types::TraceId
+pub struct sc_observability_types::TraceId(_)
+impl sc_observability_types::TraceId
+pub fn sc_observability_types::TraceId::as_str(&self) -> &str
+pub fn sc_observability_types::TraceId::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::ValueValidationError>
+impl core::convert::AsRef<str> for sc_observability_types::TraceId
+pub fn sc_observability_types::TraceId::as_ref(&self) -> &str
+impl core::convert::TryFrom<alloc::string::String> for sc_observability_types::TraceId
+pub type sc_observability_types::TraceId::Error = sc_observability_types::ValueValidationError
+pub fn sc_observability_types::TraceId::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for sc_observability_types::TraceId
+pub fn sc_observability_types::TraceId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::ValueValidationError
+impl sc_observability_types::ValueValidationError
+pub fn sc_observability_types::ValueValidationError::code(&self) -> &sc_observability_types::ErrorCode
+pub fn sc_observability_types::ValueValidationError::new(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn sc_observability_types::ValueValidationError::with_code(sc_observability_types::ErrorCode, impl core::convert::Into<alloc::string::String>) -> Self
+pub const sc_observability_types::DEFAULT_ENV_PREFIX_SEPARATOR: char
+pub const sc_observability_types::OBSERVATION_ENVELOPE_VERSION: &str
+pub static sc_observability_types::OBSERVATION_SCHEMA_VERSION: std::sync::lazy_lock::LazyLock<sc_observability_types::SchemaVersion>
+pub trait sc_observability_types::DiagnosticInfo: sc_observability_types::sealed::Sealed
+pub fn sc_observability_types::DiagnosticInfo::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::EventError
+pub fn sc_observability_types::EventError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::IdentityError
+pub fn sc_observability_types::IdentityError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::InitError
+pub fn sc_observability_types::InitError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::LogSinkError
+pub fn sc_observability_types::LogSinkError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::QueryError
+pub fn sc_observability_types::QueryError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::typed::EventFailure
+pub fn sc_observability_types::typed::EventFailure::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::typed::ExportFailure
+pub fn sc_observability_types::typed::ExportFailure::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::typed::FlushFailure
+pub fn sc_observability_types::typed::FlushFailure::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::typed::IdentityFailure
+pub fn sc_observability_types::typed::IdentityFailure::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::typed::InitFailure
+pub fn sc_observability_types::typed::InitFailure::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::typed::LogSinkFailure
+pub fn sc_observability_types::typed::LogSinkFailure::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::typed::ProjectionFailure
+pub fn sc_observability_types::typed::ProjectionFailure::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::typed::ShutdownFailure
+pub fn sc_observability_types::typed::ShutdownFailure::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::typed::SubscriberFailure
+pub fn sc_observability_types::typed::SubscriberFailure::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::v2::EventError
+pub fn sc_observability_types::v2::EventError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::v2::FlushError
+pub fn sc_observability_types::v2::FlushError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::v2::IdentityError
+pub fn sc_observability_types::v2::IdentityError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::v2::InitError
+pub fn sc_observability_types::v2::InitError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::v2::LogSinkError
+pub fn sc_observability_types::v2::LogSinkError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::v2::ProjectionError
+pub fn sc_observability_types::v2::ProjectionError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::v2::ShutdownError
+pub fn sc_observability_types::v2::ShutdownError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+impl sc_observability_types::DiagnosticInfo for sc_observability_types::v2::SubscriberError
+pub fn sc_observability_types::v2::SubscriberError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+pub trait sc_observability_types::LogProjector<T> where T: sc_observability_types::Observable: core::marker::Send + core::marker::Sync
+pub fn sc_observability_types::LogProjector::project_logs(&self, &sc_observability_types::Observation<T>) -> core::result::Result<alloc::vec::Vec<sc_observability_types::LogEvent>, sc_observability_types::v2::ProjectionError>
+pub trait sc_observability_types::ObservabilityHealthProvider: telemetry_health_provider_sealed::Sealed + core::marker::Send + core::marker::Sync
+pub fn sc_observability_types::ObservabilityHealthProvider::telemetry_health(&self) -> sc_observability_types::TelemetryHealthReport
+impl<T> sc_observability_types::ObservabilityHealthProvider for alloc::sync::Arc<T> where T: sc_observability_types::ObservabilityHealthProvider + ?core::marker::Sized
+pub fn alloc::sync::Arc<T>::telemetry_health(&self) -> sc_observability_types::TelemetryHealthReport
+pub trait sc_observability_types::Observable: core::marker::Send + core::marker::Sync + 'static
+impl<T> sc_observability_types::Observable for T where T: core::marker::Send + core::marker::Sync + 'static
+pub trait sc_observability_types::ObservationSubscriber<T> where T: sc_observability_types::Observable: core::marker::Send + core::marker::Sync
+pub fn sc_observability_types::ObservationSubscriber::observe(&self, &sc_observability_types::Observation<T>) -> core::result::Result<(), sc_observability_types::v2::SubscriberError>
+pub trait sc_observability_types::ProcessIdentityResolver: core::marker::Send + core::marker::Sync
+pub fn sc_observability_types::ProcessIdentityResolver::resolve(&self) -> core::result::Result<sc_observability_types::ProcessIdentity, sc_observability_types::v2::IdentityError>

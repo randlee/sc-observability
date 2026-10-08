@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Run the hermetic OTLP collector conformance corpus for one candidate SHA.
+"""Run the official-Collector end-to-end qualification for one candidate SHA.
 
-The existing Rust fixtures own their loopback receivers, readiness signals,
-decoded-payload assertions, exporter lifecycle, and receiver cleanup.  This
-runner keeps those real network assertions isolated by feature matrix entry,
-retains one log per entry, and continues after an entry fails.
+The runner downloads the Collector pinned in ``tests/telemetry-e2e/collector-release.json``
+(archive and binary SHA-256 verified), then runs the native, installed-frontend and
+harness pytest files with ``TELEMETRY_E2E_COLLECTOR_BINARY`` set.  The tests start
+the Collector, drive the real artifacts and read its exported files back.  Each
+case keeps its own receipt and later cases run after an earlier one fails.
 """
 
 from __future__ import annotations
@@ -19,31 +20,41 @@ import traceback
 
 
 ROOT = Path(__file__).resolve().parents[4]
-CASE_TIMEOUT_SECONDS = 15 * 60
+TESTS = ROOT / "tests/telemetry-e2e"
+DOWNLOADER = TESTS / "download_collector.py"
+# One case may build the release wheel and install the CLI before it runs.
+CASE_TIMEOUT_SECONDS = 30 * 60
+SETUP_TIMEOUT_SECONDS = 5 * 60
+PYTEST_REQUIREMENTS = ["pytest==8.4.2", "pytest-timeout==2.4.0"]
+COLLECTOR_BINARY_NAME = "otelcol-contrib.exe" if os.name == "nt" else "otelcol-contrib"
 
-CASES = (
-    (
-        "sdk-full-stack",
-        [
-            "cargo", "test", "--locked", "-p", "sc-observability-otlp",
-            "--test", "full_stack_integration", "--features", "otlp-sdk", "--", "--nocapture",
-        ],
-    ),
-    (
-        "sync-http-full-stack",
-        [
-            "cargo", "test", "--locked", "-p", "sc-observability-otlp",
-            "--test", "full_stack_integration", "--features", "sync-http", "--", "--nocapture",
-        ],
-    ),
-    (
-        "combined-full-stack",
-        [
-            "cargo", "test", "--locked", "-p", "sc-observability-otlp",
-            "--test", "full_stack_integration", "--features", "otlp-sdk,sync-http", "--", "--nocapture",
-        ],
-    ),
+SETUP_CASES = (
+    ("install-pytest", [sys.executable, "-m", "pip", "install", *PYTEST_REQUIREMENTS]),
+    ("download-collector", None),  # command needs the output directory
 )
+TEST_FILES = (
+    ("native", "test_native.py"),
+    ("frontends", "test_frontends.py"),
+    ("harness-timeouts", "test_harness_timeouts.py"),
+)
+
+
+def setup_commands(output: Path) -> list[tuple[str, list[str]]]:
+    """Commands that must succeed before any test case can run."""
+    return [
+        (name, command if command is not None
+         else [sys.executable, str(DOWNLOADER), str(output / "otelcol-contrib")])
+        for name, command in SETUP_CASES
+    ]
+
+
+def case_commands(output: Path) -> list[tuple[str, list[str]]]:
+    """One pytest invocation per test file, each with its own JUnit report."""
+    return [
+        (name, [sys.executable, "-m", "pytest", "-q", str(TESTS / file),
+                f"--junitxml={output / (name + '.xml')}"])
+        for name, file in TEST_FILES
+    ]
 
 
 def timeout_output_text(output: str | bytes | None) -> str:
@@ -67,7 +78,7 @@ def timeout_output_text_after_cleanup(partial: str | bytes | None, drained: str 
 
 
 def case_process_options() -> dict[str, object]:
-    """Place each cargo case in an owned process group or Windows job group."""
+    """Place each case in an owned process group or Windows job group."""
     if os.name == "nt":
         return {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)}
     return {"start_new_session": True}
@@ -90,8 +101,11 @@ def terminate_process_tree(process: subprocess.Popen[str]) -> str:
     return "cleanup=posix-process-group-killed"
 
 
-def run_case(name: str, command: list[str], *, environment: dict[str, str], output: Path) -> bool:
-    """Run one bounded corpus entry and retain its entire cargo/test receipt."""
+def run_case(
+    name: str, command: list[str], *, environment: dict[str, str], output: Path,
+    timeout: int = CASE_TIMEOUT_SECONDS,
+) -> bool:
+    """Run one bounded case and retain its entire command/test receipt."""
     log = output / f"{name}.log"
     process = subprocess.Popen(
         command,
@@ -103,7 +117,7 @@ def run_case(name: str, command: list[str], *, environment: dict[str, str], outp
         **case_process_options(),
     )
     try:
-        stdout, stderr = process.communicate(timeout=CASE_TIMEOUT_SECONDS)
+        stdout, stderr = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired as error:
         cleanup = terminate_process_tree(process)
         drained_stdout, drained_stderr = process.communicate()
@@ -111,7 +125,7 @@ def run_case(name: str, command: list[str], *, environment: dict[str, str], outp
             receipt.write("$ " + " ".join(command) + "\n")
             receipt.write(timeout_output_text_after_cleanup(error.stdout, drained_stdout))
             receipt.write(timeout_output_text_after_cleanup(error.stderr, drained_stderr))
-            receipt.write(f"timeout={CASE_TIMEOUT_SECONDS}\n")
+            receipt.write(f"timeout={timeout}\n")
             receipt.write(cleanup + "\n")
         print(f"collector case {name}: timed out; inspect {log}", file=sys.stderr)
         return False
@@ -121,7 +135,7 @@ def run_case(name: str, command: list[str], *, environment: dict[str, str], outp
         receipt.write(stdout)
         receipt.write(stderr)
         receipt.write(f"exit={process.returncode}\n")
-        receipt.write("cleanup=cargo-process-exited\n")
+        receipt.write("cleanup=process-exited\n")
     if process.returncode:
         print(f"collector case {name}: exit {process.returncode}; inspect {log}", file=sys.stderr)
         return False
@@ -130,12 +144,19 @@ def run_case(name: str, command: list[str], *, environment: dict[str, str], outp
 
 
 def run(source_sha: str, output: Path) -> bool:
-    """Run every real collector corpus entry, retaining later results on failure."""
+    """Prepare the pinned Collector, then run every test case, retaining later results on failure."""
     output.mkdir(parents=True, exist_ok=True)
     environment = dict(os.environ)
+    for name, command in setup_commands(output):
+        if not run_case(name, command, environment=environment, output=output, timeout=SETUP_TIMEOUT_SECONDS):
+            print(f"collector setup {name} failed; no test case was run", file=sys.stderr)
+            return False
+    case_environment = environment | {
+        "TELEMETRY_E2E_COLLECTOR_BINARY": str(output / COLLECTOR_BINARY_NAME),
+    }
     outcomes = [
-        run_case(name, command, environment=environment, output=output)
-        for name, command in CASES
+        run_case(name, command, environment=case_environment, output=output)
+        for name, command in case_commands(output)
     ]
     return all(outcomes)
 

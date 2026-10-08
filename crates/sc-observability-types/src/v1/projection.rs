@@ -7,9 +7,7 @@ use std::sync::Arc;
 
 use crate::errors_v2::{ProjectionError, SubscriberError};
 use crate::v2::ObservationFilter;
-use crate::{LogEvent, Observable, Observation, SpanSignal};
-
-use super::MetricRecord;
+use crate::{LogEvent, Observable, Observation};
 
 type SubscriberRegistrationParts<T> = (
     Arc<dyn ObservationSubscriber<T>>,
@@ -18,8 +16,6 @@ type SubscriberRegistrationParts<T> = (
 
 type ProjectionRegistrationParts<T> = (
     Option<Arc<dyn LogProjector<T>>>,
-    Option<Arc<dyn SpanProjector<T>>>,
-    Option<Arc<dyn MetricProjector<T>>>,
     Option<Arc<dyn ObservationFilter<T>>>,
 );
 
@@ -49,40 +45,6 @@ where
     ///
     /// Returns [`ProjectionError`] when projection fails.
     fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError>;
-}
-
-/// Released 1.x projector contract for span signals.
-#[deprecated(note = "use sc_observability_types::v2::SpanProjector")]
-pub trait SpanProjector<T>: Send + Sync
-where
-    T: Observable,
-{
-    /// Projects one observation into zero or more span lifecycle signals.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ProjectionError`] when projection fails.
-    fn project_spans(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<SpanSignal>, ProjectionError>;
-}
-
-/// Released 1.x projector contract for metric records.
-#[deprecated(note = "use sc_observability_types::v2::MetricProjector")]
-pub trait MetricProjector<T>: Send + Sync
-where
-    T: Observable,
-{
-    /// Projects one observation into zero or more metric records.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ProjectionError`] when projection fails.
-    fn project_metrics(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<MetricRecord>, ProjectionError>;
 }
 
 /// Released 1.x registration for one typed observation subscriber.
@@ -143,8 +105,6 @@ where
     T: Observable,
 {
     log_projector: Option<Arc<dyn LogProjector<T>>>,
-    span_projector: Option<Arc<dyn SpanProjector<T>>>,
-    metric_projector: Option<Arc<dyn MetricProjector<T>>>,
     filter: Option<Arc<dyn ObservationFilter<T>>>,
 }
 
@@ -161,8 +121,6 @@ where
     pub fn new() -> Self {
         Self {
             log_projector: None,
-            span_projector: None,
-            metric_projector: None,
             filter: None,
         }
     }
@@ -171,20 +129,6 @@ where
     #[must_use]
     pub fn with_log_projector(mut self, projector: Arc<dyn LogProjector<T>>) -> Self {
         self.log_projector = Some(projector);
-        self
-    }
-
-    /// Attaches a span projector.
-    #[must_use]
-    pub fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self {
-        self.span_projector = Some(projector);
-        self
-    }
-
-    /// Attaches a metric projector.
-    #[must_use]
-    pub fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self {
-        self.metric_projector = Some(projector);
         self
     }
 
@@ -198,12 +142,7 @@ where
     /// Splits the registration into its projector components and optional filter.
     #[must_use]
     pub fn into_parts(self) -> ProjectionRegistrationParts<T> {
-        (
-            self.log_projector,
-            self.span_projector,
-            self.metric_projector,
-            self.filter,
-        )
+        (self.log_projector, self.filter)
     }
 }
 

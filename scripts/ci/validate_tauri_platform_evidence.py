@@ -69,7 +69,7 @@ def validate(root, source=None):
         if not policies['passed'] or {case['name'] for case in policies['records']} != REQUIRED_POLICIES or not all(case['passed'] for case in policies['records']):
             raise ValueError('host policy fixture missing or failed: ' + name)
         faults = json.loads(hashed('fault-results.json', report['fault_results_sha256']).read_text(encoding='utf-8'))
-        fixture_path = Path(__file__).resolve().parents[2] / 'bindings/conformance/v1/schema-cases.json'
+        fixture_path = Path(__file__).resolve().parents[2] / 'bindings/conformance/v2/schema-cases.json'
         if report['conformance_fixture_sha256'] != digest(fixture_path):
             raise ValueError('stale canonical conformance fixtures: ' + name)
         required_fixtures = {'schema-' + case['id'] for case in json.loads(fixture_path.read_text(encoding='utf-8'))}

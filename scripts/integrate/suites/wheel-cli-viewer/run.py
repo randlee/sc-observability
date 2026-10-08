@@ -19,6 +19,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[4]
 DOWNLOADER = ROOT / "scripts/ci/fixtures/otlp/desktop-viewer/download_pinned_release.py"
 TESTS = ROOT / "tests/telemetry-e2e"
+# Viewer coverage only: the Collector qualification runs from the collector suite.
+VIEWER_TEST_FILES = (TESTS / "test_viewer_readback.py", TESTS / "test_harness_timeouts.py")
 INSTALL_TIMEOUT_SECONDS = 180
 SUITE_TIMEOUT_SECONDS = 35 * 60
 TIMEOUT_EXIT_CODE = 124
@@ -94,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     pytest_state = output / "pytest-state"
     tested = run(
-        [sys.executable, "-m", "pytest", "-q", str(TESTS), f"--basetemp={pytest_state}",
+        [sys.executable, "-m", "pytest", "-q", *map(str, VIEWER_TEST_FILES), f"--basetemp={pytest_state}",
          f"--junitxml={output / 'pytest.xml'}"],
         timeout=SUITE_TIMEOUT_SECONDS,
         env=env | {

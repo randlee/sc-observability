@@ -1,0 +1,14 @@
+pub mod sc_observability_otlp
+pub mod sc_observability_otlp::constants
+pub const sc_observability_otlp::constants::DEFAULT_OTLP_TIMEOUT_MS: u64
+pub const sc_observability_otlp::constants::MAX_BATCH_RECORDS: usize
+pub const sc_observability_otlp::constants::MAX_INPUT_BYTES: usize
+pub mod sc_observability_otlp::error_codes
+pub mod sc_observability_otlp::error_codes::sync
+pub const sc_observability_otlp::error_codes::sync::CALLER_REJECTED: &str
+pub const sc_observability_otlp::error_codes::sync::INPUT_LIMIT_EXCEEDED: &str
+pub const sc_observability_otlp::error_codes::sync::INVALID_CONFIG: &str
+pub const sc_observability_otlp::error_codes::sync::INVALID_RECORD: &str
+pub const sc_observability_otlp::error_codes::sync::RUNTIME_ENTERED: &str
+pub const sc_observability_otlp::error_codes::ALL: &[sc_observability_types::primitives::ErrorCode]
+pub const sc_observability_otlp::error_codes::TELEMETRY_EXPORT_FAILED: sc_observability_types::primitives::ErrorCode

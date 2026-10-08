@@ -15,3 +15,4 @@ crates/sc-observability-otlp/src/durable/tests/fixtures/schema-v1.sql text eol=l
 docs/manual/sc-otel/** text eol=lf
 site/manual/sc-otel/** text eol=lf
 crates/sc-otel-cli/src/manual.txt text eol=lf
+schema/cli/sc-otel/** text eol=lf

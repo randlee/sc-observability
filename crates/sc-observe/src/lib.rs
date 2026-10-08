@@ -257,14 +257,10 @@ mod canonical {
 
     type ProjectLogsFn<T> =
         dyn Fn(&Observation<T>) -> Result<Vec<LogEvent>, DiagnosticSummary> + Send + Sync + 'static;
-    type ProjectFn<T> =
-        dyn Fn(&Observation<T>) -> Result<(), DiagnosticSummary> + Send + Sync + 'static;
 
-    /// One projector family's routes, erased to the shared dispatch shape.
+    /// One registration's log route and filter, erased to the shared dispatch shape.
     struct ProjectionRoutes<T: Observable> {
         logs: Option<Arc<ProjectLogsFn<T>>>,
-        spans: Option<Arc<ProjectFn<T>>>,
-        metrics: Option<Arc<ProjectFn<T>>>,
         filter: Option<Arc<dyn ObservationFilter<T>>>,
     }
 
@@ -893,32 +889,12 @@ mod canonical {
         where
             T: Observable,
         {
-            // Released projectors route natively: converting their root span and
-            // metric models to the canonical family would turn values it cannot
-            // hold, such as scalar histograms, into routing failures.
-            let (log_projector, span_projector, metric_projector, filter) =
-                registration.into_parts();
+            let (log_projector, filter) = registration.into_parts();
             self.register_projection_routes(ProjectionRoutes {
                 logs: log_projector.map(|projector| -> Arc<ProjectLogsFn<T>> {
                     Arc::new(move |observation| {
                         projector
                             .project_logs(observation)
-                            .map_err(|err| DiagnosticSummary::from(err.diagnostic()))
-                    })
-                }),
-                spans: span_projector.map(|projector| -> Arc<ProjectFn<T>> {
-                    Arc::new(move |observation| {
-                        projector
-                            .project_spans(observation)
-                            .map(drop)
-                            .map_err(|err| DiagnosticSummary::from(err.diagnostic()))
-                    })
-                }),
-                metrics: metric_projector.map(|projector| -> Arc<ProjectFn<T>> {
-                    Arc::new(move |observation| {
-                        projector
-                            .project_metrics(observation)
-                            .map(drop)
                             .map_err(|err| DiagnosticSummary::from(err.diagnostic()))
                     })
                 }),
@@ -934,8 +910,7 @@ mod canonical {
         where
             T: Observable,
         {
-            let (log_projector, span_projector, metric_projector, filter) =
-                registration.into_parts();
+            let (log_projector, filter) = registration.into_parts();
             self.register_projection_routes(ProjectionRoutes {
                 logs: log_projector.map(|projector| -> Arc<ProjectLogsFn<T>> {
                     Arc::new(move |observation| {
@@ -944,37 +919,16 @@ mod canonical {
                             .map_err(|err| DiagnosticSummary::from(err.diagnostic()))
                     })
                 }),
-                spans: span_projector.map(|projector| -> Arc<ProjectFn<T>> {
-                    Arc::new(move |observation| {
-                        projector
-                            .project_spans(observation)
-                            .map(drop)
-                            .map_err(|err| DiagnosticSummary::from(err.diagnostic()))
-                    })
-                }),
-                metrics: metric_projector.map(|projector| -> Arc<ProjectFn<T>> {
-                    Arc::new(move |observation| {
-                        projector
-                            .project_metrics(observation)
-                            .map(drop)
-                            .map_err(|err| DiagnosticSummary::from(err.diagnostic()))
-                    })
-                }),
                 filter,
             })
         }
 
-        /// Registers the type-erased dispatch shared by both projector families.
+        /// Registers the type-erased dispatch shared by both registration paths.
         fn register_projection_routes<T>(mut self, routes: ProjectionRoutes<T>) -> Self
         where
             T: Observable,
         {
-            let ProjectionRoutes {
-                logs,
-                spans,
-                metrics,
-                filter,
-            } = routes;
+            let ProjectionRoutes { logs, filter } = routes;
 
             self.projections.push(ErasedProjectionRegistration {
                 type_id: TypeId::of::<T>(),
@@ -1009,13 +963,6 @@ mod canonical {
                                     record_failure(err.summary());
                                 }
                             }
-                            Err(summary) => record_failure(summary),
-                        }
-                    }
-
-                    for project in [&spans, &metrics].into_iter().flatten() {
-                        match project(observation) {
-                            Ok(()) => result.matched = true,
                             Err(summary) => record_failure(summary),
                         }
                     }
@@ -1225,15 +1172,13 @@ mod tests {
     use sc_observability::v2::LogSink;
     use sc_observability::{LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration};
     use sc_observability_types::v2::{
-        AggregationTemporality, Attributes, FiniteF64, LogProjector, MetricProjector, MetricRecord,
-        MetricValue, ObservationFilter, ObservationSubscriber, ProjectionError,
-        ProjectionRegistration, SpanProjector, SpanRecord, SpanSignal, SubscriberError,
-        SubscriberRegistration, TraceContext, TraceFlags,
+        LogProjector, ObservationFilter, ObservationSubscriber, ProjectionError,
+        ProjectionRegistration, SubscriberError, SubscriberRegistration,
     };
     use sc_observability_types::{
-        ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricName, MetricUnit,
-        ProcessIdentity, SpanId, SpanStarted, TargetCategory, TelemetryHealthReport,
-        TelemetryHealthState, Timestamp, TraceContext as LegacyTraceContext, TraceId,
+        ActionName, Diagnostic, ErrorCode, Level, LogEvent, ProcessIdentity, SpanId,
+        TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp,
+        TraceContext as LegacyTraceContext, TraceId,
     };
     use serde_json::Map;
     use std::sync::mpsc;
@@ -1297,54 +1242,6 @@ mod tests {
         }
     }
 
-    struct RecordingSpanProjector {
-        count: Arc<AtomicU64>,
-    }
-
-    impl SpanProjector<AgentEvent> for RecordingSpanProjector {
-        fn project_spans(
-            &self,
-            observation: &Observation<AgentEvent>,
-        ) -> Result<Vec<SpanSignal>, ProjectionError> {
-            self.count.fetch_add(1, Ordering::SeqCst);
-            Ok(vec![SpanSignal::Started(SpanRecord::<SpanStarted>::new(
-                Timestamp::UNIX_EPOCH,
-                observation.service.clone(),
-                ActionName::new("span.started").expect("valid action"),
-                v2_trace_context(),
-                Attributes::new(),
-            ))])
-        }
-    }
-
-    struct RecordingMetricProjector {
-        count: Arc<AtomicU64>,
-    }
-
-    impl MetricProjector<AgentEvent> for RecordingMetricProjector {
-        fn project_metrics(
-            &self,
-            observation: &Observation<AgentEvent>,
-        ) -> Result<Vec<MetricRecord>, ProjectionError> {
-            self.count.fetch_add(1, Ordering::SeqCst);
-            Ok(vec![
-                MetricRecord::try_new(
-                    Timestamp::UNIX_EPOCH,
-                    observation.service.clone(),
-                    MetricName::new("obs.events_total").expect("valid metric"),
-                    MetricValue::Sum {
-                        value: FiniteF64::new(1.0).expect("finite metric value"),
-                        monotonic: true,
-                        temporality: AggregationTemporality::Cumulative,
-                        start_time: Timestamp::UNIX_EPOCH,
-                    },
-                )
-                .expect("valid cumulative metric")
-                .with_unit(Some(MetricUnit::new("1").expect("valid metric unit"))),
-            ])
-        }
-    }
-
     struct FailingProjector;
 
     impl LogProjector<AgentEvent> for FailingProjector {
@@ -1397,14 +1294,6 @@ mod tests {
                 .expect("system time before unix epoch")
                 .as_nanos()
         ))
-    }
-
-    fn v2_trace_context() -> TraceContext {
-        TraceContext::new(
-            TraceId::new("0123456789abcdef0123456789abcdef").expect("valid trace id"),
-            SpanId::new("0123456789abcdef").expect("valid span id"),
-            TraceFlags::new(0),
-        )
     }
 
     fn schema_version() -> sc_observability_types::SchemaVersion {
@@ -1538,20 +1427,11 @@ mod tests {
     #[test]
     fn projector_failures_are_isolated() {
         let log_calls = Arc::new(Mutex::new(Vec::new()));
-        let span_count = Arc::new(AtomicU64::new(0));
-        let metric_count = Arc::new(AtomicU64::new(0));
         let root = temp_path("projector-failure");
         let config = CanonicalObservabilityConfig::default_for(tool_name(), root).expect("config");
         let runtime = CanonicalObservability::builder(config)
             .register_projection(
-                ProjectionRegistration::new()
-                    .with_log_projector(Arc::new(FailingProjector))
-                    .with_span_projector(Arc::new(RecordingSpanProjector {
-                        count: span_count.clone(),
-                    }))
-                    .with_metric_projector(Arc::new(RecordingMetricProjector {
-                        count: metric_count.clone(),
-                    })),
+                ProjectionRegistration::new().with_log_projector(Arc::new(FailingProjector)),
             )
             .register_projection(ProjectionRegistration::new().with_log_projector(Arc::new(
                 RecordingLogProjector {
@@ -1566,8 +1446,6 @@ mod tests {
 
         let health = runtime.health();
         assert_eq!(health.projection_failures_total, 1);
-        assert_eq!(span_count.load(Ordering::SeqCst), 1);
-        assert_eq!(metric_count.load(Ordering::SeqCst), 1);
         assert_eq!(*log_calls.lock().expect("calls poisoned"), vec!["log"]);
     }
 

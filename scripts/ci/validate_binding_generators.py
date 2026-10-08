@@ -12,8 +12,8 @@ sys.path.insert(0,str(ROOT/'scripts'))
 from _binding_schema import inspect_schema,validate
 from _hashing import digest
 def main():
-    schema=json.loads((ROOT/'bindings/schema/v1.json').read_text(encoding='utf-8'));inspect_schema(schema)
-    cases=json.loads((ROOT/'bindings/conformance/v1/schema-cases.json').read_text(encoding='utf-8'))
+    schema=json.loads((ROOT/'bindings/schema/v2.json').read_text(encoding='utf-8'));inspect_schema(schema)
+    cases=json.loads((ROOT/'bindings/conformance/v2/schema-cases.json').read_text(encoding='utf-8'))
     for case in cases:
         try:validate(schema,schema['x-sc-entrypoints'][case['entrypoint']],case['value']);actual=True
         except ValueError:actual=False
@@ -46,7 +46,7 @@ def main():
     try:result.level_revision=0
     except AttributeError:pass
     else:raise AssertionError('generated value is mutable')
-    node_test='''import {readFileSync} from 'node:fs';import {validate} from './bindings/typescript/src/generated/index.ts';const cases=JSON.parse(readFileSync('bindings/conformance/v1/schema-cases.json','utf8'));for(const c of cases){if(validate(c.entrypoint,c.value)!==c.valid)throw new Error(c.id)}console.log(`TS_SCHEMA_CASES_PASSED: ${cases.length}`);'''
+    node_test='''import {readFileSync} from 'node:fs';import {validate} from './bindings/typescript/src/generated/index.ts';const cases=JSON.parse(readFileSync('bindings/conformance/v2/schema-cases.json','utf8'));for(const c of cases){if(validate(c.entrypoint,c.value)!==c.valid)throw new Error(c.id)}console.log(`TS_SCHEMA_CASES_PASSED: ${cases.length}`);'''
     subprocess.run(['node','--experimental-strip-types','--input-type=module','-e',node_test],cwd=ROOT,check=True)
     tools=[('generate_typescript_bindings.py','bindings/typescript/src/generated'),('generate_python_bindings.py','bindings/python/sc-observability-py/python/sc_observability/generated')]
     with tempfile.TemporaryDirectory(prefix='binding-generator-check-') as temp:
@@ -54,14 +54,14 @@ def main():
         schema_command=['cargo','run','--locked','--manifest-path',str(ROOT/'bindings/schema-generator/Cargo.toml'),'--bin','sc-observability-schema','--']
         for iteration in ['schema-a','schema-b']:
             destination=temporary/iteration
-            subprocess.run(schema_command+['--output',str(destination/'v1.json'),'--errors-output',str(destination/'errors-v1.json')],cwd=ROOT,check=True,capture_output=True)
-        for filename in ['v1.json','errors-v1.json']:
+            subprocess.run(schema_command+['--output',str(destination/'v2.json'),'--errors-output',str(destination/'errors-v2.json')],cwd=ROOT,check=True,capture_output=True)
+        for filename in ['v2.json','errors-v2.json']:
             assert (temporary/'schema-a'/filename).read_bytes()==(temporary/'schema-b'/filename).read_bytes()==(ROOT/'bindings/schema'/filename).read_bytes(),'nondeterministic canonical schema'
-        target=temporary/'schema-a/v1.json';target.write_bytes(target.read_bytes()+b' ');before=target.read_bytes()
-        rejected=subprocess.run(schema_command+['--output',str(target),'--errors-output',str(temporary/'schema-a/errors-v1.json'),'--check'],cwd=ROOT,capture_output=True)
+        target=temporary/'schema-a/v2.json';target.write_bytes(target.read_bytes()+b' ');before=target.read_bytes()
+        rejected=subprocess.run(schema_command+['--output',str(target),'--errors-output',str(temporary/'schema-a/errors-v2.json'),'--check'],cwd=ROOT,capture_output=True)
         assert rejected.returncode!=0 and target.read_bytes()==before,'schema check mode overwrote drift'
         for tool,output in tools:
-            command=[sys.executable,str(ROOT/'scripts'/tool),'--schema',str(ROOT/'bindings/schema/v1.json')]
+            command=[sys.executable,str(ROOT/'scripts'/tool),'--schema',str(ROOT/'bindings/schema/v2.json')]
             subprocess.run(command+['--output-dir',str(ROOT/output),'--check'],check=True)
             for iteration in ['a','b']:subprocess.run(command+['--output-dir',str(temporary/tool/iteration)],check=True)
             a,b=temporary/tool/'a',temporary/tool/'b'

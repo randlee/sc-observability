@@ -163,21 +163,12 @@ impl FlushError {
         Self::Drain { context }
     }
 
-    /// Returns the typed export cause retained by a drain failure, when present.
-    #[must_use]
-    pub fn export_cause(&self) -> Option<&ExportError> {
-        export_cause(self.context())
-    }
-
     /// Returns the native-owned wire failure classification.
     #[must_use]
     pub fn failure_classification(&self) -> FailureClassification {
-        self.context().failure_classification().unwrap_or_else(|| {
-            self.export_cause().map_or(
-                FailureClassification::Io,
-                ExportError::failure_classification,
-            )
-        })
+        self.context()
+            .failure_classification()
+            .unwrap_or(FailureClassification::Io)
     }
 }
 
@@ -198,36 +189,16 @@ impl ShutdownError {
         Self::Drain { context }
     }
 
-    /// Returns the typed export cause retained by a drain failure, when present.
-    #[must_use]
-    pub fn export_cause(&self) -> Option<&ExportError> {
-        export_cause(self.context())
-    }
-
     /// Returns the native-owned wire failure classification.
     #[must_use]
     pub fn failure_classification(&self) -> FailureClassification {
         match self {
             Self::Timeout { .. } => FailureClassification::timeout("shutdown"),
-            Self::Drain { context } => context.failure_classification().unwrap_or_else(|| {
-                self.export_cause().map_or(
-                    FailureClassification::Io,
-                    ExportError::failure_classification,
-                )
-            }),
+            Self::Drain { context } => context
+                .failure_classification()
+                .unwrap_or(FailureClassification::Io),
         }
     }
-}
-
-fn export_cause(context: &ErrorContext) -> Option<&ExportError> {
-    let mut source = std::error::Error::source(context);
-    while let Some(error) = source {
-        if let Some(export) = error.downcast_ref::<ExportError>() {
-            return Some(export);
-        }
-        source = std::error::Error::source(error);
-    }
-    None
 }
 
 context_error!(ProjectionError, Projection => crate::error_codes::DIAGNOSTIC_INVALID);
@@ -279,331 +250,9 @@ impl LogSinkError {
     }
 }
 
-/// Canonical export failures with preserved diagnostic context.
-#[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, thiserror::Error)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum ExportError {
-    /// Transport failure; preserves its underlying registered diagnostic code.
-    #[error(transparent)]
-    Transport {
-        #[doc = "Diagnostic, remediation, source and construction backtrace."]
-        context: Box<ErrorContext>,
-    },
-    /// Blocking backend in async context failure; see the canonical cause mapping.
-    #[error(transparent)]
-    BlockingBackendInAsyncContext {
-        #[doc = "Diagnostic, remediation, source and construction backtrace."]
-        context: Box<ErrorContext>,
-    },
-    /// Async lifecycle required failure; see the canonical cause mapping.
-    #[error(transparent)]
-    AsyncLifecycleRequired {
-        #[doc = "Diagnostic, remediation, source and construction backtrace."]
-        context: Box<ErrorContext>,
-    },
-    /// Runtime terminated failure; see the canonical cause mapping.
-    #[error(transparent)]
-    RuntimeTerminated {
-        #[doc = "Diagnostic, remediation, source and construction backtrace."]
-        context: Box<ErrorContext>,
-    },
-    /// Lifecycle timeout failure; see the canonical cause mapping.
-    #[error(transparent)]
-    LifecycleTimeout {
-        #[doc = "Diagnostic, remediation, source and construction backtrace."]
-        context: Box<ErrorContext>,
-    },
-    /// Queue full failure; see the canonical cause mapping.
-    #[error(transparent)]
-    QueueFull {
-        #[doc = "Diagnostic, remediation, source and construction backtrace."]
-        context: Box<ErrorContext>,
-    },
-    /// Worker terminated failure; see the canonical cause mapping.
-    #[error(transparent)]
-    WorkerTerminated {
-        #[doc = "Diagnostic, remediation, source and construction backtrace."]
-        context: Box<ErrorContext>,
-    },
-    /// Shutdown cancelled retry failure; see the canonical cause mapping.
-    #[error(transparent)]
-    ShutdownCancelledRetry {
-        #[doc = "Diagnostic, remediation, source and construction backtrace."]
-        context: Box<ErrorContext>,
-    },
-    /// Retry deadline exhausted failure; see the canonical cause mapping.
-    #[error(transparent)]
-    RetryDeadlineExhausted {
-        #[doc = "Diagnostic, remediation, source and construction backtrace."]
-        context: Box<ErrorContext>,
-    },
-    /// Non-retryable HTTP status failure; see the canonical cause mapping.
-    #[error(transparent)]
-    NonRetryableHttpStatus {
-        #[doc = "Diagnostic, remediation, source and construction backtrace."]
-        context: Box<ErrorContext>,
-    },
-    /// Retry attempts exhausted failure; see the canonical cause mapping.
-    #[error(transparent)]
-    RetryAttemptsExhausted {
-        #[doc = "Diagnostic, remediation, source and construction backtrace."]
-        context: Box<ErrorContext>,
-    },
-    /// Terminal export failure; see the canonical cause mapping.
-    #[error(transparent)]
-    TerminalExportFailure {
-        #[doc = "Diagnostic, remediation, source and construction backtrace."]
-        context: Box<ErrorContext>,
-    },
-}
-
-impl ExportError {
-    /// Returns the original error context without reconstruction.
-    #[must_use]
-    pub fn context(&self) -> &ErrorContext {
-        match self {
-            Self::Transport { context }
-            | Self::BlockingBackendInAsyncContext { context }
-            | Self::AsyncLifecycleRequired { context }
-            | Self::RuntimeTerminated { context }
-            | Self::LifecycleTimeout { context }
-            | Self::QueueFull { context }
-            | Self::WorkerTerminated { context }
-            | Self::ShutdownCancelledRetry { context }
-            | Self::RetryDeadlineExhausted { context }
-            | Self::NonRetryableHttpStatus { context }
-            | Self::RetryAttemptsExhausted { context }
-            | Self::TerminalExportFailure { context } => context,
-        }
-    }
-    /// Returns the preserved diagnostic.
-    #[must_use]
-    pub fn diagnostic(&self) -> &Diagnostic {
-        self.context().diagnostic()
-    }
-    /// Returns the stable machine-readable code for this export failure.
-    #[must_use]
-    pub fn code(&self) -> crate::ErrorCode {
-        match self {
-            Self::Transport { context } => context.diagnostic().code.clone(),
-            Self::BlockingBackendInAsyncContext { .. } => {
-                crate::error_codes::otlp::OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT
-            }
-            Self::AsyncLifecycleRequired { .. } => {
-                crate::error_codes::otlp::OTLP_ASYNC_LIFECYCLE_REQUIRED
-            }
-            Self::RuntimeTerminated { .. } => crate::error_codes::otlp::OTLP_RUNTIME_TERMINATED,
-            Self::LifecycleTimeout { .. } => crate::error_codes::otlp::OTLP_LIFECYCLE_TIMEOUT,
-            Self::QueueFull { .. } => crate::error_codes::otlp::OTLP_QUEUE_FULL,
-            Self::WorkerTerminated { .. } => crate::error_codes::otlp::OTLP_WORKER_TERMINATED,
-            Self::ShutdownCancelledRetry { .. } => {
-                crate::error_codes::otlp::OTLP_SHUTDOWN_CANCELLED_RETRY
-            }
-            Self::RetryDeadlineExhausted { .. } => {
-                crate::error_codes::otlp::OTLP_RETRY_DEADLINE_EXHAUSTED
-            }
-            Self::NonRetryableHttpStatus { .. } => {
-                crate::error_codes::otlp::OTLP_HTTP_STATUS_TERMINAL
-            }
-            Self::RetryAttemptsExhausted { .. } => {
-                crate::error_codes::otlp::OTLP_RETRY_ATTEMPTS_EXHAUSTED
-            }
-            Self::TerminalExportFailure { .. } => crate::error_codes::otlp::OTLP_EXPORT_TERMINAL,
-        }
-    }
-    /// Returns the native-owned wire failure classification.
-    #[must_use]
-    pub const fn failure_classification(&self) -> FailureClassification {
-        match self {
-            Self::Transport { .. }
-            | Self::NonRetryableHttpStatus { .. }
-            | Self::RetryAttemptsExhausted { .. }
-            | Self::TerminalExportFailure { .. } => FailureClassification::Io,
-            Self::BlockingBackendInAsyncContext { .. } => {
-                FailureClassification::validation("runtime")
-            }
-            Self::AsyncLifecycleRequired { .. } => FailureClassification::validation("lifecycle"),
-            Self::RuntimeTerminated { .. } | Self::WorkerTerminated { .. } => {
-                FailureClassification::Unavailable
-            }
-            Self::LifecycleTimeout { .. } => FailureClassification::timeout("lifecycle"),
-            Self::QueueFull { .. } => FailureClassification::QueueFull,
-            Self::ShutdownCancelledRetry { .. } => FailureClassification::Cancelled {
-                operation: "shutdown",
-            },
-            Self::RetryDeadlineExhausted { .. } => FailureClassification::timeout("retry"),
-        }
-    }
-    /// Takes the original boxed context, preserving source identity and backtrace.
-    #[must_use]
-    pub fn into_context(self) -> Box<ErrorContext> {
-        match self {
-            Self::Transport { context }
-            | Self::BlockingBackendInAsyncContext { context }
-            | Self::AsyncLifecycleRequired { context }
-            | Self::RuntimeTerminated { context }
-            | Self::LifecycleTimeout { context }
-            | Self::QueueFull { context }
-            | Self::WorkerTerminated { context }
-            | Self::ShutdownCancelledRetry { context }
-            | Self::RetryDeadlineExhausted { context }
-            | Self::NonRetryableHttpStatus { context }
-            | Self::RetryAttemptsExhausted { context }
-            | Self::TerminalExportFailure { context } => context,
-        }
-    }
-}
-impl sealed::Sealed for ExportError {}
-impl DiagnosticInfo for ExportError {
-    fn diagnostic(&self) -> &Diagnostic {
-        self.diagnostic()
-    }
-}
-
-context_error!(
-    ConfigFailure,
-    ZeroDuration => crate::error_codes::otlp::OTLP_CONFIG_ZERO_DURATION,
-    DurationOverflow => crate::error_codes::otlp::OTLP_CONFIG_DURATION_OVERFLOW,
-    InvalidBoundOrdering => crate::error_codes::otlp::OTLP_CONFIG_BOUND_ORDER,
-    InvalidJitterPercent => crate::error_codes::otlp::OTLP_CONFIG_JITTER_PERCENT,
-    InvalidQueueCapacity => crate::error_codes::otlp::OTLP_CONFIG_QUEUE_CAPACITY,
-    InvalidQueueByteCapacity => crate::error_codes::otlp::OTLP_CONFIG_QUEUE_BYTE_CAPACITY,
-    ConfigFieldNotApplicable => crate::error_codes::otlp::OTLP_CONFIG_FIELD_NOT_APPLICABLE,
-    InsecureTransportRejected => crate::error_codes::otlp::OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED,
-    InvalidEndpoint => crate::error_codes::otlp::OTLP_CONFIG_INVALID_ENDPOINT,
-    InvalidHeader => crate::error_codes::otlp::OTLP_CONFIG_INVALID_HEADER,
-    TransportConstructionFailed => crate::error_codes::otlp::OTLP_TRANSPORT_CONSTRUCTION_FAILED,
-    UnsupportedBackend => crate::error_codes::otlp::OTLP_UNSUPPORTED_BACKEND,
-    UnsupportedProtocol => crate::error_codes::otlp::OTLP_UNSUPPORTED_PROTOCOL,
-    TokioRuntimeRequired => crate::error_codes::otlp::OTLP_TOKIO_RUNTIME_REQUIRED
-);
-
-impl ConfigFailure {
-    /// Returns the native-owned wire failure classification.
-    #[must_use]
-    pub const fn failure_classification(&self) -> FailureClassification {
-        let field = match self {
-            Self::ZeroDuration { .. } | Self::DurationOverflow { .. } => "duration",
-            Self::InvalidBoundOrdering { .. } => "bounds",
-            Self::InvalidJitterPercent { .. } => "jitter_percent",
-            Self::InvalidQueueCapacity { .. } => "queue_capacity",
-            Self::InvalidQueueByteCapacity { .. } => "queue_byte_capacity",
-            Self::ConfigFieldNotApplicable { .. } => "config",
-            Self::InsecureTransportRejected { .. } | Self::InvalidEndpoint { .. } => "endpoint",
-            Self::InvalidHeader { .. } => "headers",
-            Self::TransportConstructionFailed { .. } => "transport",
-            Self::UnsupportedBackend { .. } => "backend",
-            Self::UnsupportedProtocol { .. } => "protocol",
-            Self::TokioRuntimeRequired { .. } => "runtime",
-        };
-        FailureClassification::validation(field)
-    }
-}
-
-context_error!(
-    MetricModelError,
-    InvalidHistogram => crate::error_codes::SC_METRIC_INVALID_HISTOGRAM,
-    InvalidTemporality => crate::error_codes::SC_METRIC_INVALID_TEMPORALITY,
-    InvalidInterval => crate::error_codes::SC_METRIC_INVALID_INTERVAL
-);
-
-impl MetricModelError {
-    /// Returns the native-owned wire failure classification.
-    #[must_use]
-    pub const fn failure_classification(&self) -> FailureClassification {
-        let field = match self {
-            Self::InvalidHistogram { .. } => "histogram",
-            Self::InvalidTemporality { .. } => "temporality",
-            Self::InvalidInterval { .. } => "interval",
-        };
-        FailureClassification::validation(field)
-    }
-}
-
-/// Telemetry admission guard or the precise canonical export failure.
-#[non_exhaustive]
-#[derive(Debug, PartialEq, Serialize, Deserialize, thiserror::Error)]
-pub enum TelemetryError {
-    /// Admission is closed; stable code `OTLP_TELEMETRY_SHUTDOWN`.
-    #[error("{context}")]
-    Shutdown {
-        /// Diagnostic, remediation, source and construction backtrace.
-        #[source]
-        context: Box<ErrorContext>,
-    },
-    /// Preserves the export variant, its context and typed source chain.
-    #[error("{0}")]
-    ExportFailure(#[from] ExportError),
-    /// Canonical event admission rejected the event; delegates to the inner `EventError`.
-    #[error("{0}")]
-    Event(#[from] EventError),
-}
-impl TelemetryError {
-    /// Returns the original error context without reconstruction.
-    #[must_use]
-    pub fn context(&self) -> &ErrorContext {
-        match self {
-            Self::Shutdown { context } => context,
-            Self::ExportFailure(error) => error.context(),
-            Self::Event(error) => error.context(),
-        }
-    }
-
-    /// Returns the preserved diagnostic.
-    #[must_use]
-    pub fn diagnostic(&self) -> &Diagnostic {
-        self.context().diagnostic()
-    }
-
-    /// Takes the original boxed context, preserving source identity and backtrace.
-    #[must_use]
-    pub fn into_context(self) -> Box<ErrorContext> {
-        match self {
-            Self::Shutdown { context } => context,
-            Self::ExportFailure(error) => error.into_context(),
-            Self::Event(error) => error.into_context(),
-        }
-    }
-
-    /// Returns the stable code without discarding the export cause.
-    #[must_use]
-    pub fn code(&self) -> crate::ErrorCode {
-        match self {
-            Self::Shutdown { .. } => crate::error_codes::otlp::OTLP_TELEMETRY_SHUTDOWN,
-            Self::ExportFailure(error) => error.code(),
-            Self::Event(error) => error.code(),
-        }
-    }
-    /// Returns the native-owned wire failure classification.
-    #[must_use]
-    pub fn failure_classification(&self) -> FailureClassification {
-        match self {
-            Self::Shutdown { .. } => FailureClassification::Closed,
-            Self::ExportFailure(error) => error.failure_classification(),
-            Self::Event(error) => error.failure_classification(),
-        }
-    }
-}
-
-impl sealed::Sealed for TelemetryError {}
-
-impl DiagnosticInfo for TelemetryError {
-    fn diagnostic(&self) -> &Diagnostic {
-        self.diagnostic()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[derive(Debug, thiserror::Error)]
-    #[error("export wrapper")]
-    struct ExportWrapper {
-        #[source]
-        source: ExportError,
-    }
 
     fn context(message: &str) -> ErrorContext {
         ErrorContext::new(
@@ -619,36 +268,24 @@ mod tests {
             message,
             crate::Remediation::not_recoverable("inspect the lost helper"),
         )
-        .source(Box::new(ExportError::Transport {
-            context: Box::new(context("retained export cause")),
-        }))
+        .source(Box::new(std::io::Error::other("retained helper cause")))
     }
 
     #[test]
-    fn drain_classification_prefers_explicit_native_value_and_finds_nested_export_source() {
-        let export = ExportError::Transport {
-            context: Box::new(context("export transport failed")),
-        };
+    fn drain_classification_prefers_explicit_native_value_and_keeps_its_source() {
         let drain = ErrorContext::new(
             crate::error_codes::DIAGNOSTIC_INVALID,
             "flush helper failed",
             crate::Remediation::not_recoverable("inspect the helper"),
         )
-        .source(Box::new(ExportWrapper { source: export }));
+        .source(Box::new(std::io::Error::other("helper transport failed")));
         let error =
             FlushError::classified_drain(Box::new(drain), FailureClassification::Unavailable);
 
-        let wrapper = std::error::Error::source(error.context())
-            .and_then(|source| source.downcast_ref::<ExportWrapper>())
-            .expect("drain retains its wrapper source");
-        let expected = std::error::Error::source(wrapper)
-            .and_then(|source| source.downcast_ref::<ExportError>())
-            .expect("wrapper retains its export source");
-
-        assert!(std::ptr::eq(
-            error.export_cause().expect("nested export source"),
-            expected
-        ));
+        let source = std::error::Error::source(error.context())
+            .and_then(|source| source.downcast_ref::<std::io::Error>())
+            .expect("drain retains its source");
+        assert_eq!(source.to_string(), "helper transport failed");
         assert_eq!(
             error.failure_classification(),
             FailureClassification::Unavailable
@@ -787,7 +424,7 @@ mod tests {
     }
 
     #[test]
-    fn helper_lost_drain_retains_internal_classification_and_export_source() {
+    fn helper_lost_drain_retains_internal_classification_and_source() {
         let flush = FlushError::classified_drain(
             Box::new(helper_lost_context("flush helper lost")),
             FailureClassification::Internal,
@@ -808,11 +445,10 @@ mod tests {
                     $error.failure_classification(),
                     FailureClassification::Internal
                 );
-                assert!(matches!(
-                    $error.export_cause(),
-                    Some(ExportError::Transport { context })
-                        if context.diagnostic().message == "retained export cause"
-                ));
+                assert_eq!(
+                    std::error::Error::source($error.context()).map(ToString::to_string),
+                    Some("retained helper cause".to_owned())
+                );
             };
         }
 
@@ -821,20 +457,15 @@ mod tests {
     }
 
     #[test]
-    fn unclassified_drain_uses_export_source_or_io_fallback() {
-        let exported = FlushError::Drain {
-            context: Box::new(context("drain").source(Box::new(ExportError::QueueFull {
-                context: Box::new(context("transport")),
-            }))),
+    fn unclassified_drain_falls_back_to_io() {
+        let flush = FlushError::Drain {
+            context: Box::new(context("drain").source(Box::new(std::io::Error::other("io")))),
         };
-        let fallback = ShutdownError::Drain {
-            context: Box::new(context("drain without export source")),
+        let shutdown = ShutdownError::Drain {
+            context: Box::new(context("drain without source")),
         };
 
-        assert_eq!(
-            exported.failure_classification(),
-            FailureClassification::QueueFull
-        );
-        assert_eq!(fallback.failure_classification(), FailureClassification::Io);
+        assert_eq!(flush.failure_classification(), FailureClassification::Io);
+        assert_eq!(shutdown.failure_classification(), FailureClassification::Io);
     }
 }

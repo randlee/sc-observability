@@ -99,19 +99,6 @@ pub enum ObservationError {
     RoutingFailure(#[source] Box<ErrorContext>),
 }
 
-/// Telemetry emit error returned by the released root `Telemetry` operations.
-#[cfg(feature = "v1")]
-#[deprecated(note = "removed; see docs/migration/phase-f.md")]
-#[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
-pub enum TelemetryError {
-    /// The telemetry runtime has already been shut down.
-    #[error("telemetry runtime is shut down")]
-    Shutdown,
-    /// Export or span-assembly work failed for the requested telemetry operation.
-    #[error("{0}")]
-    ExportFailure(#[source] Box<ErrorContext>),
-}
-
 #[cfg(all(test, feature = "v1"))]
 mod tests {
     use super::*;
