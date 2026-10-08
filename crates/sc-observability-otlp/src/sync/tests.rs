@@ -830,6 +830,18 @@ fn invalid_configuration_is_rejected() {
         validation_code(client().with_header("bad header", "v").map(drop)),
         codes::INVALID_CONFIG
     );
+    for name in [
+        "content-type",
+        "Content-Encoding",
+        "content-length",
+        "host",
+    ] {
+        assert_eq!(
+            validation_code(client().with_header(name, "application/x-protobuf").map(drop)),
+            codes::INVALID_CONFIG,
+            "{name} must remain exporter-owned"
+        );
+    }
     assert_eq!(
         validation_code(client().with_header("x-token", "line\nbreak").map(drop)),
         codes::INVALID_CONFIG

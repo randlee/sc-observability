@@ -92,7 +92,9 @@ use crate::constants::{
 };
 use crate::error_codes::sync as codes;
 use crate::{api, sdk};
-use otel_reqwest::header::{HeaderMap, HeaderValue};
+use otel_reqwest::header::{
+    CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, HOST, HeaderMap, HeaderName, HeaderValue,
+};
 
 #[cfg(test)]
 mod tests;
@@ -352,7 +354,9 @@ impl Client {
     ///
     /// Returns [`SyncError::Validation`] with
     /// [`error_codes::sync::INVALID_CONFIG`](crate::error_codes::sync::INVALID_CONFIG)
-    /// for an invalid header name or value.
+    /// for an invalid, reserved, or malformed header name or value. The OTLP
+    /// protocol owns `content-type`, `content-encoding`, `content-length`, and
+    /// `host`.
     pub fn with_header(mut self, name: &str, value: &str) -> Result<Self, SyncError> {
         let name = otel_reqwest::header::HeaderName::from_bytes(name.as_bytes()).map_err(|_| {
             SyncError::validation(
@@ -360,6 +364,12 @@ impl Client {
                 format!("invalid header name {name:?}"),
             )
         })?;
+        if Self::is_reserved_protocol_header(&name) {
+            return Err(SyncError::validation(
+                codes::INVALID_CONFIG,
+                format!("header {name} is reserved for the OTLP protocol"),
+            ));
+        }
         let mut header_value = HeaderValue::from_str(value).map_err(|_| {
             SyncError::validation(
                 codes::INVALID_CONFIG,
@@ -373,6 +383,13 @@ impl Client {
         }
         self.headers.insert(name, header_value);
         Ok(self)
+    }
+
+    fn is_reserved_protocol_header(name: &HeaderName) -> bool {
+        *name == CONTENT_TYPE
+            || *name == CONTENT_ENCODING
+            || *name == CONTENT_LENGTH
+            || *name == HOST
     }
 
     /// Sets the connect, request and retry-sequence timeout. The default is
