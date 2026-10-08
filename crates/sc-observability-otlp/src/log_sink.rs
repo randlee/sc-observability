@@ -48,7 +48,7 @@ use sc_observability_types::v2::LogSinkError;
 use sc_observability_types::{Level, LogEvent, SinkHealth, SinkHealthState, SinkName};
 use serde_json::Value;
 
-use crate::constants::{OTEL_LOG_SINK_NAME, SDK_DIAGNOSTIC_TARGET_PREFIX};
+use crate::constants::{OTEL_LOG_SINK_NAME, SDK_DIAGNOSTIC_TARGET};
 use crate::{api, sdk};
 
 #[cfg(test)]
@@ -75,9 +75,11 @@ mod tests;
 /// distinct from the resource's `service.name`. Optional identifiers,
 /// outcome, diagnostic, state transition and process identity become
 /// `sc.observability.log.*` attributes and event fields are added under their
-/// own names. Events whose target starts with `opentelemetry` are SDK
-/// diagnostics routed back through a bridge; the sink drops them so they never
-/// recurse into the SDK.
+/// own names. Events whose target is exactly `opentelemetry` or starts with
+/// `opentelemetry::` are SDK diagnostics routed back through a bridge; the sink
+/// drops them so they never recurse into the SDK. Similar application targets
+/// such as `opentelemetry_app`, `opentelemetry_sdk`, and `opentelemetry_otlp`
+/// remain eligible for export.
 #[derive(Debug)]
 pub struct OtelLogSink {
     logger: SdkLogger,
@@ -95,11 +97,7 @@ impl OtelLogSink {
 
 impl LogSink for OtelLogSink {
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
-        if event
-            .target
-            .as_str()
-            .starts_with(SDK_DIAGNOSTIC_TARGET_PREFIX)
-        {
+        if is_sdk_diagnostic_target(event.target.as_str()) {
             return Ok(());
         }
         let mut record = self.logger.create_log_record();
@@ -121,6 +119,13 @@ impl LogSink for OtelLogSink {
             last_error: None,
         }
     }
+}
+
+fn is_sdk_diagnostic_target(target: &str) -> bool {
+    target == SDK_DIAGNOSTIC_TARGET
+        || target
+            .strip_prefix(SDK_DIAGNOSTIC_TARGET)
+            .is_some_and(|suffix| suffix.starts_with("::"))
 }
 
 /// Serializes one log event value; the shared event types always serialize.

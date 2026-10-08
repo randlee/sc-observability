@@ -25,7 +25,7 @@ pub(crate) const OTLP_HTTP_METRICS_PATH: &str = "v1/metrics";
 /// Health name reported by `OtelLogSink`.
 #[cfg(feature = "log-sink")]
 pub(crate) const OTEL_LOG_SINK_NAME: &str = "opentelemetry";
-/// Target prefix of OpenTelemetry SDK diagnostics, which `OtelLogSink` drops
-/// so they never recurse into the SDK.
+/// Target namespace of OpenTelemetry SDK diagnostics, dropped at the exact
+/// target or `::` child boundary.
 #[cfg(feature = "log-sink")]
-pub(crate) const SDK_DIAGNOSTIC_TARGET_PREFIX: &str = "opentelemetry";
+pub(crate) const SDK_DIAGNOSTIC_TARGET: &str = "opentelemetry";

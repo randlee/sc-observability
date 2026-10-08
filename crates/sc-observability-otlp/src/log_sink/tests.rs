@@ -340,20 +340,47 @@ fn all_zero_trace_ids_are_not_mapped_as_trace_context() {
 }
 
 #[test]
-fn sdk_diagnostic_targets_are_dropped() {
+fn sdk_diagnostic_target_boundary_drops_only_the_sdk_namespace() {
+    assert!(super::is_sdk_diagnostic_target("opentelemetry"));
+    assert!(super::is_sdk_diagnostic_target("opentelemetry::otlp"));
+    assert!(!super::is_sdk_diagnostic_target("opentelemetry_app"));
+    assert!(!super::is_sdk_diagnostic_target("opentelemetry_sdk"));
+    assert!(!super::is_sdk_diagnostic_target("opentelemetry_otlp"));
+    assert!(!super::is_sdk_diagnostic_target("opentelemetry.otlp"));
+    assert!(!super::is_sdk_diagnostic_target("application"));
+
     let exporter = CapturingExporter::default();
     let provider = provider(exporter.clone());
     let sink = OtelLogSink::new(&provider, scope());
+    sink.write(&event("opentelemetry"))
+        .expect("diagnostic write");
     sink.write(&event("opentelemetry_sdk"))
-        .expect("diagnostic write");
+        .expect("application namespace write");
+    sink.write(&event("opentelemetry_otlp"))
+        .expect("application namespace write");
     sink.write(&event("opentelemetry.otlp"))
-        .expect("diagnostic write");
+        .expect("application target write");
+    sink.write(&event("opentelemetry_app"))
+        .expect("application namespace write");
     sink.write(&event("application"))
         .expect("application write");
     provider.force_flush().expect("provider flush");
     let records = exporter.records();
-    assert_eq!(records.len(), 1, "only the application event is emitted");
-    assert_eq!(records[0].target().map(AsRef::as_ref), Some("application"));
+    let targets = records
+        .iter()
+        .map(|record| record.target().map(AsRef::as_ref))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        targets,
+        [
+            Some("opentelemetry_sdk"),
+            Some("opentelemetry_otlp"),
+            Some("opentelemetry.otlp"),
+            Some("opentelemetry_app"),
+            Some("application"),
+        ],
+        "similar application targets remain eligible for export"
+    );
     provider.shutdown().expect("provider shutdown");
 }
 
