@@ -2,6 +2,7 @@
 use super::*;
 use sc_observability_otlp::constants::{MAX_BATCH_RECORDS, MAX_INPUT_BYTES};
 use sc_observability_otlp::sdk::error::OTelSdkError;
+use serde_json::Value;
 use std::ffi::{CStr, CString};
 
 fn config(timeout_s: Option<f64>, root_certificate: Option<PathBuf>) -> Config {
@@ -435,4 +436,27 @@ fn a_blocked_export_releases_the_gil() {
     release.send(()).expect("release collector");
     let result = sender.join().expect("send thread");
     assert_eq!(envelope(&result)["kind"], "ok", "{result}");
+}
+
+#[test]
+fn panic_payload_does_not_reach_python_failure() {
+    Python::initialize();
+    Python::attach(|py| {
+        let payload = "Authorization: Bearer top-secret";
+        let result = run(py, config(None, None), "send_log", || {
+            std::panic::panic_any(payload)
+        });
+        let envelope: Value = serde_json::from_str(&result).expect("valid failure envelope");
+        assert_eq!(envelope["kind"], "error");
+        assert_eq!(envelope["error"]["kind"], "internal");
+        assert_eq!(
+            envelope["error"]["code"],
+            sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL
+        );
+        assert_eq!(
+            envelope["error"]["message"],
+            "native telemetry call panicked"
+        );
+        assert!(!result.contains(payload));
+    });
 }

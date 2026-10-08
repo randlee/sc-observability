@@ -160,20 +160,7 @@ fn run(
     }));
     result_json(match outcome {
         Ok(result) => result.map_err(|error| failure(operation, &error)),
-        Err(payload) => {
-            let cause = payload
-                .downcast_ref::<String>()
-                .cloned()
-                .or_else(|| {
-                    payload
-                        .downcast_ref::<&str>()
-                        .map(|text| (*text).to_owned())
-                })
-                .unwrap_or_else(|| "non-string panic payload".into());
-            Err(internal_failure(format!(
-                "native telemetry call panicked: {cause}"
-            )))
-        }
+        Err(_) => Err(internal_failure("native telemetry call panicked")),
     })
 }
 
