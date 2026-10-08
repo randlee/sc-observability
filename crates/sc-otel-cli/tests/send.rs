@@ -430,7 +430,15 @@ fn rejected_export_exits_7_without_printing_credentials() {
         Some(format!("Bearer {SECRET}").as_str())
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("SC_OBSERVABILITY_OTLP_EXPORT_FAILED"),
+        "{stderr}"
+    );
     assert!(stderr.contains("export failed"), "{stderr}");
+    assert!(
+        stderr.contains("check the endpoint and --root-certificate; raise --timeout"),
+        "{stderr}"
+    );
     assert!(!stderr.contains(SECRET), "{stderr}");
     assert!(!stderr.contains("s3cret-pass"), "{stderr}");
     assert!(output.stdout.is_empty());

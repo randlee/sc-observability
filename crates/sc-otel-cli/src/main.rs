@@ -8,6 +8,7 @@ mod error_codes;
 mod send;
 
 use clap::Parser;
+use sc_observability_otlp::{error_codes::TELEMETRY_EXPORT_FAILED, sync::SyncError};
 use std::{panic::AssertUnwindSafe, process::ExitCode};
 
 fn main() -> ExitCode {
@@ -69,7 +70,13 @@ fn run() -> u8 {
         Ok(()) => error_codes::EXIT_OK,
         Err(error) => {
             // Display only: the client redacts header values and URL userinfo there.
-            eprintln!("sc-otel: {error}");
+            match &error {
+                SyncError::Export(_) => eprintln!(
+                    "sc-otel: {TELEMETRY_EXPORT_FAILED}: {error}; \
+                     check the endpoint and --root-certificate; raise --timeout if needed"
+                ),
+                SyncError::Validation { .. } => eprintln!("sc-otel: {error}"),
+            }
             send::exit_code(&error)
         }
     }
