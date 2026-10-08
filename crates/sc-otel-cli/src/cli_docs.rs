@@ -99,8 +99,25 @@ fn artifact(root: &Path, relative: &str, expected: &str, update: bool) {
     } else {
         let actual = std::fs::read_to_string(&path)
             .unwrap_or_else(|error| panic!("{}: {error}; run {REGENERATE}", path.display()));
-        assert_eq!(actual, expected, "{relative} is stale; run {REGENERATE}");
+        assert!(
+            artifact_text_matches(&actual, expected),
+            "{relative} is stale; run {REGENERATE}"
+        );
     }
+}
+
+fn artifact_text_matches(actual: &str, expected: &str) -> bool {
+    actual.replace("\r\n", "\n") == expected
+}
+
+#[test]
+fn generated_artifacts_accept_crlf_checkout_without_hiding_content_drift() {
+    let expected = "first line\nsecond line\n";
+    let crlf_checkout = expected.replace('\n', "\r\n");
+    assert!(artifact_text_matches(&crlf_checkout, expected));
+
+    let changed_content = crlf_checkout.replace("second line", "changed line");
+    assert!(!artifact_text_matches(&changed_content, expected));
 }
 
 #[test]
