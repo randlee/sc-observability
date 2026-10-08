@@ -437,6 +437,30 @@ fn rejected_export_exits_7_without_printing_credentials() {
 }
 
 #[test]
+fn rejected_export_does_not_print_environment_header_values() {
+    const ENV_SECRET: &str = "Bearer environment-secret";
+
+    let directory = tempfile::tempdir().expect("tempdir");
+    let collector = Collector::start();
+    let endpoint = collector.endpoint.clone();
+    let request = collector.serve("400 Bad Request");
+    let output = run(sc_otel(&directory)
+        .env(
+            "OTEL_EXPORTER_OTLP_HEADERS",
+            format!("authorization={ENV_SECRET}"),
+        )
+        .args(["--endpoint", &endpoint, "--timeout", "5"])
+        .args(["log", "--body", "rejected"]));
+    assert_eq!(output.status.code(), Some(7), "{output:?}");
+    let request = request.join().expect("collector");
+    assert_eq!(request.header("authorization"), Some(ENV_SECRET));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("export failed"), "{stderr}");
+    assert!(!stderr.contains(ENV_SECRET), "{stderr}");
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
 fn invalid_input_exits_3_and_sends_nothing() {
     let directory = tempfile::tempdir().expect("tempdir");
     let collector = Collector::start();
