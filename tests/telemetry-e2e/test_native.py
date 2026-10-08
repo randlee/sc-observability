@@ -16,6 +16,7 @@ from conftest import PROCESS_TIMEOUT_SECONDS, OfficialCollector, attributes, run
 SECRET = "hunter2-secret"
 MACRO_MESSAGE = "compose macro event"
 BRIDGE_MESSAGE = "compose bridge event"
+TRACING_MESSAGE = "compose tracing event"
 COMPOSE_SERVICE = "e2e-compose"
 BARRIER_SERVICE = "e2e-sync-client"
 
@@ -115,8 +116,12 @@ def test_logger_composition_routes_each_event_once(
 
     if want_file:
         file_events = read_file_events(root)
-        # One line per event: the macro event and the `log` facade event, no duplicates.
-        assert sorted(str(event["message"]) for event in file_events) == [BRIDGE_MESSAGE, MACRO_MESSAGE]
+        # One line per input: the macro, `log` facade, and tracing-compatible event.
+        assert sorted(str(event["message"]) for event in file_events) == [
+            BRIDGE_MESSAGE,
+            MACRO_MESSAGE,
+            TRACING_MESSAGE,
+        ]
         macro = next(event for event in file_events if event["message"] == MACRO_MESSAGE)
         assert macro["fields"]["marker"] == "macro-event"
         assert macro["fields"]["password"] == "[REDACTED]"
@@ -125,7 +130,11 @@ def test_logger_composition_routes_each_event_once(
             f"OTel-only composition created files under {root}"
 
     if want_otel:
-        assert sorted(entry["record"]["body"]["stringValue"] for entry in exported) == [BRIDGE_MESSAGE, MACRO_MESSAGE]
+        assert sorted(entry["record"]["body"]["stringValue"] for entry in exported) == [
+            BRIDGE_MESSAGE,
+            MACRO_MESSAGE,
+            TRACING_MESSAGE,
+        ]
         macro_record = next(e for e in exported if e["record"]["body"]["stringValue"] == MACRO_MESSAGE)
         # The sink maps the event target to the OTLP scope name.
         assert macro_record["scope"]["name"] == "e2e.compose"

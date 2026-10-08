@@ -267,6 +267,11 @@ fn compose(endpoint: &str, log_root: &str, otel: bool, file: bool) -> Result<(),
         target: "e2e.compose", password = "hunter2-secret", marker = "macro-event", "compose macro event"
     );
     log::info!(target: "e2e.compose", "compose bridge event");
+    sc_observability_log::event!(
+        target: "e2e.compose",
+        sc_observability_log::Level::INFO,
+        "compose tracing event"
+    );
 
     attachment.detach(Duration::from_secs(5))?;
     logger.flush_with_timeout(Duration::from_secs(10))?;
