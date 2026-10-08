@@ -5,7 +5,10 @@ use crate::{
     cli::Cli,
     error_codes::{EXIT_EXPORT, EXIT_INTERNAL, EXIT_OK, EXIT_USAGE, EXIT_VALIDATION},
 };
-use clap::{Command, CommandFactory};
+use clap::{
+    Command, CommandFactory,
+    error::{ContextKind, ErrorKind},
+};
 use serde_json::{Value, json};
 use std::{fmt::Write, path::Path};
 
@@ -175,6 +178,7 @@ fn command_contract_for(command: &Command) -> Value {
                 .map(|conflict| conflict.get_id().as_str().to_owned())
                 .collect::<Vec<_>>();
             conflicts.sort();
+            let requires = requires_dependencies(command, argument);
             let mut flags = argument
                 .get_long_and_visible_aliases()
                 .unwrap_or_default()
@@ -221,6 +225,7 @@ fn command_contract_for(command: &Command) -> Value {
                 "default_values": argument.get_default_values().iter().map(|value| value.to_string_lossy()).collect::<Vec<_>>(),
                 "allowed_values": allowed_values,
                 "conflicts_with": conflicts,
+                "requires": requires,
             });
             if let Some(constraint) = parser_constraint(command, argument) {
                 contract["value_constraint"] = json!(constraint);
@@ -262,6 +267,78 @@ fn command_contract_for(command: &Command) -> Value {
         "groups": groups,
         "subcommands": subcommands,
     })
+}
+
+/// Extracts conditional dependencies from Clap by probing its own parser. Clap
+/// deliberately does not expose `Arg::requires` as public metadata, so this
+/// keeps the generated contract tied to the behavior users actually receive.
+fn requires_dependencies(command: &Command, argument: &clap::Arg) -> Vec<String> {
+    let Some((flag, value)) = argument_probe(argument) else {
+        return Vec::new();
+    };
+    let mut probe = vec![command.get_name().to_owned()];
+
+    for required in command
+        .get_arguments()
+        .filter(|candidate| candidate.is_required_set() && candidate.get_id() != argument.get_id())
+    {
+        let Some((flag, value)) = argument_probe(required) else {
+            return Vec::new();
+        };
+        probe.push(flag);
+        if let Some(value) = value {
+            probe.push(value);
+        }
+    }
+
+    probe.push(flag);
+    if let Some(value) = value {
+        probe.push(value);
+    }
+
+    let Err(error) = command.clone().try_get_matches_from(probe) else {
+        return Vec::new();
+    };
+    if error.kind() != ErrorKind::MissingRequiredArgument {
+        return Vec::new();
+    }
+    let missing = error
+        .get(ContextKind::InvalidArg)
+        .map(ToString::to_string)
+        .unwrap_or_default();
+    let mut dependencies = command
+        .get_arguments()
+        .filter(|candidate| candidate.get_id() != argument.get_id())
+        .filter_map(|candidate| {
+            let long = candidate.get_long()?;
+            missing
+                .contains(&format!("--{long}"))
+                .then(|| candidate.get_id().as_str().to_owned())
+        })
+        .collect::<Vec<_>>();
+    dependencies.sort();
+    dependencies
+}
+
+fn argument_probe(argument: &clap::Arg) -> Option<(String, Option<String>)> {
+    let flag = argument
+        .get_long()
+        .map(|name| format!("--{name}"))
+        .or_else(|| argument.get_short().map(|name| format!("-{name}")))?;
+    if !argument.get_action().takes_values() {
+        return Some((flag, None));
+    }
+    let value = match argument.get_id().as_str() {
+        "trace_id" => "0123456789abcdef0123456789abcdef".to_owned(),
+        "span_id" | "parent_span_id" => "0123456789abcdef".to_owned(),
+        "attributes" => "{}".to_owned(),
+        "timeout" | "start_time_unix_nano" | "end_time_unix_nano" => "1".to_owned(),
+        _ => argument.get_possible_values().first().map_or_else(
+            || "contract-probe".to_owned(),
+            |value| value.get_name().to_owned(),
+        ),
+    };
+    Some((flag, Some(value)))
 }
 
 fn effective_num_args(argument: &clap::Arg) -> clap::builder::ValueRange {
@@ -374,6 +451,51 @@ fn planted_command_definition_drift_is_detected() {
     let error = contract_matches(&expected, &command_contract_for(&drifted))
         .expect_err("a changed Clap command definition must invalidate the artifact");
     assert!(error.contains("no longer matches"));
+}
+
+#[test]
+fn command_contract_projects_clap_requires_dependencies() {
+    let contract = command_contract();
+    let log = command(&contract, "log");
+    assert_eq!(argument(log, "trace_id")["requires"], json!(["span_id"]));
+    assert_eq!(argument(log, "span_id")["requires"], json!(["trace_id"]));
+
+    let span = command(&contract, "span");
+    assert_eq!(
+        argument(span, "parent_span_id")["requires"],
+        json!(["trace_id"])
+    );
+}
+
+#[test]
+fn planted_requires_drift_is_detected() {
+    let expected = command_contract();
+    let drifted = Cli::command().mut_subcommand("log", |command| {
+        command.mut_arg("trace_id", |argument| {
+            argument.requires(clap::builder::Resettable::Reset)
+        })
+    });
+    let error = contract_matches(&expected, &command_contract_for(&drifted))
+        .expect_err("removing a Clap requires constraint must invalidate the artifact");
+    assert!(error.contains("no longer matches"));
+}
+
+fn command<'a>(contract: &'a Value, name: &str) -> &'a Value {
+    contract["subcommands"]
+        .as_array()
+        .expect("subcommands are an array")
+        .iter()
+        .find(|command| command["name"] == name)
+        .expect("command is present")
+}
+
+fn argument<'a>(command: &'a Value, id: &str) -> &'a Value {
+    command["arguments"]
+        .as_array()
+        .expect("arguments are an array")
+        .iter()
+        .find(|argument| argument["id"] == id)
+        .expect("argument is present")
 }
 
 #[test]

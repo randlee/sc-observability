@@ -16,6 +16,7 @@
         "min": 1
       },
       "required": false,
+      "requires": [],
       "value_name": [
         "URL"
       ]
@@ -35,6 +36,7 @@
         "min": 1
       },
       "required": false,
+      "requires": [],
       "value_name": [
         "NAME=VALUE"
       ]
@@ -54,6 +56,7 @@
         "min": 1
       },
       "required": false,
+      "requires": [],
       "value_name": [
         "FILE"
       ]
@@ -73,6 +76,7 @@
         "min": 1
       },
       "required": false,
+      "requires": [],
       "value_name": [
         "NAME"
       ]
@@ -92,6 +96,7 @@
         "min": 1
       },
       "required": false,
+      "requires": [],
       "value_constraint": "error: invalid value '__sc_otel_contract_invalid_value__' for '--timeout <SECONDS>': timeout must be a whole number of seconds greater than zero\n\nFor more information, try '--help'.\n",
       "value_name": [
         "SECONDS"
@@ -132,6 +137,7 @@
             "min": 1
           },
           "required": false,
+          "requires": [],
           "value_name": [
             "JSON|@FILE|-"
           ]
@@ -151,6 +157,7 @@
             "min": 1
           },
           "required": true,
+          "requires": [],
           "value_name": [
             "BODY"
           ]
@@ -179,6 +186,7 @@
             "min": 1
           },
           "required": false,
+          "requires": [],
           "value_name": [
             "SEVERITY"
           ]
@@ -198,6 +206,9 @@
             "min": 1
           },
           "required": false,
+          "requires": [
+            "trace_id"
+          ],
           "value_constraint": "error: invalid value '__sc_otel_contract_invalid_value__' for '--span-id <HEX>': synchronous OTLP input rejected (SC_OBSERVABILITY_OTLP_SYNC_INVALID_RECORD): Operation failed: span id: expected 16 lowercase hex digits\n\nFor more information, try '--help'.\n",
           "value_name": [
             "HEX"
@@ -218,6 +229,9 @@
             "min": 1
           },
           "required": false,
+          "requires": [
+            "span_id"
+          ],
           "value_constraint": "error: invalid value '__sc_otel_contract_invalid_value__' for '--trace-id <HEX>': synchronous OTLP input rejected (SC_OBSERVABILITY_OTLP_SYNC_INVALID_RECORD): Operation failed: trace id: expected 32 lowercase hex digits\n\nFor more information, try '--help'.\n",
           "value_name": [
             "HEX"
@@ -261,6 +275,7 @@
             "min": 1
           },
           "required": false,
+          "requires": [],
           "value_name": [
             "JSON|@FILE|-"
           ]
@@ -280,6 +295,7 @@
             "min": 1
           },
           "required": false,
+          "requires": [],
           "value_name": [
             "DESCRIPTION"
           ]
@@ -304,6 +320,7 @@
             "min": 1
           },
           "required": true,
+          "requires": [],
           "value_name": [
             "KIND"
           ]
@@ -323,6 +340,7 @@
             "min": 1
           },
           "required": true,
+          "requires": [],
           "value_name": [
             "NAME"
           ]
@@ -342,6 +360,7 @@
             "min": 1
           },
           "required": false,
+          "requires": [],
           "value_name": [
             "UNIT"
           ]
@@ -361,6 +380,7 @@
             "min": 1
           },
           "required": true,
+          "requires": [],
           "value_constraint": "error: invalid value '__sc_otel_contract_invalid_value__' for '--value <VALUE>': invalid float literal\n\nFor more information, try '--help'.\n",
           "value_name": [
             "VALUE"
@@ -404,6 +424,7 @@
             "min": 1
           },
           "required": false,
+          "requires": [],
           "value_name": [
             "JSON|@FILE|-"
           ]
@@ -423,6 +444,7 @@
             "min": 1
           },
           "required": false,
+          "requires": [],
           "value_constraint": "error: invalid value '__sc_otel_contract_invalid_value__' for '--end-time-unix-nano <NANOS>': invalid digit found in string\n\nFor more information, try '--help'.\n",
           "value_name": [
             "NANOS"
@@ -443,6 +465,7 @@
             "min": 1
           },
           "required": false,
+          "requires": [],
           "value_name": [
             "DESCRIPTION"
           ]
@@ -470,6 +493,7 @@
             "min": 1
           },
           "required": false,
+          "requires": [],
           "value_name": [
             "KIND"
           ]
@@ -489,6 +513,7 @@
             "min": 1
           },
           "required": true,
+          "requires": [],
           "value_name": [
             "NAME"
           ]
@@ -513,6 +538,7 @@
             "min": 0
           },
           "required": false,
+          "requires": [],
           "value_name": [
             "OK"
           ]
@@ -532,6 +558,9 @@
             "min": 1
           },
           "required": false,
+          "requires": [
+            "trace_id"
+          ],
           "value_constraint": "error: invalid value '__sc_otel_contract_invalid_value__' for '--parent-span-id <HEX>': synchronous OTLP input rejected (SC_OBSERVABILITY_OTLP_SYNC_INVALID_RECORD): Operation failed: span id: expected 16 lowercase hex digits\n\nFor more information, try '--help'.\n",
           "value_name": [
             "HEX"
@@ -552,6 +581,7 @@
             "min": 1
           },
           "required": false,
+          "requires": [],
           "value_constraint": "error: invalid value '__sc_otel_contract_invalid_value__' for '--span-id <HEX>': synchronous OTLP input rejected (SC_OBSERVABILITY_OTLP_SYNC_INVALID_RECORD): Operation failed: span id: expected 16 lowercase hex digits\n\nFor more information, try '--help'.\n",
           "value_name": [
             "HEX"
@@ -572,6 +602,7 @@
             "min": 1
           },
           "required": false,
+          "requires": [],
           "value_constraint": "error: invalid value '__sc_otel_contract_invalid_value__' for '--start-time-unix-nano <NANOS>': invalid digit found in string\n\nFor more information, try '--help'.\n",
           "value_name": [
             "NANOS"
@@ -592,6 +623,7 @@
             "min": 1
           },
           "required": false,
+          "requires": [],
           "value_constraint": "error: invalid value '__sc_otel_contract_invalid_value__' for '--trace-id <HEX>': synchronous OTLP input rejected (SC_OBSERVABILITY_OTLP_SYNC_INVALID_RECORD): Operation failed: trace id: expected 32 lowercase hex digits\n\nFor more information, try '--help'.\n",
           "value_name": [
             "HEX"
