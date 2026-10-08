@@ -6,3 +6,5 @@ pub(crate) const PANIC_DETAILS_ENV: &str = "SC_OTEL_DEBUG_PANIC";
 pub(crate) const SCOPE_NAME: &str = "sc-otel";
 /// `--attributes` value that reads the JSON object from standard input.
 pub(crate) const STDIN_SOURCE: &str = "-";
+/// Maximum bytes accepted from a custom root certificate PEM file.
+pub(crate) const MAX_ROOT_CERTIFICATE_BYTES: usize = 1024 * 1024;

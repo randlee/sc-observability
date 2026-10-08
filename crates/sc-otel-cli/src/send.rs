@@ -2,7 +2,7 @@
 //! shared synchronous client.
 
 use crate::cli::{Cli, Command, Kind, LogArgs, LogSeverity, MetricArgs, MetricKind, SpanArgs};
-use crate::constants::{SCOPE_NAME, STDIN_SOURCE};
+use crate::constants::{MAX_ROOT_CERTIFICATE_BYTES, SCOPE_NAME, STDIN_SOURCE};
 use crate::error_codes::{EXIT_EXPORT, EXIT_VALIDATION};
 use sc_observability_otlp::api::logs::{AnyValue, LogRecord as _, Severity};
 use sc_observability_otlp::api::trace::{
@@ -18,7 +18,9 @@ use sc_observability_otlp::sdk::trace::{
 use sc_observability_otlp::sync::{Client, SyncError, check_input_limits, resolve_endpoint};
 use serde_json::Value as Json;
 use std::{
+    fs::File,
     io::Read,
+    path::Path,
     time::{Duration, SystemTime},
 };
 
@@ -64,12 +66,7 @@ fn client(cli: &Cli) -> Result<Client, SyncError> {
         client = client.with_timeout(timeout)?;
     }
     if let Some(path) = &cli.root_certificate {
-        let pem = std::fs::read(path).map_err(|error| {
-            SyncError::validation(
-                codes::INVALID_CONFIG,
-                format!("cannot read root certificate {}: {error}", path.display()),
-            )
-        })?;
+        let pem = read_root_certificate(path)?;
         client = client.with_root_certificate_pem(&pem)?;
     }
     Ok(client)
@@ -220,6 +217,55 @@ fn read_capped(reader: impl Read, name: &str) -> Result<String, SyncError> {
         .map_err(|error| invalid(format!("cannot read {name}: {error}")))?;
     check_attribute_input_limits(bytes.len(), 0)?;
     String::from_utf8(bytes).map_err(|_| invalid(format!("{name} is not UTF-8")))
+}
+
+/// Reads a custom certificate only from regular files and within its PEM limit.
+fn read_root_certificate(path: &Path) -> Result<Vec<u8>, SyncError> {
+    let metadata = std::fs::metadata(path).map_err(|error| {
+        SyncError::validation(
+            codes::INVALID_CONFIG,
+            format!("cannot read root certificate {}: {error}", path.display()),
+        )
+    })?;
+    if !metadata.is_file() {
+        return Err(SyncError::validation(
+            codes::INVALID_CONFIG,
+            format!("root certificate {} must be a regular file", path.display()),
+        ));
+    }
+    let file = File::open(path).map_err(|error| {
+        SyncError::validation(
+            codes::INVALID_CONFIG,
+            format!("cannot read root certificate {}: {error}", path.display()),
+        )
+    })?;
+    read_capped_bytes(
+        file,
+        &format!("root certificate {}", path.display()),
+        MAX_ROOT_CERTIFICATE_BYTES,
+        codes::INVALID_CONFIG,
+    )
+}
+
+/// Reads at most one byte beyond `limit`, rejecting excess without buffering it.
+fn read_capped_bytes(
+    reader: impl Read,
+    name: &str,
+    limit: usize,
+    read_error_code: &'static str,
+) -> Result<Vec<u8>, SyncError> {
+    let cap = u64::try_from(limit).map_or(u64::MAX, |limit| limit.saturating_add(1));
+    let mut bytes = Vec::new();
+    reader.take(cap).read_to_end(&mut bytes).map_err(|error| {
+        SyncError::validation(read_error_code, format!("cannot read {name}: {error}"))
+    })?;
+    if bytes.len() > limit {
+        return Err(SyncError::validation(
+            codes::INPUT_LIMIT_EXCEEDED,
+            format!("{name} exceeds the {limit}-byte limit"),
+        ));
+    }
+    Ok(bytes)
 }
 
 fn key_values(attributes: Vec<(String, Json)>) -> Result<Vec<KeyValue>, SyncError> {
@@ -383,5 +429,38 @@ mod tests {
         ]);
         assert!(child.parent_span_is_remote);
         assert_eq!(child.span_context.trace_flags(), TraceFlags::SAMPLED);
+    }
+
+    #[test]
+    fn root_certificate_file_is_byte_capped() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let path = directory.path().join("roots.pem");
+        std::fs::write(&path, vec![b'x'; MAX_ROOT_CERTIFICATE_BYTES + 1])
+            .expect("write oversized root certificate");
+
+        let error = read_root_certificate(&path).expect_err("oversized PEM");
+        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn root_certificate_rejects_writerless_fifo_without_blocking() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let path = directory.path().join("roots.pem");
+        let status = std::process::Command::new("mkfifo")
+            .arg(&path)
+            .status()
+            .expect("create FIFO");
+        assert!(status.success(), "mkfifo exited with {status}");
+
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = sender.send(read_root_certificate(&path));
+        });
+        let result = receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("reader blocked on writer-less FIFO");
+        let error = result.expect_err("FIFO is not a regular certificate file");
+        assert_eq!(code(&error), codes::INVALID_CONFIG);
     }
 }
