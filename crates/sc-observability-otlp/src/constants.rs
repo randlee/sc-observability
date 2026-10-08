@@ -2,9 +2,11 @@
 
 /// Endpoint the synchronous frontends use when neither an explicit endpoint
 /// nor [`OTLP_ENDPOINT_ENV`] is set.
+#[cfg(feature = "synchronous-client")]
 pub(crate) const DEFAULT_OTLP_ENDPOINT: &str = "http://localhost:4318";
 
 /// Environment variable naming the synchronous frontends' default endpoint.
+#[cfg(feature = "synchronous-client")]
 pub(crate) const OTLP_ENDPOINT_ENV: &str = "OTEL_EXPORTER_OTLP_ENDPOINT";
 
 /// Default OTLP request timeout in milliseconds.

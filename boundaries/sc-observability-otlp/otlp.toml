@@ -7,8 +7,8 @@ facade = "crate_root"
 modules = ["api", "sdk", "sync"]
 
 [public.feature_gates]
-api = "log-sink"
-sdk = "log-sink"
+api = "native"
+sdk = "native"
 sync = "synchronous-client"
 [implementation]
 type = "crate"

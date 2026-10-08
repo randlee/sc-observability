@@ -11,10 +11,12 @@ description = "Native OpenTelemetry log sink and synchronous OTLP client for sc-
 
 [features]
 default = []
+# Official OpenTelemetry API/SDK re-exports (`api`, `sdk`) only (ADR-023).
+native = ["dep:opentelemetry", "dep:opentelemetry_sdk"]
 # Native OpenTelemetry log sink for the core logger (ADR-023); no OTLP transport.
-log-sink = ["dep:sc-observability", "dep:serde_json", "dep:opentelemetry", "dep:opentelemetry_sdk"]
+log-sink = ["native", "dep:sc-observability", "dep:serde_json"]
 # Blocking OTLP/HTTP protobuf client for CLI and Python frontends (ADR-023).
-synchronous-client = ["log-sink", "dep:opentelemetry-otlp", "opentelemetry-otlp/http-proto", "opentelemetry-otlp/reqwest-blocking-client", "opentelemetry-otlp/reqwest-rustls", "dep:opentelemetry-http", "dep:otel-reqwest", "dep:futures-executor", "dep:tokio"]
+synchronous-client = ["native", "dep:opentelemetry-otlp", "opentelemetry-otlp/http-proto", "opentelemetry-otlp/reqwest-blocking-client", "opentelemetry-otlp/reqwest-rustls", "dep:opentelemetry-http", "dep:otel-reqwest", "dep:futures-executor", "dep:tokio"]
 
 [dependencies]
 serde_json = { workspace = true, optional = true }

@@ -12,7 +12,7 @@ publish = false
 [dependencies]
 sc-observability.workspace = true
 sc-observability-log.workspace = true
-sc-observability-otlp = { workspace = true, features = ["synchronous-client"] }
+sc-observability-otlp = { workspace = true, features = ["log-sink", "synchronous-client"] }
 sc-observability-types.workspace = true
 opentelemetry.workspace = true
 opentelemetry_sdk.workspace = true

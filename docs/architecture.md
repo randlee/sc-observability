@@ -667,7 +667,7 @@ metric projectors with `sc-observe`; OTel logging attaches through the core
 | `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState`, and logging query/follow value and error contracts |
 | `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, legacy direct rotation helpers, `RetainedLogPolicy`, queue-backed writer runtime, `Logger`, `JsonlLogReader`, follow session runtime, and logging health/maintenance re-exports including `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState` |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, log projectors, top-level health re-exports; no OTLP dependents |
-| `sc-observability-otlp` | `sc-observability-types`; optional `sc-observability`, `serde_json`, `opentelemetry`, `opentelemetry_sdk` (feature `log-sink`); optional `opentelemetry-otlp`, `opentelemetry-http`, `otel-reqwest` (reqwest 0.13 blocking), `futures-executor`, `tokio` (feature `synchronous-client`); dev-only `sc-observability`, `tempfile`, `tokio`, `rustls`, `opentelemetry-proto`, `prost` ([ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends)) | `sc-observe`, `agent-team-mail-*` | `OtelLogSink`, `sync::Client`, `api`/`sdk` official re-exports, OTLP constants and error codes |
+| `sc-observability-otlp` | `sc-observability-types`; optional `opentelemetry`, `opentelemetry_sdk` (feature `native`); optional `sc-observability`, `serde_json` (feature `log-sink`, with `native`); optional `opentelemetry-otlp`, `opentelemetry-http`, `otel-reqwest` (reqwest 0.13 blocking), `futures-executor`, `tokio` (feature `synchronous-client`, with `native`); dev-only `sc-observability`, `tempfile`, `tokio`, `rustls`, `opentelemetry-proto`, `prost` ([ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends)) | `sc-observe`, `agent-team-mail-*` | `OtelLogSink`, `sync::Client`, `api`/`sdk` official re-exports, OTLP constants and error codes |
 | `sc-observability-log`† | `sc-observability`, `sc-observability-types`, `sc-observability-log-macros` (exact-pinned) | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*`, Tauri/Specta/PyO3 | `log`-facade bridge and tracing-compatible event/`#[instrument]` macros re-exports; `LogGuard`/`LogControl` lifecycle; `InitError`/`FlushError`/`ShutdownError`/`DetachError` are a scoped TYP-030 companion exception (PHB-002); B.1 mechanical copy, unpublished |
 | `sc-observability-dto`† | `sc-observability-types`, `serde`, `serde_json`; optional exact-pinned Schemars tooling | core runtime, bridge, Tauri, PyO3, ownership capabilities | B.3 schema-v1 wire projections and checked conversions; scoped TYP-030 wire-only exception, no native type replacement |
 | `sc-observability-schema` | `sc-observability-dto` (with the `schema-gen` feature) | runtime crates, binding runtimes, and host/framework crates | isolated, unpublished schema-generator crate under `bindings/schema-generator/`; emits schema artifacts from DTO wire types |
@@ -1933,9 +1933,10 @@ No transport implementation or runtime dependency enters the types layer.
   and provider-lifetime unit tests with h-1.
 
 - **h-1 contract record** (implemented in `sc-observability-otlp`):
-  - *Features*: `log-sink` = `sc-observability` + official `opentelemetry` and
-    `opentelemetry_sdk` 0.33.0, no transport; the ATM/native Tokio path selects
-    only this. `synchronous-client` = `log-sink` + `opentelemetry-otlp`
+  - *Features*: `native` = official `opentelemetry` and `opentelemetry_sdk`
+    0.33.0 and the `api`/`sdk` re-exports only. `log-sink` = `native` +
+    `sc-observability`, no transport; the ATM/native Tokio path selects
+    only this. `synchronous-client` = `native` + `opentelemetry-otlp`
     `http-proto`, `reqwest-blocking-client` and `reqwest-rustls`, a
     caller-supplied blocking reqwest 0.13 client with rustls, `opentelemetry-http`
     (its `HttpClient` trait only), `futures-executor`

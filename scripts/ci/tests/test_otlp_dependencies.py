@@ -67,8 +67,8 @@ sc-lint-attributes""",
 
     def test_log_sink_cannot_enable_otlp_exporter(self):
         self.replace(
-            'log-sink = ["dep:sc-observability",',
-            'log-sink = ["dep:opentelemetry-otlp", "dep:sc-observability",',
+            'log-sink = ["native",',
+            'log-sink = ["dep:opentelemetry-otlp", "native",',
         )
         self.rejects("opentelemetry-otlp: incorrect binding to log-sink")
 

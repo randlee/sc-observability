@@ -2,13 +2,13 @@
 # these exact workspace pins, effective features, and feature bindings.
 [transport.opentelemetry]
 version = "=0.33.0"
-backends = ["log-sink", "synchronous-client"]
+backends = ["native", "log-sink", "synchronous-client"]
 features = []
 default_features = true
 
 [transport.opentelemetry_sdk]
 version = "=0.33.0"
-backends = ["log-sink", "synchronous-client"]
+backends = ["native", "log-sink", "synchronous-client"]
 features = ["rt-tokio"]
 default_features = true
 

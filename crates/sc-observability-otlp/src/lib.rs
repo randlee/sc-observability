@@ -12,7 +12,7 @@ pub mod error_codes;
 
 #[cfg(feature = "log-sink")]
 mod log_sink;
-#[cfg(feature = "log-sink")]
+#[cfg(feature = "native")]
 mod native;
 #[cfg(feature = "log-sink")]
 mod severity;
@@ -22,6 +22,6 @@ pub mod sync;
 #[cfg(feature = "log-sink")]
 #[doc(inline)]
 pub use log_sink::OtelLogSink;
-#[cfg(feature = "log-sink")]
+#[cfg(feature = "native")]
 #[doc(inline)]
 pub use native::{api, sdk};
