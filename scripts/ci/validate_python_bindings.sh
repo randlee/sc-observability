@@ -17,11 +17,20 @@ B4_GENERATOR_PYTHON="${B4_GENERATOR_PYTHON:-$(uv python find 3.12.10)}"
 "$B4_GENERATOR_PYTHON" -c 'import sys; assert sys.version_info[:3] == (3, 12, 10), "schema generation requires Python 3.12.10"'
 
 # The shared validator owns the selected interpreter, PYTHONHOME, and loader
-# path updates for every Rust-hosted binding command below.
+# path updates for every Rust-hosted binding command below.  CPython 3.10
+# needs the pinned tomli compatibility dependency in a clean source checkout.
+# Keep that bootstrap on every source-validator invocation rather than relying
+# on ambient site packages.
+B4_VALIDATOR=(
+  uv run --no-project --python "$B4_PYTHON"
+  --with-requirements scripts/ci/python-packaging-requirements.txt
+  python
+)
 B4_EMBEDDED_ENV=()
+B4_EMBEDDED_ASSIGNMENTS="$("${B4_VALIDATOR[@]}" scripts/ci/python_binding_validator.py embedded-environment "$B4_PYTHON")"
 while IFS= read -r assignment; do
   B4_EMBEDDED_ENV+=("$assignment")
-done < <("$B4_PYTHON" scripts/ci/python_binding_validator.py embedded-environment "$B4_PYTHON")
+done <<< "$B4_EMBEDDED_ASSIGNMENTS"
 
 B4_TEMP_DIR="$(mktemp -d -t sc-observability-b4.XXXXXX)"
 trap 'rm -rf "$B4_TEMP_DIR"' EXIT
@@ -42,7 +51,8 @@ MYPYPATH=bindings/python/sc-observability-py/python \
 uv run --no-project --python "$B4_PYTHON" --with pytest==9.1.1 python -m pytest \
   bindings/python/sc-observability-py/tests/test_facade.py
 
-uvx --from "maturin==$("$B4_PYTHON" -c 'from pathlib import Path; from scripts.ci.python_binding_validator import maturin_version; print(maturin_version(Path(".")))')" maturin build --locked \
+B4_MATURIN_VERSION="$("${B4_VALIDATOR[@]}" -c 'from pathlib import Path; from scripts.ci.python_binding_validator import maturin_version; print(maturin_version(Path(".")))')"
+uvx --from "maturin==$B4_MATURIN_VERSION" maturin build --locked \
   --manifest-path bindings/python/sc-observability-py/Cargo.toml \
   --features test-hooks,otlp-telemetry \
   --interpreter "$B4_PYTHON" \

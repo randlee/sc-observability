@@ -15,17 +15,29 @@ import subprocess
 import sys
 from typing import Mapping
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - Python 3.10 compatibility
-    import tomli as tomllib
-
-
 class BindingValidationError(ValueError):
     """A declared Python binding validation input is invalid."""
 
 
 INTERPRETER_PROBE_TIMEOUT_SECONDS = 2 * 60
+
+
+def _toml_loader():
+    """Load TOML only for helpers that parse packaging metadata.
+
+    CPython 3.10 invokes the embedded-environment and Maturin-pin helpers in a
+    clean interpreter.  Those helpers do not parse TOML, so they must not
+    require the `tomli` compatibility dependency merely by importing this
+    module.
+    """
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # pragma: no cover - Python 3.10 compatibility
+        try:
+            import tomli as tomllib
+        except ModuleNotFoundError as error:
+            raise BindingValidationError("TOML helpers require tomli on Python 3.10") from error
+    return tomllib
 
 
 def venv_python(venv: Path, *, platform_name: str | None = None) -> Path:
@@ -99,7 +111,7 @@ def production_maturin_features(root: Path) -> list[str]:
     repository_pyproject = root / "bindings/python/sc-observability-py/pyproject.toml"
     pyproject = repository_pyproject if repository_pyproject.exists() else root / "pyproject.toml"
     try:
-        features = tomllib.loads(pyproject.read_text(encoding="utf-8"))["tool"]["maturin"]["features"]
+        features = _toml_loader().loads(pyproject.read_text(encoding="utf-8"))["tool"]["maturin"]["features"]
     except (OSError, ValueError, KeyError, TypeError) as error:
         raise BindingValidationError(f"invalid production wheel metadata: {pyproject}") from error
     if not isinstance(features, list) or not features or any(not isinstance(feature, str) or not feature for feature in features):
