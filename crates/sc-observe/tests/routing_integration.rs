@@ -257,6 +257,14 @@ fn one_observation_can_fan_out_to_subscribers_and_logs() {
     legacy.emit(observation()).expect("legacy emit");
     typed.emit(observation()).expect("typed emit");
 
+    // The writer thread is asynchronous: both runtimes must drain before the files are read.
+    legacy
+        .flush()
+        .expect("legacy flush barrier before reading projected log");
+    typed
+        .flush_with_timeout(std::time::Duration::from_secs(5))
+        .expect("typed flush barrier before reading projected log");
+
     let legacy_log_path = legacy_root
         .join(sc_observability::constants::DEFAULT_LOG_DIR_NAME)
         .join(format!(
