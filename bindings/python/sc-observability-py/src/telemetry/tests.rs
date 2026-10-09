@@ -244,11 +244,23 @@ fn attributes_map_python_scalars_and_reject_other_values() {
                 .expect("u64 above i64::MAX converts"),
             [("huge".into(), Scalar::Str("9223372036854775808".into()),)]
         );
+        assert_eq!(
+            attributes(
+                python_attributes(py, c"[('big', 1.5e19), ('low', -(2**63))]"),
+                ""
+            )
+            .expect("large float and i64::MIN stay accepted"),
+            [
+                ("big".into(), Scalar::Float(1.5e19)),
+                ("low".into(), Scalar::Int(i64::MIN)),
+            ]
+        );
         for source in [
             c"[('k', None)]",
             c"[('k', [1])]",
             c"[('k', {'a': 1})]",
             c"[('k', 2**64)]",
+            c"[('k', -(2**63) - 1)]",
         ] {
             let result = attributes(python_attributes(py, source), "");
             assert_eq!(code(result), codes::INVALID_RECORD);
