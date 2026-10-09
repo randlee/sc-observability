@@ -236,7 +236,7 @@ pub fn check_input_limits(input_bytes: usize, records: usize) -> Result<(), Sync
 /// Frontends add the log body or signal name, every attribute key, and every
 /// string attribute value. Keeping the accumulation here makes the CLI and
 /// Python binding apply the same per-call input policy.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct InputByteCounter {
     bytes: usize,
 }

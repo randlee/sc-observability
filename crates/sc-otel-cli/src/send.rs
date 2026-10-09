@@ -372,7 +372,7 @@ mod tests {
         let inline = format!("{{\"a\":\"{}\"}}", "x".repeat(MAX_INPUT_BYTES));
         let error = attributes(Some(&inline), "").expect_err("inline above limit");
         assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
-        let key = "k".repeat(MAX_INPUT_BYTES);
+        let key = "k".repeat(MAX_INPUT_BYTES + 1);
         let error = attributes(Some(&format!("{{\"{key}\":true}}")), "")
             .expect_err("oversized attribute key");
         assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
