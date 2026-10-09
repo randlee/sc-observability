@@ -1519,8 +1519,6 @@ pub enum SyncError {
 }
 
 pub fn check_input_limits(input_bytes: usize, records: usize) -> Result<(), SyncError>;
-pub fn span_times(start_unix_nano: Option<u64>, end_unix_nano: Option<u64>)
-    -> Result<(SystemTime, SystemTime), SyncError>;
 ```
 
 Rules:
