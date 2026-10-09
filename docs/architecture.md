@@ -1618,8 +1618,9 @@ was reworded accordingly to describe the remaining validation.
   run (d-30).
 - **Configuration**: One precedence contract applies per field: explicit
   value > telemetry.yaml > environment (`OTEL_EXPORTER_OTLP_ENDPOINT`,
-  `OTEL_SERVICE_NAME`, `SC_OTEL_AUTH_HEADER`) > default. Credentials come
-  only from explicit input or the environment. PR URL templates and source
+  `OTEL_SERVICE_NAME`) > default; the earlier `SC_OTEL_AUTH_HEADER` source is
+  superseded by ADR-023. Credentials come only from explicit input or the
+  environment. PR URL templates and source
   mapping are consumer configuration, which the core ignores.
 - **Verification**: d-34 proves each per-variant encoding by loopback
   capture. d-30 and d-31 assert against the d-29 golden fixtures. d-32 proves
