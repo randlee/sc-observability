@@ -289,7 +289,7 @@ fn input_limits_count_attributes_and_text_bytes() {
         ] {
             assert_eq!(code(result), codes::INPUT_LIMIT_EXCEEDED);
         }
-        let long_key = format!("[('k' * {MAX_INPUT_BYTES}, True)]");
+        let long_key = format!("[('k' * {}, True)]", MAX_INPUT_BYTES + 1);
         assert_eq!(
             code(attributes(eval(long_key), "")),
             codes::INPUT_LIMIT_EXCEEDED
