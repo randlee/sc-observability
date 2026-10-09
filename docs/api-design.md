@@ -1514,7 +1514,7 @@ impl Client {
 }
 
 pub enum SyncError {
-    Validation { code: &'static str, source: sdk::error::OTelSdkError },
+    Validation { code: ErrorCode, source: sdk::error::OTelSdkError },
     Export(sdk::error::OTelSdkError),
 }
 

@@ -53,14 +53,14 @@ fn root_certificate_uses_the_shared_bounded_regular_file_reader() {
         .expect("write oversized root certificate");
     assert_eq!(
         code(client(&config(None, Some(oversized))).map(drop)),
-        codes::INVALID_CONFIG
+        codes::INVALID_CONFIG.as_str()
     );
 
     let non_regular = directory.path().join("certificate-directory");
     std::fs::create_dir(&non_regular).expect("create certificate directory");
     assert_eq!(
         code(client(&config(None, Some(non_regular))).map(drop)),
-        codes::INVALID_CONFIG
+        codes::INVALID_CONFIG.as_str()
     );
 }
 
@@ -74,7 +74,7 @@ fn failures_project_to_the_shared_failure_union_with_registry_codes() {
     };
     assert_eq!(
         (diagnostic.code.as_str(), field.as_str()),
-        (codes::INVALID_RECORD, "fields")
+        (codes::INVALID_RECORD.as_str(), "fields")
     );
     assert!(diagnostic.message.contains("bad"));
     let Failure::Validation { field, .. } = failure(
@@ -90,7 +90,7 @@ fn failures_project_to_the_shared_failure_union_with_registry_codes() {
     ) else {
         std::panic::panic_any("an entered runtime has no input field and must be unavailable");
     };
-    assert_eq!(diagnostic.code, codes::RUNTIME_ENTERED);
+    assert_eq!(diagnostic.code, codes::RUNTIME_ENTERED.as_str());
     assert!(diagnostic.message.contains("inside a runtime"));
     let Failure::Unavailable { diagnostic } = failure(
         "send_span",
@@ -125,7 +125,7 @@ fn log_and_span_field_combinations_are_validated() {
         log(log_fields("info", Some(trace), None)).map(drop),
         log(log_fields("info", None, Some("00f067aa0ba902b7"))).map(drop),
     ] {
-        assert_eq!(code(result), codes::INVALID_RECORD);
+        assert_eq!(code(result), codes::INVALID_RECORD.as_str());
     }
     assert!(log(log_fields("warn", Some(trace), Some("00f067aa0ba902b7"))).is_ok());
     let span_fields =
@@ -146,7 +146,7 @@ fn log_and_span_field_combinations_are_validated() {
         span(span_fields("client", Some("00f067aa0ba902b7"), false, None)).map(drop),
         span(span_fields("client", None, true, Some("boom"))).map(drop),
     ] {
-        assert_eq!(code(result), codes::INVALID_RECORD);
+        assert_eq!(code(result), codes::INVALID_RECORD.as_str());
     }
     let generated = match span(span_fields("server", None, false, Some("boom"))) {
         Ok(span) => span,
@@ -173,7 +173,7 @@ fn span_times_outside_the_unsigned_64_bit_range_are_validation_failures() {
         for source in [c"-1", c"2**64"] {
             assert_eq!(
                 code(unix_nanos("end_time_unix_nano", &int(source))),
-                codes::INVALID_RECORD
+                codes::INVALID_RECORD.as_str()
             );
         }
     });
@@ -210,7 +210,7 @@ fn a_parent_is_local_and_start_after_end_is_rejected() {
         assert!(span(fields(c"2", c"2", None)).is_ok());
         assert_eq!(
             code(span(fields(c"3", c"2", None)).map(drop)),
-            codes::INVALID_RECORD
+            codes::INVALID_RECORD.as_str()
         );
     });
 }
@@ -266,7 +266,7 @@ fn attributes_map_python_scalars_and_reject_other_values() {
             c"[('k', -(2**63) - 1)]",
         ] {
             let result = attributes(python_attributes(py, source), &[]);
-            assert_eq!(code(result), codes::INVALID_RECORD);
+            assert_eq!(code(result), codes::INVALID_RECORD.as_str());
         }
     });
 }
@@ -290,12 +290,12 @@ fn input_limits_count_attributes_and_text_bytes() {
             attributes(eval(long_value), &["x"]),
             attributes(Vec::new(), &[&"x".repeat(MAX_INPUT_BYTES + 1)]),
         ] {
-            assert_eq!(code(result), codes::INPUT_LIMIT_EXCEEDED);
+            assert_eq!(code(result), codes::INPUT_LIMIT_EXCEEDED.as_str());
         }
         let long_key = format!("[('k' * {}, True)]", MAX_INPUT_BYTES + 1);
         assert_eq!(
             code(attributes(eval(long_key), &[])),
-            codes::INPUT_LIMIT_EXCEEDED
+            codes::INPUT_LIMIT_EXCEEDED.as_str()
         );
     });
 }
@@ -314,7 +314,7 @@ fn oversized_span_name_is_an_input_limit_failure() {
         error: None,
         attributes: Vec::new(),
     });
-    assert_eq!(code(result), codes::INPUT_LIMIT_EXCEEDED);
+    assert_eq!(code(result), codes::INPUT_LIMIT_EXCEEDED.as_str());
 }
 
 #[test]
@@ -332,7 +332,10 @@ fn oversized_span_error_metric_text_and_service_name_are_input_limit_failures() 
         error: Some(big.clone()),
         attributes: Vec::new(),
     };
-    assert_eq!(code(span(span_with_error)), codes::INPUT_LIMIT_EXCEEDED);
+    assert_eq!(
+        code(span(span_with_error)),
+        codes::INPUT_LIMIT_EXCEEDED.as_str()
+    );
     let metric_fields = |unit: Option<String>, description: Option<String>| MetricFields {
         name: "metric".into(),
         kind: "counter".into(),
@@ -343,11 +346,11 @@ fn oversized_span_error_metric_text_and_service_name_are_input_limit_failures() 
     };
     assert_eq!(
         code(metric(metric_fields(Some(big.clone()), None))),
-        codes::INPUT_LIMIT_EXCEEDED
+        codes::INPUT_LIMIT_EXCEEDED.as_str()
     );
     assert_eq!(
         code(metric(metric_fields(None, Some(big.clone())))),
-        codes::INPUT_LIMIT_EXCEEDED
+        codes::INPUT_LIMIT_EXCEEDED.as_str()
     );
     let config = Config {
         endpoint: None,
@@ -362,7 +365,10 @@ fn oversized_span_error_metric_text_and_service_name_are_input_limit_failures() 
         trace_context: None,
         attributes: Vec::new(),
     });
-    assert_eq!(code(export(config, signal)), codes::INPUT_LIMIT_EXCEEDED);
+    assert_eq!(
+        code(export(config, signal)),
+        codes::INPUT_LIMIT_EXCEEDED.as_str()
+    );
 }
 
 #[test]
@@ -386,7 +392,10 @@ fn invalid_timeout_and_unreadable_certificate_are_config_failures_before_export(
             Some(PathBuf::from("/nonexistent/sc-observability-ca.pem")),
         ),
     ] {
-        assert_eq!(code(export(config, signal())), codes::INVALID_CONFIG);
+        assert_eq!(
+            code(export(config, signal())),
+            codes::INVALID_CONFIG.as_str()
+        );
     }
 }
 
