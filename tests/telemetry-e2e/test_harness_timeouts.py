@@ -41,19 +41,31 @@ def test_viewer_restart_uses_canonical_harness_stop_and_start_headlessly(
 ) -> None:
     state = tmp_path / "viewer-state"
     calls: list[list[str]] = []
+    ports = iter([(41000, 41001, 41002), (42000, 42001, 42002)])
 
     def record(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append(command)
-        return subprocess.CompletedProcess(command, 0, "", "")
+        if "start" not in command:
+            return subprocess.CompletedProcess(command, 0, "", "")
+        http, grpc, ui = next(ports)
+        ready = {"status": "ready", "http": http, "grpc": grpc, "ui": ui}
+        return subprocess.CompletedProcess(command, 0, json.dumps(ready) + "\n", "")
 
     monkeypatch.setattr("conftest.run_process", record)
     viewer = PinnedViewer("viewer", "0.5.0", "a" * 64, state)
+    viewer.start()
+    assert (viewer.http, viewer.grpc, viewer.ui) == (41000, 41001, 41002)
+    assert viewer["otlp"] == "http://127.0.0.1:41000"
     viewer.restart()
 
     expected_harness = ROOT / "scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py"
     assert VIEWER_HARNESS == expected_harness
+    # Every start asks the viewer to bind ephemeral ports and publishes what it reports.
     assert calls == [
+        _viewer_start_command("viewer", "0.5.0", "a" * 64, state, 0, 0, 0, reuse_state=False),
         [sys.executable, str(expected_harness), "stop", "--state-dir", str(state)],
-        _viewer_start_command("viewer", "0.5.0", "a" * 64, state, viewer.http, viewer.grpc, viewer.ui,
-                              reuse_state=True),
+        _viewer_start_command("viewer", "0.5.0", "a" * 64, state, 0, 0, 0, reuse_state=True),
     ]
+    assert (viewer.http, viewer.grpc, viewer.ui) == (42000, 42001, 42002)
+    assert viewer["otlp"] == "http://127.0.0.1:42000"
+    assert viewer["rpc"] == "http://127.0.0.1:42002/rpc"

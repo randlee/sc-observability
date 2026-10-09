@@ -34,18 +34,16 @@ _METRICS = (  # (kind, value, viewer metricType)
 def _wait_for(
     viewer: dict[str, str], method: str, params: list[object], predicate: Callable[[object], bool],
 ) -> object:
-    """Wait for viewer ingestion while retaining the last useful response."""
+    """Poll only for ingestion; the harness has already proven the RPC endpoint ready.
+
+    An RPC failure is a real failure and propagates at once rather than being retried.
+    """
     deadline = time.monotonic() + 15
     last: object = None
     while time.monotonic() < deadline:
-        try:
-            result = rpc(viewer["rpc"], method, params)
-            last = result
-            if predicate(result):
-                return result
-        except (AssertionError, OSError, TimeoutError, ValueError) as error:
-            # The viewer may briefly reject RPCs while it starts its ingest loop.
-            last = f"{type(error).__name__}: {error}"
+        last = rpc(viewer["rpc"], method, params)
+        if predicate(last):
+            return last
         time.sleep(0.25)
     raise AssertionError(f"viewer ingestion via {method} timed out; last result: {last!r}")
 

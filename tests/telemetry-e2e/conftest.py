@@ -442,26 +442,6 @@ def run_python(artifacts: dict[str, Path], cwd: Path, request: dict[str, Any]) -
 # Pinned desktop viewer
 
 
-def reserve_loopback_sockets(count: int) -> list[socket.socket]:
-    """Reserve distinct loopback ports until the caller deliberately releases them."""
-    sockets: list[socket.socket] = []
-    try:
-        for _ in range(count):
-            reserved = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            reserved.bind(("127.0.0.1", 0))
-            sockets.append(reserved)
-        return sockets
-    except BaseException:
-        for reserved in sockets:
-            reserved.close()
-        raise
-
-
-def loopback_endpoint(reserved: socket.socket) -> str:
-    host, port = reserved.getsockname()[:2]
-    return f"http://{host}:{port}"
-
-
 def _viewer_host_platform() -> str:
     """Match the downloader's host selection for explicit local viewer opt-in."""
     machine = platform.machine().lower()
@@ -483,26 +463,24 @@ def _viewer_start_command(
 
 
 class PinnedViewer(dict[str, str]):
-    """A hash-pinned viewer that tests may stop and restart on its same ports."""
+    """A hash-pinned viewer that tests may stop and restart.
+
+    The harness asks the viewer to bind ephemeral ports and reports the bound
+    ports in its ready JSON, so no port is chosen and released before use.
+    Every start, including a restart, publishes the ports it was given.
+    """
 
     def __init__(self, binary: str, version: str, binary_sha256: str, state: Path) -> None:
         self.binary = binary
         self.version = version
         self.binary_sha256 = binary_sha256
         self.state = state
-        self._reservations = reserve_loopback_sockets(3)
-        self.http, self.grpc, self.ui = (int(port.getsockname()[1]) for port in self._reservations)
-        assert len({self.http, self.grpc, self.ui}) == 3
-        super().__init__(otlp=f"http://127.0.0.1:{self.http}", rpc=f"http://127.0.0.1:{self.ui}/rpc")
+        self.http = self.grpc = self.ui = 0
+        super().__init__()
 
     def start(self, *, reuse_state: bool = False) -> None:
-        # The harness owns the listeners, so release the deterministic
-        # reservations immediately before it is invoked.
-        for reserved in self._reservations:
-            reserved.close()
-        self._reservations = []
         command = _viewer_start_command(
-            self.binary, self.version, self.binary_sha256, self.state, self.http, self.grpc, self.ui,
+            self.binary, self.version, self.binary_sha256, self.state, 0, 0, 0,
             reuse_state=reuse_state,
         )
         started = run_process(
@@ -510,6 +488,9 @@ class PinnedViewer(dict[str, str]):
             check=False, text=True, capture_output=True, timeout=VIEWER_TIMEOUT_SECONDS,
         )
         assert started.returncode == 0, started.stdout + started.stderr
+        ready = json.loads(started.stdout.strip().splitlines()[-1])
+        self.http, self.grpc, self.ui = (int(ready[name]) for name in ("http", "grpc", "ui"))
+        self.update(otlp=f"http://127.0.0.1:{self.http}", rpc=f"http://127.0.0.1:{self.ui}/rpc")
 
     def stop(self) -> None:
         stopped = run_process(
