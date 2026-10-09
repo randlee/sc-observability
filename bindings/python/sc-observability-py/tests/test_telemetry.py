@@ -111,6 +111,12 @@ def test_log_forwards_fields_and_explicit_headers_win(collector: Collector, monk
         assert expected in body, expected
 
 
+def test_float_above_u64_max_is_accepted_as_a_double(collector: Collector) -> None:
+    _ok(Telemetry(collector.endpoint).log("x", attributes={"big": 1.5e19}))
+    _, body = collector.only("/v1/logs")
+    assert struct.pack("<d", 1.5e19) in body
+
+
 def test_span_forwards_ids_times_status_and_attributes(collector: Collector) -> None:
     _ok(Telemetry(collector.endpoint).span(
         "deploy", trace_id=TRACE_ID, span_id=SPAN_ID, parent_span_id=PARENT_ID, kind="client",
