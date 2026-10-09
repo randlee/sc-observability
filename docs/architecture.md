@@ -69,7 +69,7 @@ Owns:
 - `ErrorCode`, `Diagnostic`, `Remediation`, `ErrorContext`
 - `Timestamp`, `DurationMs`
 - `TraceContext`, `TraceId`, `SpanId`
-- `SpanRecord<S>`, `SpanSignal`, `MetricRecord`, `LogEvent`
+- `LogEvent`
 - typed stable labels such as `CorrelationId`, `OutcomeLabel`, `SinkName`, and
   `MetricUnit`
 - `ObservabilityHealthProvider`
@@ -88,11 +88,6 @@ Must not own:
 - routing runtime behavior
 - OTLP exporters or OpenTelemetry dependencies
 - application-specific observation payloads
-
-Malformed deserialized `SpanRecord<SpanEnded>` values are tolerated at
-read/interop boundaries only. Producer-facing APIs still require a valid
-ended span, while `duration_ms()` returns `None` for malformed
-deserialize-only records instead of panicking.
 
 Important boundary:
 
@@ -503,7 +498,7 @@ Runtime role:
 
 - accept `Observation<T>`
 - route to typed subscribers
-- project to `LogEvent`, `SpanSignal`, and `MetricRecord`
+- project to `LogEvent`
 - send logs into the logging layer
 - expose generic downstream extension points for higher-layer integrations
 - expose crate-local observation injection traits implemented by
@@ -520,38 +515,24 @@ layer.
 
 ### 3.4 `sc-observability-otlp`
 
-This crate is the top-of-stack OpenTelemetry layer.
+This crate is the top-of-stack OpenTelemetry layer
+([ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends)).
 
 Owns:
 
-- `sc_observability_otlp::v2::Telemetry` (`RuntimeTelemetry`)
-- `sc_observability_otlp::v2::TelemetryConfig`
-- `sc_observability_otlp::v2::OtelConfig`
-- `sc_observability_otlp::v2::OtlpProtocol`
-- the runtime's internal `V2SpanAssembler`
-- the canonical `sc_observability_types::otlp::OtlpCompleteSpan` record
-- internal OTLP exporter contracts used by the runtime implementation
-- OTLP batching, retry, timeout, flush, and shutdown
-- `TelemetryHealthReport`, `ExporterHealth`, and `ExporterHealthState` defined
-  in `sc-observability-types`, re-exported by `sc-observability-otlp`
+- `OtelLogSink` (feature `log-sink`): maps redacted core `LogEvent`s to native
+  log records from a caller-owned `SdkLoggerProvider` through the existing
+  `LogSink` extension point
+- `sync::Client` (feature `synchronous-client`): exports logs, completed spans
+  and metrics through the official blocking OTLP/HTTP protobuf exporter
+- `api`/`sdk` re-exports of the official `opentelemetry` and
+  `opentelemetry_sdk` types those contracts name
+- `constants` (`DEFAULT_OTLP_TIMEOUT_MS`, `MAX_INPUT_BYTES`,
+  `MAX_BATCH_RECORDS`) and `error_codes` (`TELEMETRY_EXPORT_FAILED`, `sync::*`)
 
-Runtime role:
-
-- consume lower-layer projected logs, spans, and metrics
-- assemble span lifecycle signals into completed exportable spans
-- invoke actual OpenTelemetry/OTLP services and transports
-- expose crate-local telemetry signal injection traits implemented by
-  `Telemetry`
-
-Configuration model:
-
-- `sc_observability_otlp::v2::TelemetryConfig` is constructed and owned by the
-  application layer
-- `sc_observability_otlp::v2::TelemetryConfig` is passed directly to
-  `sc-observability-otlp`
-- `sc_observability_otlp::v2::OtelConfig` selects the exporter backend and
-  typed `v2::OtlpProtocol`
-- `TelemetryConfig` is not embedded in or derived from `ObservabilityConfig`
+Tokio hosts use `opentelemetry_sdk` and `opentelemetry-otlp` directly. The
+`sc-otel` CLI and the Python `Telemetry` binding are thin frontends over
+`sync::Client`.
 
 Must not push OTLP concerns into the lower crates.
 
@@ -593,16 +574,15 @@ any OTLP dependency.
 ### 4.3 Full Stack
 
 ```text
-application -> sc-observability-otlp
-                    |
-                    v
-               sc-observe
+application -> sc-observability-otlp (OtelLogSink, sync::Client)
                     |
                     v
               sc-observability
 ```
 
-Use when the application needs OTel export in addition to routing and logging.
+Use when the application needs OTel export in addition to logging. File-only,
+OTel-only and both are selected with `LoggerConfig.enable_file_sink` plus
+`register_sink` (H-004).
 
 ### 4.4 ATM-Shaped Baseline
 
@@ -666,7 +646,8 @@ Producer code should be wired at the highest layer it needs:
 
 - logging-only producers inject `Logger` or a narrow logging handle
 - routing-aware producers inject `Observability`
-- OTel-enabled producers compose the OTLP layer on top of `sc-observe`
+- OTel-enabled producers register `OtelLogSink` with the logger or use the
+  official SDK directly (H-002/H-004)
 
 The important ownership rule is:
 
@@ -675,40 +656,25 @@ The important ownership rule is:
 
 ### 5.1 Full-Stack Attachment Model
 
-Under the corrected layering, `sc-observability-otlp` attaches to
-`sc-observe` by using the existing open projector extension points.
-
-The attachment model is:
-
-1. the application constructs `ObservabilityBuilder` for `sc-observe`
-2. the application constructs `TelemetryConfig` independently for
-   `sc-observability-otlp`
-3. `sc-observability-otlp` registers its `LogProjector`, `SpanProjector`, and
-   `MetricProjector` implementations with `ObservabilityBuilder`
-4. `sc-observe` remains generic and routes observations through those
-   registrations like any other external projector
-
-Important boundary:
-
-- `sc-observe` does not provide a special internal OTLP handle
-- `sc-observability-otlp` plugs in through the same registration model exposed
-  to other downstream projector consumers
+Superseded by H-004/ADR-023: `sc-observability-otlp` no longer registers span or
+metric projectors with `sc-observe`; OTel logging attaches through the core
+`LogSink` extension point.
 
 ## 6. Crate Boundary Table
 
 | Crate | Depends On | Must Not Depend On | Public Surface Summary |
 | --- | --- | --- | --- |
-| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState`, and logging query/follow value and error contracts; Phase D wave 5 (ADR-021): the `otlp::signals` neutral signal types and the `otlp::submission` contracts (envelope, receipts, status, error codes, config and precedence, the `TelemetryClient` trait) |
+| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState`, and logging query/follow value and error contracts |
 | `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, legacy direct rotation helpers, `RetainedLogPolicy`, queue-backed writer runtime, `Logger`, `JsonlLogReader`, follow session runtime, and logging health/maintenance re-exports including `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState` |
-| `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
-| `sc-observability-otlp` | `sc-observability-types` (`sc-observability` and `sc-observe` dev-only for facade/integration tests; `tonic` with `router` dev-only for the collector; [ADR-019 amendments](#adr-019-amendment-otlp-hermetic-test-collector)) | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
+| `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, log projectors, top-level health re-exports; no OTLP dependents |
+| `sc-observability-otlp` | `sc-observability-types`; optional `opentelemetry`, `opentelemetry_sdk` (feature `native`); optional `sc-observability`, `serde_json` (feature `log-sink`, with `native`); optional `opentelemetry-otlp`, `opentelemetry-http`, `otel-reqwest` (reqwest 0.13 blocking), `futures-executor`, `tokio` (feature `synchronous-client`, with `native`); dev-only `sc-observability`, `tempfile`, `tokio`, `rustls`, `opentelemetry-proto`, `prost` ([ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends)) | `sc-observe`, `agent-team-mail-*` | `OtelLogSink`, `sync::Client`, `api`/`sdk` official re-exports, OTLP constants and error codes |
 | `sc-observability-log`† | `sc-observability`, `sc-observability-types`, `sc-observability-log-macros` (exact-pinned) | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*`, Tauri/Specta/PyO3 | `log`-facade bridge and tracing-compatible event/`#[instrument]` macros re-exports; `LogGuard`/`LogControl` lifecycle; `InitError`/`FlushError`/`ShutdownError`/`DetachError` are a scoped TYP-030 companion exception (PHB-002); B.1 mechanical copy, unpublished |
 | `sc-observability-dto`† | `sc-observability-types`, `serde`, `serde_json`; optional exact-pinned Schemars tooling | core runtime, bridge, Tauri, PyO3, ownership capabilities | B.3 schema-v1 wire projections and checked conversions; scoped TYP-030 wire-only exception, no native type replacement |
 | `sc-observability-schema` | `sc-observability-dto` (with the `schema-gen` feature) | runtime crates, binding runtimes, and host/framework crates | isolated, unpublished schema-generator crate under `bindings/schema-generator/`; emits schema artifacts from DTO wire types |
 | `sc-observability-log-macros`† | third-party proc-macro support only (`syn`, `quote`, `proc-macro2`) | `sc-observability-log` (no reverse dependency back to the bridge), `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | procedural macro expansion only for `sc-observability-log`'s event/`#[instrument]` forms; no runtime types; B.1 mechanical copy, unpublished |
-| `sc-observability-composition` | dev-dependencies only: `sc-observability`, `sc-observability-log`, `sc-observe`, `sc-observability-otlp`, `sc-observability-types`, `tokio`, `serde_json`, `tempfile`, and `tonic`/`opentelemetry-proto` for loopback collector fixtures | any normal or build dependency; any workspace crate depending on it; `agent-team-mail-*` | unpublished (`publish = false`) test harness at `tests/sc-observability-composition` for the D18 real composition cases; no library surface ([ADR-019/ADR-020 amendment](#adr-019adr-020-amendment-composition-test-harness)) |
 | `sc-observability-log-consumer-check`† | `sc-observability-log` only (direct path dependency) | `sc-observability-log-macros` (macro expansion is exercised only through the bridge, preserving the external macro-expansion hygiene check), `agent-team-mail-*` | CI-only compile-time proof that macro consumers need only the bridge dependency; never published |
-| `sc-otel-cli` | `sc-observability-types`, `sc-observability-otlp` (feature `durable-store`) | `sc-observe`, PyO3, `agent-team-mail-*` | Phase D wave 5 (ADR-021): the `sc-otel` binary (`emit`, `validate`, `flush`, `status`) at `crates/sc-otel-cli`; workspace member, `publish = false` this phase |
+| `sc-otel-cli` | `sc-observability-types`, `sc-observability-otlp` (feature `synchronous-client`) | `sc-observe`, PyO3, `agent-team-mail-*` | `sc-otel` command-line telemetry frontend; workspace member, `publish = false` |
+| `sc-observability-py` | `sc-observability`, `sc-observability-binding-runtime`, `sc-observability-dto`, `sc-observability-types`; optionally `sc-observability-otlp` (`otlp-telemetry` enables `synchronous-client`) | `agent-team-mail-*` | owned and host-attached Python bindings; optional native synchronous OTLP telemetry |
 
 † This crate's ADR-011 companion-boundary placement (including its TYP-030 companion/wire-only exception scoping above) follows ADR-011's accepted companion-boundary decision.
 
@@ -761,44 +727,32 @@ graph TD
   Python --> DTO
   Python --> Types
   Python -. "LoggerConfig construction only, no shutdown ownership" .-> Core
-  Python -. "feature otlp-telemetry only (ADR-021)" .-> OTLP[sc-observability-otlp]
+  Python -. "feature otlp-telemetry only (ADR-023)" .-> OTLP[sc-observability-otlp]
 ```
 
-Phase D wave 5 adds one feature-gated edge (ADR-021): with the
-`otlp-telemetry` Cargo feature, `sc-observability-py` depends on
-`sc-observability-otlp` (feature `durable-store`). The submission contract it
-uses lives in `sc_observability_types::otlp::submission`, over the existing
-`Python --> Types` edge. Release wheels enable that feature through
+One feature-gated edge exists (ADR-023): with the `otlp-telemetry` Cargo
+feature, `sc-observability-py` depends on `sc-observability-otlp` (feature
+`synchronous-client`). Release wheels enable that feature through
 `[tool.maturin] features`. The binding runtime, Tauri and DTO crates gain no
 OTLP edge, and the Python crate without the feature has none.
 
-### Phase D transport allowlist
+### OTLP transport allowlist
 
-The OTLP dependency allowlist explicitly permits the feature-gated
-`sync-http` feature and its reviewed `reqwest`, `httpdate`, `getrandom`,
-and Tokio `rt`/`sync` dependencies; obs-d-21 owns this normative declaration.
-The synchronous HTTP transport uses `reqwest =0.12.28` with `blocking`, `json`,
-`rustls-tls` and default features off, and `httpdate =1.0.3`; its transitive
-Tokio use does not impose a caller-owned runtime. The separate `otlp-sdk`
-feature admits the reviewed `opentelemetry*` SDK family and its explicitly
-reviewed transport dependencies only. Its `HttpBinary` terminal posts the
-projected protobuf requests through the same reviewed `reqwest =0.12.28` and
-encodes them with `prost =0.14.4` (`std`, default features off), because the
-pinned official HTTP exporters accept only SDK record types. obs-d-21 records
-exact remaining pins in Cargo.lock and the existing boundaries manifest at
-implementation review. No wildcard approval covers an unrelated dependency. ADR-019 records this
-amendment to ADR-018; the existing boundary manifest is the single machine
-allowlist and this section is its normative explanation.
+`policy/otlp-transport.toml` binds the reviewed `opentelemetry`,
+`opentelemetry_sdk`, `opentelemetry-otlp`, `opentelemetry-http`,
+`futures-executor`, `otel-reqwest` (`reqwest =0.13.5`, `blocking`, `rustls`)
+and Tokio pins to the `log-sink` and `synchronous-client` features (ADR-023).
+The `synchronous-client` exporter uses the official blocking reqwest client and
+requires no caller-owned runtime. No wildcard approval covers an unrelated
+dependency; the existing boundary manifest is the single machine allowlist.
 
-The OTLP crate's dev-dependencies support its tests: `sc-observability-types`
-with `test-double` supplies test fixtures, `tempfile` supports temporary-file
-tests, `sc-observability` and `sc-observe` support facade and error-registry
-tests, and `tokio` with `test-util` supports paused-time SDK tests. `tonic` adds
-the `router` feature for the hermetic integration collector. These remain
-test-only dependencies; the normal transport policy validates production
-dependency boundaries. `router` is enabled only through the dev-dependency
-declaration, while normal `tonic` use remains optional under `otlp-sdk`
-([ADR-019 amendment](#adr-019-amendment-otlp-hermetic-test-collector)).
+The OTLP crate's dev-dependencies support its tests: `tempfile` for
+temporary-file tests, `sc-observability` and `tokio` for sink and Tokio-path
+tests, and `opentelemetry-proto`, `prost` and `rustls` (`ring`) to decode
+requests and serve TLS at the synchronous client's loopback test collector. The
+production `sc-observability` edge exists only under the optional `log-sink`
+feature, which `OtelLogSink` needs
+([ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends)).
 
 ## 6.1 Query/Follow Dependency Order
 
@@ -865,6 +819,9 @@ facade is deprecated behind the default `v1` feature.
 - **Status**: Accepted
 - **Context**: The prior document set collapsed the stack by making `sc-observe` depend on both logging and OTLP layers.
 - **Decision**: The dependency order is `types <- sc-observability <- sc-observability-log`, `sc-observability <- sc-observe`, and `types <- sc-observability-otlp`; `sc-observability` and `sc-observe` are OTLP test dev-dependencies only.
+- **Amended by ADR-023**: `sc-observability <- sc-observability-otlp` is also a
+  production edge under the optional `log-sink` feature, for `OtelLogSink`
+  only. `sc-observe` stays an OTLP dev-dependency and no reverse edge exists.
 - **Consequences**:
   - OTLP remains optional
   - `sc-observe` can be used without OpenTelemetry
@@ -1214,6 +1171,8 @@ in [the CI policy](ci-policy.md).
 
 **Phase F amendment:** PHF-002 governs deprecation before removal.
 
+**Phase H amendment:** superseded by [ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends) (H-006); the custom backends, lifecycle and `sync-http`/`otlp-sdk` features are removed.
+
 - **Status**: Accepted 2026-09-26 by the technical lead (this PR is the acceptance record); D.6 may proceed.
 - **Context**: Tokio-hosted consumers need the official SDK while synchronous
   and Python-hosted consumers need the previously tested blocking HTTP/JSON
@@ -1236,6 +1195,8 @@ in [the CI policy](ci-policy.md).
 ### ADR-019: Phase D Implementation Decisions
 
 **Phase F amendment:** PHF-002 governs deprecation before removal.
+
+**Phase H amendment:** superseded by [ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends) (H-006); the transport allowlist, `ExportError`/`ConfigFailure`/`TelemetryError`, the `error_codes::otlp` registry and the telemetry shutdown boundary are removed. Logging decisions remain binding.
 
 - **Status**: Accepted 2026-09-26 by the technical lead (PR #227 is the acceptance record).
 - **Context**: ADR-017/018 established the original 2.0 surface proposal and dual
@@ -1322,6 +1283,8 @@ was reworded accordingly to describe the remaining validation.
 
 #### ADR-019 amendment: staged neutral signal contracts
 
+**Phase H amendment:** superseded by [ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends) (H-006); the `v2` signal models are removed.
+
 - **Status**: Accepted 2026-09-26 by the lead (ruling
   `01M3F5BQFV804H5G4W6HFNZ03V`); native attribute serde amended to the
   tagged form 2026-09-27 by the maintainer. The original ADR-019 acceptance
@@ -1385,6 +1348,8 @@ was reworded accordingly to describe the remaining validation.
 
 #### ADR-019 amendment: external SDK fixture seam (retired in Phase F)
 
+**Phase H amendment:** superseded by [ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends) (H-006); `examples/otlp-sdk` is removed.
+
 - **Status**: Accepted 2026-09-28 by the Phase D lead for the D.7 external
   fixture scope; final release/API approval remains D.18's responsibility.
 - **Context**: D.7's external Tokio-hosted fixture must exercise the real SDK
@@ -1415,6 +1380,8 @@ was reworded accordingly to describe the remaining validation.
   production composition and release/API approval.
 
 #### ADR-019 amendment: conservative transport-local retry bridge
+
+**Phase H amendment:** superseded by [ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends) (H-006); the raw SDK adapter and its retry executor are removed; retries are the official exporter's.
 
 - **Status**: Accepted 2026-09-28 by the Phase D lead for the D.7 completion
   layer; this does not revise the original ADR-019 acceptance.
@@ -1450,6 +1417,8 @@ was reworded accordingly to describe the remaining validation.
   wall-clock delays.
 
 #### ADR-019 amendment: deferred DTO attribute projection
+
+**Phase H amendment:** superseded by [ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends) (H-006); the span and metric DTOs are removed.
 
 - **Status**: Accepted 2026-09-30 by the Phase D lead, recording Rand's
   2026-09-27 scope ruling in
@@ -1494,6 +1463,8 @@ was reworded accordingly to describe the remaining validation.
 
 #### ADR-019/ADR-020 amendment: composition test harness
 
+**Phase H amendment:** superseded by [ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends) (H-006); `tests/sc-observability-composition` is removed; `tests/telemetry-e2e` qualifies export against a local official Collector.
+
 - **Status**: Accepted 2026-09-30 by the Phase D lead as a new, narrow
   test-only exception (QA finding obs-d-18-combined-bridge-harness-qa-pr714-f1).
   No earlier approval covered it.
@@ -1519,6 +1490,8 @@ was reworded accordingly to describe the remaining validation.
 
 #### ADR-019 amendment: OTLP hermetic test collector
 
+**Phase H amendment:** superseded by [ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends) (H-006); the tonic collector and `otlp-sdk` feature are removed; the synchronous client's loopback collector uses the dev-dependencies in section 6.
+
 - **Status**: Accepted 2026-09-30 by the Phase D lead, recording the root
   test-only authorization for D9 (`01M3SWJRCXVHH4MY8HK1XHF3R6` /
   `01M3SWJRWPYQEAM706WHN2WTZ5`; QA finding obs-d-9-qa-pr718-f3). The original
@@ -1542,6 +1515,8 @@ was reworded accordingly to describe the remaining validation.
   quality-policy RULE-007; D9 owns the collector qualification.
 
 ### ADR-021: Shared Customer Telemetry Submission and Durable Admission
+
+**Phase H amendment:** superseded by [ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends) (H-006); the durable store, `durable-store` feature, submission contracts, signal mirrors and capability matrix below are removed (H-003/H-005/H-006).
 
 - **Status**: Accepted (lead decision 2026-10-01) for Phase D wave 5
   (d-29 contract, d-33 store and drain, d-34 OTLP/JSON encoders, d-30
@@ -1760,6 +1735,11 @@ was reworded accordingly to describe the remaining validation.
   amendment to this ADR identifying the exception and its consumer impact.
   Committed version history is authorized; it is neither a platform exception
   nor a bless workflow or approval certificate.
+- **H-006 exception** (operator-approved): the rejected 1.5.0 OTel additions
+  are deleted without the deprecate-before-remove `v1` stage, with no OTel
+  migration notes, deprecation gates, compatibility tests or historical
+  baseline-equivalence work. Prior-version snapshots in `schema/api` stay
+  unchanged; current native API checks and retained logging parity still apply.
 
 ## 8. API-Design Consistency
 
@@ -1767,10 +1747,8 @@ was reworded accordingly to describe the remaining validation.
 
 - `sc-observe` depends on `sc-observability-types` and `sc-observability` only
 - `ObservabilityConfig` no longer owns OTLP configuration
-- `TelemetryConfig` is application-constructed and passed directly to
-  `sc-observability-otlp`
-- OTLP attachment is expressed through projector registration with
-  `ObservabilityBuilder`
+- OTLP attaches through `OtelLogSink` on the core `LogSink` extension point
+  and the official SDK (ADR-023)
 - the ATM production boundary is explicitly outside this repo in
   `atm-observability-adapter`
 
@@ -1798,6 +1776,8 @@ repository.
 
 
 ### Phase D types staging
+
+**Phase H amendment:** superseded by [ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends) (H-006); the root and `v2` signal models are removed.
 
 D.12 implements the accepted ADR-017/018/019 types contract under
 `sc_observability_types::v2`. ADR-017's canonical error migration does not
@@ -1845,7 +1825,14 @@ No transport implementation or runtime dependency enters the types layer.
   OpenTelemetry dependencies (ADR-004/009 unchanged). A single workspace pin
   selects 0.33.0. `synchronous-client` selects official HTTP/protobuf,
   reqwest-blocking-client and rustls; a standard executor drives blocking
-  export. No bespoke worker, reader adapter, retry queue or request DTO.
+  export. No bespoke worker, custom reader implementation, retry queue or
+  request DTO. H-1 retains only two narrowly scoped private adapters: the
+  `FlushOnlyExporter`/`FlushGate` pair gates the official metric exporter to
+  the explicit flush, prevents a second export during shutdown after a
+  caller-recording error, and detects an empty metric recording; `ExplicitHeaders`
+  reapplies explicit application headers after exporter-provided environment
+  headers so explicit values win. Neither adapter adds a public exporter,
+  provider or reader facade, and no other wrapper is authorized.
   Metric sends take a closure over the native Meter; the SDK owns provider,
   resource, reader and flush. Flush reports failure but coarsens its cause in
   0.33.0. One small SyncError distinguishes Validation from Export and preserves
@@ -1866,6 +1853,12 @@ No transport implementation or runtime dependency enters the types layer.
   contract, and obtain item-by-item confirmation before any core/-log/-types
   deletion. ATM team-lead receives the same proposed changes. No answer means
   preserve, not permission to delete.
+- **H-006 exception** (operator-approved): the rejected 1.5.0 OTel additions
+  are deleted without the PHF-002 deprecate-before-remove `v1` stage: no v1
+  compatibility stubs, OTel migration notes, deprecation gates, compatibility
+  tests or historical baseline-equivalence work. ADR-022 prior-version
+  snapshots in `schema/api` stay unchanged; current native API checks and
+  retained logging parity still apply.
 - **Supersedes for Phase H**: ADR-002's restriction of the OTLP-to-core edge
   to dev-dependencies, and OTLP-014's types-only production edge: h-1 activates
   the production core LogSink dependency alongside its implementation. No
@@ -1938,3 +1931,73 @@ No transport implementation or runtime dependency enters the types layer.
   validation and construction; invalid data cannot become a successful empty
   export. h-4 checks frontend failure equivalence only, leaving exporter timeout
   and provider-lifetime unit tests with h-1.
+
+- **Frontend instrumentation identity**: Each frontend intentionally constructs
+  its own native `InstrumentationScope`: the CLI uses `sc-otel`, while Python
+  uses `sc_observability`, and each reports its own package version. The scope
+  identifies the instrumentation library that emitted telemetry, so sharing
+  this identity would mislabel one frontend as the other. This frontend-specific
+  metadata does not change H-005's equivalent log/span/metric operations over
+  the shared synchronous client and configuration. Endpoint resolution, trace
+  and span ID parsing, and input-limit policy remain shared in `sync`.
+
+- **h-1 contract record** (implemented in `sc-observability-otlp`):
+  - *Features*: `native` = official `opentelemetry` and `opentelemetry_sdk`
+    0.33.0 and the `api`/`sdk` re-exports only. `log-sink` = `native` +
+    `sc-observability`, no transport; the ATM/native Tokio path selects
+    only this. `synchronous-client` = `native` + `opentelemetry-otlp`
+    `http-proto`, `reqwest-blocking-client` and `reqwest-rustls`, a
+    caller-supplied blocking reqwest 0.13 client with rustls, `opentelemetry-http`
+    (its `HttpClient` trait only), `futures-executor`
+    and `tokio` for `Handle::try_current` only. Frontends enable only
+    `sc-observability-otlp/synchronous-client`. `validate_dependency_bans.sh`
+    checks the resolved `log-sink` graph contains no `reqwest`,
+    `opentelemetry-otlp` or `opentelemetry-http`.
+  - *Re-exports*: `api::{InstrumentationScope, Key, KeyValue, Value}`,
+    `api::logs::{AnyValue, LogRecord, Severity}`,
+    `api::trace::{Event, Link, SpanContext, SpanId, SpanKind, Status,
+    TraceFlags, TraceId, TraceState}`, `api::metrics::{Meter, MeterProvider}`,
+    `sdk::Resource`, `sdk::trace::{IdGenerator, RandomIdGenerator, SpanData,
+    SpanEvents, SpanLinks}`,
+    `sdk::logs::{SdkLogRecord, SdkLoggerProvider}`,
+    `sdk::error::{OTelSdkError, OTelSdkResult}`; unmodified upstream types, no
+    glob re-export.
+  - *Signatures*: `sync::Client::new(&str)`, `with_header(self, &str, &str)`,
+    `with_timeout(self, Duration)`, `with_root_certificate_pem(self, &[u8])`
+    (each `-> Result<Self, SyncError>`); `send_log<F>(&mut self, &sdk::Resource,
+    api::InstrumentationScope, F)` with `F: FnOnce(&mut sdk::logs::SdkLogRecord)
+    -> Result<(), SyncError>`; `send_span(&mut self, &sdk::Resource,
+    sdk::trace::SpanData)`; `send_metrics<F>(&mut self, &sdk::Resource,
+    api::InstrumentationScope, F)` with `F: FnOnce(&api::metrics::Meter) ->
+    Result<(), SyncError>`; `sync::check_input_limits(bytes, records)`;
+    `sync::resolve_endpoint(Option<&str>) -> Result<Cow<str>, SyncError>`;
+    `sync::parse_trace_id(field, value) -> Result<TraceId, SyncError>` and
+    `sync::parse_span_id(field, value) -> Result<SpanId, SyncError>`;
+    `sync::span_times(Option<u64>, Option<u64>)`, which orders span times on the
+    supplied Unix nanoseconds before converting them to `SystemTime`;
+    `OtelLogSink::new(&sdk::logs::SdkLoggerProvider, api::InstrumentationScope)`
+    implementing the core `LogSink`. The SDK span collections
+    `SpanEvents`/`SpanLinks` are non-exhaustive: callers fill them from
+    `Default`.
+  - *Errors*: `SyncError::Validation { code, source }` uses the
+    `error_codes::sync` registry (`INVALID_CONFIG`, `RUNTIME_ENTERED`,
+    `INVALID_RECORD`, `INPUT_LIMIT_EXCEEDED`, `CALLER_REJECTED`) and never
+    reaches the network; `SyncError::Export` wraps the native exporter error.
+    A closure's `Validation` passes through; any other closure error becomes
+    `CALLER_REJECTED`. A metric send that records no valid measurement is
+    `INVALID_RECORD`. Display and sources redact header values and URL
+    userinfo. Limits are `MAX_INPUT_BYTES` (1 MiB) and `MAX_BATCH_RECORDS`
+    (10,000) in `constants`.
+  - *Metrics lifecycle*: delta temporality behind the official
+    `PeriodicReader` (24 h interval, so the timer never exports); a private
+    exporter delegate forwards only the explicit flush, giving exactly one
+    request and none after a closure error. Flush failure is reported with the
+    SDK's coarsened cause; shutdown adds no second export.
+  - *Precedence and limits*: explicit endpoint, timeout, protocol and headers
+    win over `OTEL_EXPORTER_OTLP_*`. The 0.33.0 exporter merges the general and
+    per-signal `*_HEADERS` into each request, so the client passes explicit
+    headers to its transport instead of `with_headers`: the official blocking
+    reqwest client, through the `opentelemetry-http` `HttpClient` trait, sets
+    them last on every request. Environment headers with other names are still
+    sent. The timeout bounds connect, request and the native retry deadline;
+    upstream offers no forcible cancellation.

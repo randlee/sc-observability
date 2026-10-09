@@ -55,7 +55,7 @@ Layering requirements:
 - LAY-002 `sc-observability` shall depend on `sc-observability-types` only.
 - LAY-003 `sc-observe` shall depend on `sc-observability-types` and `sc-observability`.
 - LAY-004 `sc-observe` shall not depend on `sc-observability-otlp`.
-- LAY-005 `sc-observability-otlp`'s only normal sc-* dependency is `sc-observability-types`; `sc-observability` and `sc-observe` are dev-dependencies of its tests.
+- LAY-005 Superseded by ADR-023 (Phase H): `sc-observability` is also a production dependency under the `log-sink` feature; `sc-observe` is no dependency. `sc-observability-otlp`'s only normal sc-* dependency is `sc-observability-types`; `sc-observability` and `sc-observe` are dev-dependencies of its tests.
 - LAY-006 Higher-layer concerns shall not be required to understand or use lower-layer crates.
 - LAY-007 `sc-observability` requirements shall remain fully self-contained and shall not include routing or OTLP concerns.
 
@@ -76,14 +76,14 @@ This crate owns shared neutral contracts only.
 - TYP-011 `TraceId` shall validate 32-character lowercase hex W3C trace IDs.
 - TYP-012 `SpanId` shall validate 16-character lowercase hex W3C span IDs.
 - TYP-013 Request, session, runtime, and application metadata shall not be part of `TraceContext`.
-- TYP-014 Span lifecycle shall use the canonical `sc_observability_types::v2` span record types.
-- TYP-015 `SpanRecord<SpanStarted>` shall have the only public constructor.
-- TYP-016 `SpanRecord<SpanEnded>` shall be reachable only through `SpanRecord<SpanStarted>::end(...)`.
-- TYP-017 Producer-facing `SpanRecord<S>` fields shall be private, with read access through accessors.
-- TYP-018 Final span duration shall be exposed only on `SpanRecord<SpanEnded>`.
-- TYP-019 Canonical `sc_observability_types::v2` span-state serialization shall not expose a producer-facing mutable state field.
+- TYP-014 Superseded by H-006 (Phase H): the span record types are removed. Span lifecycle shall use the canonical `sc_observability_types::v2` span record types.
+- TYP-015 Superseded by H-006 (Phase H): the span record types are removed. `SpanRecord<SpanStarted>` shall have the only public constructor.
+- TYP-016 Superseded by H-006 (Phase H): the span record types are removed. `SpanRecord<SpanEnded>` shall be reachable only through `SpanRecord<SpanStarted>::end(...)`.
+- TYP-017 Superseded by H-006 (Phase H): the span record types are removed. Producer-facing `SpanRecord<S>` fields shall be private, with read access through accessors.
+- TYP-018 Superseded by H-006 (Phase H): the span record types are removed. Final span duration shall be exposed only on `SpanRecord<SpanEnded>`.
+- TYP-019 Superseded by H-006 (Phase H): the span record types are removed. Canonical `sc_observability_types::v2` span-state serialization shall not expose a producer-facing mutable state field.
 - TYP-020 `Observable` shall remain an open trait for consumer-owned payload types.
-- TYP-021 `ObservationSubscriber<T>`, `ObservationFilter<T>`, `LogProjector<T>`, `SpanProjector<T>`, and `MetricProjector<T>` shall remain open extension points.
+- TYP-021 `SpanProjector<T>` and `MetricProjector<T>` superseded by H-006 (Phase H): removed. `ObservationSubscriber<T>`, `ObservationFilter<T>`, and `LogProjector<T>` shall remain open extension points.
 - TYP-023 Traits used behind `Arc<dyn ...>` shall remain object-safe, with `T` fixed at each usage site.
 - TYP-024 Traits used in concurrent routing or injection contexts shall be `Send + Sync`.
 - TYP-025 `ToolName` shall be owned by `sc-observability-types`, wrap a validated string identifier, and represent the top-level tool or executable identity used for config and path derivation.
@@ -312,27 +312,27 @@ This crate is the observation routing layer built on top of logging.
 This crate is the OTel/OTLP layer built on `sc-observability-types`.
 
 - OTLP-001 `sc-observability-otlp` shall provide the OTLP-backed telemetry surface.
-- OTLP-002 `sc-observability-otlp` shall expose `v2::Telemetry` (`RuntimeTelemetry`) and `v2::TelemetryConfig`.
+- OTLP-002 Superseded by H-002/H-006 (Phase H). `sc-observability-otlp` shall expose `v2::Telemetry` (`RuntimeTelemetry`) and `v2::TelemetryConfig`.
 - OTLP-003 `sc-observability-otlp` shall own all OpenTelemetry and OTLP transport concerns.
-- OTLP-004 `v2::OtelConfig.protocol` shall be a typed `v2::OtlpProtocol` enum rather than a free-form string.
-- OTLP-005 Invalid OTLP transport configuration shall fail at `RuntimeTelemetry::new(...)` with `sc_observability_types::v2::InitError`.
-- OTLP-006 `RuntimeTelemetry` emit methods shall return `sc_observability_types::v2::TelemetryError`.
-- OTLP-007 Calling an emit method after `shutdown()` shall return `v2::TelemetryError::Shutdown`.
-- OTLP-008 The canonical runtime `V2SpanAssembler` shall buffer a started span, attach events, and emit `sc_observability_types::otlp::OtlpCompleteSpan` only when the span ends.
-- OTLP-009 In-flight started spans without a matching end shall be dropped at flush/shutdown and counted as dropped exports.
-- OTLP-010 The internal trace-export path shall export `sc_observability_types::otlp::OtlpCompleteSpan`, not a raw span signal.
-- OTLP-011 crate-local `LogExporter`, `TraceExporter`, and `MetricExporter` contracts may remain object-safe for `Arc<dyn ...>`, but they are implementation details rather than public extension points.
-- OTLP-012 Exporter failures after validation shall be fail-open and shall update health and dropped-export counters.
-- OTLP-013 Telemetry health shall expose `TelemetryHealthReport`,
+- OTLP-004 Superseded by H-002 (Phase H). `v2::OtelConfig.protocol` shall be a typed `v2::OtlpProtocol` enum rather than a free-form string.
+- OTLP-005 Superseded by H-006 (Phase H). Invalid OTLP transport configuration shall fail at `RuntimeTelemetry::new(...)` with `sc_observability_types::v2::InitError`.
+- OTLP-006 Superseded by H-006 (Phase H). `RuntimeTelemetry` emit methods shall return `sc_observability_types::v2::TelemetryError`.
+- OTLP-007 Superseded by H-006 (Phase H). Calling an emit method after `shutdown()` shall return `v2::TelemetryError::Shutdown`.
+- OTLP-008 Superseded by H-006 (Phase H). The canonical runtime `V2SpanAssembler` shall buffer a started span, attach events, and emit `sc_observability_types::otlp::OtlpCompleteSpan` only when the span ends.
+- OTLP-009 Superseded by H-006 (Phase H). In-flight started spans without a matching end shall be dropped at flush/shutdown and counted as dropped exports.
+- OTLP-010 Superseded by H-006 (Phase H). The internal trace-export path shall export `sc_observability_types::otlp::OtlpCompleteSpan`, not a raw span signal.
+- OTLP-011 Superseded by H-006 (Phase H). crate-local `LogExporter`, `TraceExporter`, and `MetricExporter` contracts may remain object-safe for `Arc<dyn ...>`, but they are implementation details rather than public extension points.
+- OTLP-012 Superseded by H-006 (Phase H). Exporter failures after validation shall be fail-open and shall update health and dropped-export counters.
+- OTLP-013 Superseded by H-006 (Phase H). Telemetry health shall expose `TelemetryHealthReport`,
   `ExporterHealth`, and typed `ExporterHealthState` (defined in
   `sc-observability-types` and re-exported by `sc-observability-otlp`).
-- OTLP-014 `sc-observability-otlp`'s only normal sc-* dependency is `sc-observability-types`; `sc-observe` is a dev-dependency of its tests.
+- OTLP-014 Superseded by ADR-023 (Phase H): the `log-sink` feature adds a production `sc-observability` edge; `sc-observe` is no dependency. `sc-observability-otlp`'s only normal sc-* dependency is `sc-observability-types`; `sc-observe` is a dev-dependency of its tests.
 - OTLP-015 `sc-observability-otlp` shall attach OTel behavior using lower-level routing and logging infrastructure from the crates beneath it.
 - OTLP-016 `sc-observability-otlp` shall not push OTLP-specific requirements into `sc-observability`.
-- OTLP-017 `sc-observability-otlp` shall attach to the routing layer by registering `LogProjector`, `SpanProjector`, and `MetricProjector` implementations with `ObservabilityBuilder`, not through direct internal access to `sc-observe` internals.
-- OTLP-018 `v2::TelemetryConfig` shall be constructed independently of `ObservabilityConfig` and passed directly to `sc-observability-otlp` at setup time.
+- OTLP-017 Superseded by H-004 (Phase H): OTel logging attaches through the core `LogSink` extension point. `sc-observability-otlp` shall attach to the routing layer by registering `LogProjector`, `SpanProjector`, and `MetricProjector` implementations with `ObservabilityBuilder`, not through direct internal access to `sc-observe` internals.
+- OTLP-018 Superseded by H-002 (Phase H). `v2::TelemetryConfig` shall be constructed independently of `ObservabilityConfig` and passed directly to `sc-observability-otlp` at setup time.
 - OTLP-019 Zero-configuration OTLP behavior shall be disabled by default until the application explicitly enables telemetry or provides a valid endpoint.
-- OTLP-020 `v2::TelemetryConfig` and `v2::OtelConfig` shall define documented defaults:
+- OTLP-020 Superseded by H-002 (Phase H). `v2::TelemetryConfig` and `v2::OtelConfig` shall define documented defaults:
   - `enabled = false`
   - `protocol = HttpBinary`
   - `timeout_ms = 3000`
@@ -368,13 +368,13 @@ This crate is the OTel/OTLP layer built on `sc-observability-types`.
     shutdown; premature runtime termination yields `RuntimeTerminated`, never
     false success, and accounts admitted-but-incomplete records as dropped
   - incomplete spans are dropped only at shutdown/final flush
-- OTLP-022 `sc-observability-otlp` shall own crate-local sealed signal-emitter traits for direct telemetry injection where needed.
-- OTLP-023 The synchronous HTTP/JSON backend (feature `sync-http`) is a
+- OTLP-022 Superseded by H-006 (Phase H). `sc-observability-otlp` shall own crate-local sealed signal-emitter traits for direct telemetry injection where needed.
+- OTLP-023 Superseded by H-003/H-006 (Phase H). The synchronous HTTP/JSON backend (feature `sync-http`) is a
   first-class supported backend for callers without an async runtime. Its code,
   tests, dashboards, and operational recipes shall be maintained in this
   repository and shall not ship scratch paths, ATM dependencies/labels, or
   stale source-repository names.
-- OTLP-024 The supported Grafana/LogQL operational recipes shall be translated
+- OTLP-024 Superseded by H-006 (Phase H). The supported Grafana/LogQL operational recipes shall be translated
   to the current neutral resource/attribute schema, tested against the same
   hermetic collector corpus as both exporters, and stored under
   `docs/observability/otlp/`; legacy phase documents are evidence, not a public
@@ -596,14 +596,14 @@ keeps version 1.5.0 for every published crate; there is no major version bump.
 
 - PHD-001 Superseded by PHF-002 (Phase F): deprecate before removing.
 - PHD-002 Superseded by PHF-002 (Phase F): deprecate before removing.
-- PHD-003 OTLP shall provide both an official SDK/Tokio backend requiring a caller-owned runtime and a bounded plain-thread synchronous HTTP/JSON backend (feature `sync-http`) for callers without an async runtime. They shall share crate-private contracts, ordered admission/lifecycle barriers, deadlines and health/drop accounting. Backend/protocol/runtime combinations shall be validated at construction, and enabled transports shall never silently fall back to no-op.
-- PHD-004 Preserve the accepted Phase D canonical OTLP config/default/validation behavior: queue bounds limit record count and aggregate bytes, explicit validated config is not overridden by ambient OTEL_* values, and both backends satisfy the retired OTLP-021 lifecycle design. D22 specifies compatibility with released config literals/defaults; D26 supplies minimal adapters without changing backend contracts. Incompatible new configuration owners use the canonical namespace while the released root configuration retains its behavior.
+- PHD-003 Superseded by H-002/H-003 (Phase H). OTLP shall provide both an official SDK/Tokio backend requiring a caller-owned runtime and a bounded plain-thread synchronous HTTP/JSON backend (feature `sync-http`) for callers without an async runtime. They shall share crate-private contracts, ordered admission/lifecycle barriers, deadlines and health/drop accounting. Backend/protocol/runtime combinations shall be validated at construction, and enabled transports shall never silently fall back to no-op.
+- PHD-004 Superseded by H-002/H-006 (Phase H). Preserve the accepted Phase D canonical OTLP config/default/validation behavior: queue bounds limit record count and aggregate bytes, explicit validated config is not overridden by ambient OTEL_* values, and both backends satisfy the retired OTLP-021 lifecycle design. D22 specifies compatibility with released config literals/defaults; D26 supplies minimal adapters without changing backend contracts. Incompatible new configuration owners use the canonical namespace while the released root configuration retains its behavior.
 
 ## 13. Phase F — Purpose test and migration path
 
 - PHF-001 Every published crate exposes only its 2.0 logging, observation-routing and OTel export primitives and their configuration. Application code and examples live in exactly one designated place: `examples/` or the consumer's own repository.
 - PHF-002 Deprecate before removing. Every public 1.x item in every published crate ships behind its crate's default-on `v1` Cargo feature with `#[deprecated(note = "<2.0 replacement>")]` (an item with no replacement: `"removed; see docs/migration/phase-f.md"`), re-exported from its released path; the next release deletes the `v1` modules and features. A deprecated item need not keep working: it needs no compatibility adapters, tests or baseline comparison. Deleted in Phase F: public items already `#[deprecated]` in published 1.4.1, items never released, and internal plumbing. Test seams follow PHF-003. Every 2.0 item stays (Product Bar, CLAUDE.md). Canonical code never uses a `v1` item.
-- PHF-003 A test seam that the instrumented Python wheel needs (`sc-observability-types` `test-double`, `sc-observability-binding-runtime` `test-hooks`, `sc-observability` `fault-injection` for revision exhaustion) stays behind its off-by-default feature, `#[doc(hidden)]`, and out of the published API snapshot. Every other test seam is `#[cfg(test)]`.
+- PHF-003 A test seam that the instrumented Python wheel needs (`sc-observability-binding-runtime` `test-hooks`, `sc-observability` `fault-injection` for revision exhaustion) stays behind its off-by-default feature, `#[doc(hidden)]`, and out of the published API snapshot. Every other test seam is `#[cfg(test)]`.
 - PHF-004 `queue_capacity` is standard logger configuration with a recommended default that the logger enforces; no other layer carries a copy.
 
 ### Phase D wave 5 — Customer telemetry submission
@@ -612,52 +612,52 @@ These additive requirements extend the compatible 1.x baseline. Customer field
 mapping remains outside the transport. These requirements cover logs, traces,
 metrics and profiles, including the pinned development-version profile protocol.
 
-- PHD-005 A shared Rust submission API shall accept logs, completed spans,
+- PHD-005 Superseded by H-006 (Phase H). A shared Rust submission API shall accept logs, completed spans,
   metrics and profiles independently or together, preserving original UTC timestamps,
   structured attributes, resource/scope and supplied valid correlation. Paired
   logs/spans without IDs receive shared IDs; conflicting supplied IDs or timing
   return typed errors. Historical records without actual start time are not
   fabricated spans.
-- PHD-006 Metric submission shall preserve gauge, sum, explicit histogram,
+- PHD-006 Superseded by H-006 (Phase H). Metric submission shall preserve gauge, sum, explicit histogram,
   exponential histogram and imported summary representations; numeric type,
   temporality, monotonicity, timestamps, distribution data and supported
   exemplars shall not be flattened or silently dropped. Profile samples, stacks,
   dictionaries, units, timestamps and links shall be preserved and references
   validated against the pinned profile schema. Span events/links/status
   and structured log bodies shall survive export. New contracts remain additive.
-- PHD-007 Successful durable admission shall mean a versioned record is committed
+- PHD-007 Superseded by H-006 (Phase H). Successful durable admission shall mean a versioned record is committed
   locally before the receipt returns. Pending data shall survive process restart.
   Capacity exhaustion, invalid payloads and persistence failure shall be explicit
   errors; pending data shall not be silently evicted. The store shall support
   bounded retention and coordinated access from Python and CLI processes.
-- PHD-008 Delivery shall track each signal independently and support bounded flush,
+- PHD-008 Superseded by H-006 (Phase H). Delivery shall track each signal independently and support bounded flush,
   timeout, shutdown and retry after collector recovery. Admission and remote
   delivery shall be distinguishable. Document at-least-once delivery and its crash
   duplication window; stable import keys shall prevent duplicate local admission.
-- PHD-009 Installed Python bindings shall expose shared configuration, submission,
+- PHD-009 Superseded by H-005/H-006 (Phase H). Installed Python bindings shall expose shared configuration, submission,
   receipts, status and flush/shutdown with matching type stubs and typed errors.
   Existing logging APIs shall retain compatibility. `open`, `emit` (durable
   commit), `flush`, `shutdown` and `status` shall release the GIL; context exit
   shall not hide delivery errors. Release wheels shall enable the telemetry
   feature.
-- PHD-010 An installable Rust CLI, the `sc-otel` binary from crate `sc-otel-cli`,
+- PHD-010 Superseded by H-005/H-006 (Phase H). An installable Rust CLI, the `sc-otel` binary from crate `sc-otel-cli`,
   shall expose the same submission contract through structured stdin and
   log/span/metric/profile options, plus validate, flush and status. Python and
   CLI shall use the same validation/config precedence. Exit status and machine
   output shall distinguish invalid input, admission failure and delivery failure.
-- PHD-011 The sanity consumer shall map historical and live LLM/JEV records with
+- PHD-011 Superseded by H-006 (Phase H). The sanity consumer shall map historical and live LLM/JEV records with
   configurable team/service/phase and a repository-specific PR URL template.
   Preserve reviewer identity, tested commit and original UTC timing. Persist
   source progress only after admission and handle partial lines, rotation,
   truncation and repeated imports without silent loss. Local time is display only.
-- PHD-012 End-to-end tests shall submit through the installed Python package and
+- PHD-012 Superseded by H-008 (Phase H). End-to-end tests shall submit through the installed Python package and
   actual CLI, then read back records from the pinned `otel-desktop-viewer`
   (v0.5.0) for every signal it supports, asserting values, timestamps and correlation. Collector capture
   shall verify remaining supported wire forms explicitly; it does not substitute
   for viewer readback or justify claiming unsupported viewer capabilities.
   Exercise offline recovery, process restart and partial signal delivery.
   Proof is automated query assertions; manual UI inspection is not proof.
-- PHD-013 Full telemetry support shall be measured against the pinned upstream
+- PHD-013 Superseded by H-006 (Phase H). Full telemetry support shall be measured against the pinned upstream
   opentelemetry-proto v1.10.0 (Rust `opentelemetry-proto =0.33.0`): all four signal families, every payload variant
   and their fields must be represented through Rust, Python, CLI and the durable
   format. Serialization/export tests shall exercise the variants and nested
@@ -746,6 +746,14 @@ and ADR-023; historical text and unrelated logging obligations remain intact.
   or a required new ATM dependency.
 - H-008 File plus OTel simultaneous logging is the only new capability. Each
   sprint shall list any added wrapper and its necessity; default is none.
+  H-1's only approved private adapters are `FlushOnlyExporter`/`FlushGate`,
+  which limit metric export to the explicit flush, suppress a second export
+  during shutdown after a caller-recording error, and detect an empty metric
+  recording; and `ExplicitHeaders`, which reapplies explicit application
+  headers after exporter-provided environment headers so explicit values win.
+  These adapters do not add a public exporter, provider or reader facade, and
+  no additional wrapper is authorized. Their implementation rationale is
+  recorded in ADR-023 and the h-1 sprint contract.
   Phase H shall finish with net deletion of source code, report actual
   added/deleted source and test lines separately, and preserve relevant tests.
   Use one git diff --numstat excluding generated paths and require a negative
