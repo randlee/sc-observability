@@ -822,7 +822,8 @@ facade is deprecated behind the default `v1` feature.
 - **Decision**: The dependency order is `types <- sc-observability <- sc-observability-log`, `sc-observability <- sc-observe`, and `types <- sc-observability-otlp`; `sc-observability` and `sc-observe` are OTLP test dev-dependencies only.
 - **Amended by ADR-023**: `sc-observability <- sc-observability-otlp` is also a
   production edge under the optional `log-sink` feature, for `OtelLogSink`
-  only. `sc-observe` stays an OTLP dev-dependency and no reverse edge exists.
+  only. `sc-observe` is no dependency of `sc-observability-otlp` (not even a
+  dev-dependency), and no reverse edge exists.
 - **Consequences**:
   - OTLP remains optional
   - `sc-observe` can be used without OpenTelemetry
