@@ -17,6 +17,9 @@ native = ["dep:opentelemetry", "dep:opentelemetry_sdk"]
 log-sink = ["native", "dep:sc-observability", "dep:serde_json"]
 # Blocking OTLP/HTTP protobuf client for CLI and Python frontends (ADR-023).
 synchronous-client = ["native", "dep:opentelemetry-otlp", "opentelemetry-otlp/http-proto", "opentelemetry-otlp/reqwest-blocking-client", "opentelemetry-otlp/reqwest-rustls", "dep:opentelemetry-http", "dep:otel-reqwest", "dep:futures-executor", "dep:tokio"]
+# Official OTLP/HTTP exporters (`otlp`) for Tokio hosts, driven by the default SDK batch processors
+# and their blocking reqwest client; no sc-observability dependency.
+tokio-exporter = ["native", "dep:opentelemetry-otlp", "opentelemetry-otlp/http-proto", "opentelemetry-otlp/reqwest-blocking-client", "opentelemetry-otlp/reqwest-rustls"]
 
 [dependencies]
 serde_json = { workspace = true, optional = true }

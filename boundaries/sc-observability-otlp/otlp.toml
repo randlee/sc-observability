@@ -4,10 +4,11 @@ owner_crate_path = "sc_observability_otlp"
 name = "ScObservabilityOtlp"
 [public]
 facade = "crate_root"
-modules = ["api", "sdk", "sync"]
+modules = ["api", "otlp", "sdk", "sync"]
 
 [public.feature_gates]
 api = "native"
+otlp = "tokio-exporter"
 sdk = "native"
 sync = "synchronous-client"
 [implementation]

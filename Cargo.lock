@@ -1029,9 +1029,6 @@ name = "otlp-native-example"
 version = "1.6.0"
 dependencies = [
  "log",
- "opentelemetry",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
  "sc-observability",
  "sc-observability-log",
  "sc-observability-otlp",

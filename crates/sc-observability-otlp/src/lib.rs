@@ -22,6 +22,9 @@ pub mod sync;
 #[cfg(feature = "log-sink")]
 #[doc(inline)]
 pub use log_sink::OtelLogSink;
+#[cfg(feature = "tokio-exporter")]
+#[doc(inline)]
+pub use native::otlp;
 #[cfg(feature = "native")]
 #[doc(inline)]
 pub use native::{api, sdk};

@@ -1,26 +1,28 @@
 //! Selective re-exports of the unmodified official OpenTelemetry 0.33.0 types
-//! named by the synchronous client and log-sink contracts (ADR-023).
+//! named by the synchronous client, log-sink and Tokio exporter contracts
+//! (ADR-023).
 //!
-//! Frontends reach these types through this crate so they declare no direct
-//! OpenTelemetry dependency. Native Tokio hosts depend on the official crates
-//! directly and need none of these paths.
+//! Hosts and frontends reach these types through this crate so they declare no
+//! direct OpenTelemetry dependency. The `otlp` module (feature
+//! `tokio-exporter`) adds the official OTLP/HTTP exporters.
 
 /// OpenTelemetry API types used by the native contracts.
 pub mod api {
     #[doc(inline)]
-    pub use opentelemetry::{InstrumentationScope, Key, KeyValue, Value};
+    pub use opentelemetry::{Context, InstrumentationScope, Key, KeyValue, Value};
 
     /// Native log data model types.
     pub mod logs {
         #[doc(inline)]
-        pub use opentelemetry::logs::{AnyValue, LogRecord, Severity};
+        pub use opentelemetry::logs::{AnyValue, LogRecord, Logger, LoggerProvider, Severity};
     }
 
     /// Native trace identity and completed-span component types.
     pub mod trace {
         #[doc(inline)]
         pub use opentelemetry::trace::{
-            Event, Link, SpanContext, SpanId, SpanKind, Status, TraceFlags, TraceId, TraceState,
+            Event, Link, Span, SpanContext, SpanId, SpanKind, Status, TraceContextExt, TraceFlags,
+            TraceId, TraceState, Tracer, TracerProvider,
         };
     }
 
@@ -40,14 +42,21 @@ pub mod sdk {
     pub mod trace {
         #[doc(inline)]
         pub use opentelemetry_sdk::trace::{
-            IdGenerator, RandomIdGenerator, SpanData, SpanEvents, SpanLinks,
+            BatchSpanProcessor, IdGenerator, RandomIdGenerator, SdkTracerProvider, SpanData,
+            SpanEvents, SpanLinks,
         };
     }
 
     /// Native SDK logger provider and record types.
     pub mod logs {
         #[doc(inline)]
-        pub use opentelemetry_sdk::logs::{SdkLogRecord, SdkLoggerProvider};
+        pub use opentelemetry_sdk::logs::{BatchLogProcessor, SdkLogRecord, SdkLoggerProvider};
+    }
+
+    /// Native SDK metric reader and provider types.
+    pub mod metrics {
+        #[doc(inline)]
+        pub use opentelemetry_sdk::metrics::{PeriodicReader, SdkMeterProvider};
     }
 
     /// Native SDK operation result types.
@@ -55,4 +64,13 @@ pub mod sdk {
         #[doc(inline)]
         pub use opentelemetry_sdk::error::{OTelSdkError, OTelSdkResult};
     }
+}
+
+/// Official OTLP/HTTP exporters for the default SDK batch processors.
+#[cfg(feature = "tokio-exporter")]
+pub mod otlp {
+    #[doc(inline)]
+    pub use opentelemetry_otlp::{
+        LogExporter, MetricExporter, Protocol, SpanExporter, WithExportConfig,
+    };
 }
