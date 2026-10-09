@@ -28,6 +28,7 @@ test:
 deny:
     cargo deny --manifest-path bindings/python/sc-observability-py/Cargo.toml --features otlp-telemetry --locked check --config policy/deny.toml licenses bans advisories
     cargo deny --manifest-path crates/sc-otel-cli/Cargo.toml --all-features --locked check --config policy/deny.toml licenses bans advisories
+    cargo deny --manifest-path crates/sc-observability-otlp/Cargo.toml --features log-sink --locked check --config policy/deny.toml licenses bans advisories
 
 # Full gate: lint, tests and the scoped dependency audit.
 validate: lint test deny
