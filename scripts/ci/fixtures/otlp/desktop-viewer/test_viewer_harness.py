@@ -471,5 +471,164 @@ class ViewerHarnessSafetyTests(unittest.TestCase):
                 stop_mock.assert_called_once()
 
 
+LOG = (
+    '2026-10-08T20:22:31.625-0700\tinfo\totlpreceiver@v0.159.0/otlp.go:120\tStarting GRPC server\t'
+    '{"resource": {"service.name": "otel-desktop-viewer"}, "endpoint": "127.0.0.1:55188"}\n'
+    '2026-10-08T20:22:31.625-0700\tinfo\totlpreceiver@v0.159.0/otlp.go:175\tStarting HTTP server\t'
+    '{"resource": {"service.name": "otel-desktop-viewer"}, "endpoint": "127.0.0.1:55189"}\n'
+)
+
+
+class EphemeralPortHandshakeTests(unittest.TestCase):
+    def test_logged_endpoints_name_the_grpc_and_http_ports(self) -> None:
+        self.assertEqual(harness._logged_endpoints(LOG), {"grpc": 55188, "http": 55189})
+        self.assertEqual(harness._logged_endpoints("no endpoints yet\n"), {})
+
+    def test_socket_table_parsers_read_only_listening_rows(self) -> None:
+        proc = ("  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+                "   0: 0100007F:D993 00000000:0000 0A 00000000:00000000 00:00000000 00000000   501        0 111 1\n"
+                "   1: 0100007F:D994 0100007F:0050 01 00000000:00000000 00:00000000 00000000   501        0 222 1\n")
+        self.assertEqual(harness._parse_proc_net_tcp(proc), {"111": 0xD993})
+        self.assertEqual(harness._parse_lsof_ports("p123\nf4\nn127.0.0.1:55187\nf5\nn[::1]:55188\nn*:55189\n"),
+                         {55187, 55188, 55189})
+        netstat = ("  Proto  Local Address          Foreign Address        State           PID\n"
+                   "  TCP    127.0.0.1:55187        0.0.0.0:0              LISTENING       4242\n"
+                   "  TCP    127.0.0.1:55188        0.0.0.0:0              LISTENING       999\n"
+                   "  TCP    127.0.0.1:55189        127.0.0.1:50000        ESTABLISHED     4242\n")
+        self.assertEqual(harness._parse_netstat_ports(netstat, 4242), {55187})
+
+    def test_bound_ports_resolve_ephemeral_requests_from_log_and_socket_table(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            log = Path(temp) / "viewer.log"
+            requested = {"http": 0, "grpc": 0, "ui": 0}
+            self.assertIsNone(harness._bound_ports(1, log, requested), "no log yet")
+            log.write_text("starting\n")
+            self.assertIsNone(harness._bound_ports(1, log, requested), "endpoints not logged yet")
+            log.write_text(LOG)
+            with mock.patch.object(harness, "_listening_ports", return_value={55187, 55188, 55189}):
+                self.assertEqual(harness._bound_ports(1, log, requested),
+                                 {"http": 55189, "grpc": 55188, "ui": 55187})
+            with mock.patch.object(harness, "_listening_ports", return_value={55188, 55189}):
+                self.assertIsNone(harness._bound_ports(1, log, requested), "browser port not listening yet")
+            with mock.patch.object(harness, "_listening_ports", return_value={55186, 55187, 55188, 55189}):
+                self.assertIsNone(harness._bound_ports(1, log, requested), "ambiguous browser port")
+
+    def test_explicit_ports_never_consult_the_process(self) -> None:
+        requested = {"http": 4318, "grpc": 4317, "ui": 8000}
+        with mock.patch.object(harness, "_listening_ports", side_effect=AssertionError("consulted")):
+            self.assertEqual(harness._bound_ports(1, Path("missing.log"), requested), requested)
+
+    def test_start_reports_the_ports_the_viewer_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            binary = _fake_binary(root, body="exit")
+            args = argparse.Namespace(binary=str(binary), state_dir=str(root / "state"),
+                                      binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
+                                      version=None, host="127.0.0.1", http=0, grpc=0, ui=0)
+            process = mock.Mock(pid=999)
+            process.poll.return_value = None
+
+            def launch(command: list[str], **kwargs: object) -> mock.Mock:
+                kwargs["stdout"].write(LOG.encode())
+                kwargs["stdout"].flush()
+                self.assertEqual([command[i + 1] for i, v in enumerate(command)
+                                  if v in ("--http", "--grpc", "--browser-port")], ["0", "0", "0"])
+                return process
+
+            with mock.patch.object(harness.subprocess, "Popen", side_effect=launch), \
+                    mock.patch.object(harness, "_listening_ports", return_value={55187, 55188, 55189}), \
+                    mock.patch.object(harness, "_request", return_value=(200, b"")) as request, \
+                    mock.patch.object(harness, "rpc", return_value=[]) as rpc, \
+                    mock.patch("builtins.print") as printed:
+                harness.start(args)
+            ready = json.loads(printed.call_args.args[0])
+            self.assertEqual((ready["status"], ready["http"], ready["grpc"], ready["ui"]),
+                             ("ready", 55189, 55188, 55187))
+            request.assert_called_with("http://127.0.0.1:55187/", timeout=1)
+            self.assertEqual(rpc.call_args.args[0], "http://127.0.0.1:55187/")
+            recorded = json.loads((root / "state" / "viewer.json").read_text())
+            self.assertEqual((recorded["http"], recorded["grpc"], recorded["ui"]), (55189, 55188, 55187))
+
+    def test_logged_port_zero_is_not_a_bound_port(self) -> None:
+        zero = LOG.replace("127.0.0.1:55188", "127.0.0.1:0")
+        self.assertEqual(harness._logged_endpoints(zero), {"http": 55189})
+
+    def test_bound_ports_ignore_endpoints_logged_before_the_offset(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            log = Path(temp) / "viewer.log"
+            requested = {"http": 0, "grpc": 0, "ui": 0}
+            log.write_text(LOG)  # the previous run, retained across stop
+            offset = log.stat().st_size
+            with mock.patch.object(harness, "_listening_ports", return_value={55187, 55188, 55189}):
+                self.assertIsNone(harness._bound_ports(1, log, requested, offset), "new run not logged yet")
+            with log.open("a") as handle:
+                handle.write(LOG.replace("55188", "56188").replace("55189", "56189"))
+            with mock.patch.object(harness, "_listening_ports", return_value={56187, 56188, 56189}):
+                self.assertEqual(harness._bound_ports(1, log, requested, offset),
+                                 {"http": 56189, "grpc": 56188, "ui": 56187})
+
+    def _start_args(self, root: Path) -> argparse.Namespace:
+        binary = _fake_binary(root, body="exit")
+        return argparse.Namespace(binary=str(binary), state_dir=str(root / "state"),
+                                  binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
+                                  version=None, host="127.0.0.1", http=0, grpc=0, ui=0)
+
+    def test_start_ignores_a_retained_log_from_the_previous_run(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = self._start_args(root)
+            state = root / "state"
+            state.mkdir()
+            (state / "viewer.log").write_text(LOG)
+            (state / "viewer.duckdb").write_bytes(b"")
+            (state / harness.RESTART_MARKER).write_text(json.dumps({
+                "binary": str(Path(args.binary).resolve()), "sha256": args.binary_sha256,
+                "version": None, "database": str((state / "viewer.duckdb").resolve())}))
+            args.reuse_state = True
+            process = mock.Mock(pid=999)
+            fresh = LOG.replace("55188", "56188").replace("55189", "56189")
+            polls: list[int] = []
+
+            def poll() -> None:
+                polls.append(1)
+                if len(polls) == 2:  # the new process logs only after the first readiness pass
+                    with (state / "viewer.log").open("a") as handle:
+                        handle.write(fresh)
+
+            def listening(_pid: int) -> set[int]:
+                return {56187, 56188, 56189} if len(polls) >= 2 else {55187, 55188, 55189}
+
+            process.poll.side_effect = poll
+            with mock.patch.object(harness.subprocess, "Popen", return_value=process), \
+                    mock.patch.object(harness, "_listening_ports", side_effect=listening), \
+                    mock.patch.object(harness, "_request", return_value=(200, b"")), \
+                    mock.patch.object(harness, "rpc", return_value=[]), \
+                    mock.patch("builtins.print") as printed:
+                harness.start(args)
+            ready = json.loads(printed.call_args.args[0])
+            self.assertEqual((ready["http"], ready["grpc"], ready["ui"]), (56189, 56188, 56187))
+
+    def test_start_fails_at_once_on_an_rpc_error_from_a_listening_viewer(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = self._start_args(root)
+            process = mock.Mock(pid=999)
+            process.poll.return_value = None
+
+            def launch(command: list[str], **kwargs: object) -> mock.Mock:
+                kwargs["stdout"].write(LOG.encode())
+                kwargs["stdout"].flush()
+                return process
+
+            with mock.patch.object(harness.subprocess, "Popen", side_effect=launch), \
+                    mock.patch.object(harness, "_listening_ports", return_value={55187, 55188, 55189}), \
+                    mock.patch.object(harness, "_request", return_value=(200, b"")), \
+                    mock.patch.object(harness, "rpc",
+                                      side_effect=harness.HarnessError("RPC searchLogs failed: boom")) as rpc:
+                with self.assertRaisesRegex(harness.HarnessError, "RPC searchLogs failed: boom"):
+                    harness.start(args)
+            rpc.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

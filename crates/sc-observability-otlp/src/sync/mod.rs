@@ -65,9 +65,11 @@
 use std::borrow::Cow;
 use std::fmt;
 use std::future::Future;
+use std::io::Read;
+use std::path::Path;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 use opentelemetry::logs::{LogRecord as _, Logger as _, LoggerProvider as _};
@@ -96,8 +98,11 @@ use otel_reqwest::header::{
     CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, HOST, HeaderMap, HeaderName, HeaderValue,
 };
 
+mod signal;
 #[cfg(test)]
 mod tests;
+
+pub use signal::{CompletedSpan, LogEntry, Measurement, MetricKind, span_status};
 
 /// Placeholder written in place of credentials in error text.
 const REDACTED: &str = "[REDACTED]";
@@ -120,6 +125,69 @@ pub enum SyncError {
     },
     /// The official exporter or SDK lifecycle failed.
     Export(sdk::error::OTelSdkError),
+}
+
+/// Reads a frontend-supplied PEM bundle from one bounded regular file.
+///
+/// The CLI and Python boundary share this reader so neither can block on a
+/// device or FIFO, nor buffer more than one MiB of certificate input.
+///
+/// # Errors
+///
+/// Returns [`SyncError::Validation`] with [`codes::INVALID_CONFIG`] when the
+/// path cannot be read, is not a regular file, or exceeds the byte limit.
+pub fn read_root_certificate(path: &Path) -> Result<Vec<u8>, SyncError> {
+    read_bounded_regular_file(path, "root certificate", codes::INVALID_CONFIG)
+}
+
+/// Reads one frontend-supplied file of at most [`MAX_INPUT_BYTES`] bytes.
+///
+/// The file is opened first and the check that it is a regular file runs on the
+/// opened handle, so a path swapped for a FIFO or device after a path check cannot
+/// be opened into a block. On Unix the open itself is non-blocking, which lets a
+/// writer-less FIFO open and then fail the regular-file check. `what` names the
+/// input in error messages and `code` is the registry code every failure carries.
+///
+/// # Errors
+///
+/// Returns [`SyncError::Validation`] with `code` when the path cannot be opened
+/// or read, is not a regular file, or exceeds the byte limit.
+pub fn read_bounded_regular_file(
+    path: &Path,
+    what: &str,
+    code: &'static str,
+) -> Result<Vec<u8>, SyncError> {
+    let unreadable = |error: std::io::Error| {
+        SyncError::validation(
+            code,
+            format!("cannot read {what} {}: {error}", path.display()),
+        )
+    };
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.custom_flags(libc::O_NONBLOCK);
+    }
+    let file = options.open(path).map_err(unreadable)?;
+    if !file.metadata().map_err(unreadable)?.is_file() {
+        return Err(SyncError::validation(
+            code,
+            format!("{what} {} must be a regular file", path.display()),
+        ));
+    }
+    let limit = MAX_INPUT_BYTES;
+    let cap = u64::try_from(limit).map_or(u64::MAX, |limit| limit.saturating_add(1));
+    let mut bytes = Vec::new();
+    file.take(cap).read_to_end(&mut bytes).map_err(unreadable)?;
+    if bytes.len() > limit {
+        return Err(SyncError::validation(
+            code,
+            format!("{what} {} exceeds the {limit}-byte limit", path.display()),
+        ));
+    }
+    Ok(bytes)
 }
 
 impl SyncError {
@@ -154,6 +222,23 @@ impl std::error::Error for SyncError {
     }
 }
 
+/// Converts an unsigned attribute integer without losing its exact value.
+///
+/// Native OpenTelemetry attributes support signed integers only. Values that
+/// fit that representation remain integers; larger values become their exact
+/// decimal string instead of a lossy floating-point value. CLI and Python use
+/// this shared rule at their language boundaries.
+#[must_use]
+pub fn unsigned_attribute<T>(value: u64) -> T
+where
+    T: From<i64> + From<String>,
+{
+    match i64::try_from(value) {
+        Ok(value) => T::from(value),
+        Err(_) => T::from(value.to_string()),
+    }
+}
+
 /// Rejects frontend input above [`MAX_INPUT_BYTES`] or [`MAX_BATCH_RECORDS`].
 ///
 /// CLI and Python entry points call this before parsing or exporting input.
@@ -177,6 +262,37 @@ pub fn check_input_limits(input_bytes: usize, records: usize) -> Result<(), Sync
         ));
     }
     Ok(())
+}
+
+/// Shared byte accounting for one frontend signal before it is exported.
+///
+/// Frontends add the log body or signal name, the span error text, the metric
+/// unit and description, every attribute key, and every string attribute
+/// value; the service name is counted once per call. Keeping the accumulation
+/// here makes the CLI and Python binding apply the same per-call input policy.
+#[derive(Debug, Default)]
+pub struct InputByteCounter {
+    bytes: usize,
+}
+
+impl InputByteCounter {
+    /// Starts an empty per-signal input counter.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { bytes: 0 }
+    }
+
+    /// Adds text to the input and rejects it as soon as it exceeds the limit.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SyncError::Validation`] with
+    /// [`error_codes::sync::INPUT_LIMIT_EXCEEDED`](crate::error_codes::sync::INPUT_LIMIT_EXCEEDED)
+    /// when the accumulated input exceeds [`MAX_INPUT_BYTES`].
+    pub fn add_text(&mut self, text: &str) -> Result<(), SyncError> {
+        self.bytes = self.bytes.saturating_add(text.len());
+        check_input_limits(self.bytes, 0)
+    }
 }
 
 /// Returns the shared CLI and Python endpoint after applying precedence.
@@ -235,6 +351,17 @@ pub fn parse_span_id(field: &str, value: &str) -> Result<SpanId, SyncError> {
     SpanId::from_hex(value).map_err(|error| invalid_id(field, &error))
 }
 
+/// Returns whether a supplied parent span ID establishes remote provenance.
+///
+/// A parent ID identifies a causal relationship, but does not by itself say
+/// that the parent originated in another process. Frontends therefore mark
+/// such a parent as local unless a future shared input contract carries
+/// explicit remote provenance.
+#[must_use]
+pub(crate) const fn parent_span_is_remote() -> bool {
+    false
+}
+
 /// Returns span start and end times given as Unix nanoseconds; a missing end
 /// is the current time and a missing start is the end.
 ///
@@ -247,7 +374,7 @@ pub fn parse_span_id(field: &str, value: &str) -> Result<SpanId, SyncError> {
 /// Returns [`SyncError::Validation`] with
 /// [`error_codes::sync::INVALID_RECORD`](crate::error_codes::sync::INVALID_RECORD)
 /// when the start is after the end.
-pub fn span_times(
+pub(super) fn span_times(
     start_unix_nano: Option<u64>,
     end_unix_nano: Option<u64>,
 ) -> Result<(SystemTime, SystemTime), SyncError> {
@@ -581,8 +708,10 @@ impl Client {
     ///
     /// Returns [`SyncError::Validation`] when the closure fails (nothing is
     /// exported), when no valid measurement was recorded (for example only
-    /// instruments with invalid names), or when a Tokio runtime is entered;
-    /// returns [`SyncError::Export`] when the flush or shutdown fails.
+    /// instruments with invalid names), when one scope registers the same
+    /// instrument name with a different kind or unit (nothing is exported),
+    /// or when a Tokio runtime is entered; returns [`SyncError::Export`] when
+    /// the flush or shutdown fails.
     pub fn send_metrics<F>(
         &mut self,
         resource: &sdk::Resource,
@@ -625,6 +754,17 @@ impl Client {
         let shutdown = provider.shutdown();
         flushed.map_err(|error| self.export_error(error))?;
         shutdown.map_err(|error| self.export_error(error))?;
+        let conflict = gate
+            .conflict
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(name) = conflict {
+            return Err(SyncError::validation(
+                codes::INVALID_RECORD,
+                format!("conflicting instrument {name}: registered with a different kind or unit"),
+            ));
+        }
         if gate.exported.load(Ordering::SeqCst) {
             Ok(())
         } else {
@@ -777,6 +917,9 @@ struct FlushGate {
     armed: AtomicBool,
     /// Whether the flush collected at least one metric and exported it.
     exported: AtomicBool,
+    /// The instrument name registered twice with a different kind or unit; a
+    /// later conflicting export replaces an earlier one.
+    conflict: Mutex<Option<String>>,
 }
 
 /// Delegates to the official exporter only during the explicit flush, so a
@@ -793,6 +936,14 @@ impl PushMetricExporter for FlushOnlyExporter {
         if !self.gate.armed.load(Ordering::SeqCst) || !has_metric_data_points(metrics) {
             return Ok(());
         }
+        if let Some(name) = conflicting_instrument(metrics) {
+            *self
+                .gate
+                .conflict
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(name);
+            return Ok(());
+        }
         self.gate.exported.store(true, Ordering::SeqCst);
         self.inner.export(metrics).await
     }
@@ -807,6 +958,71 @@ impl PushMetricExporter for FlushOnlyExporter {
 
     fn temporality(&self) -> Temporality {
         self.inner.temporality()
+    }
+}
+
+/// Returns the first instrument name that one scope registers twice
+/// (case-insensitively, per the `OTel` instrument identity rule) with a
+/// different data type or unit.
+fn conflicting_instrument(metrics: &ResourceMetrics) -> Option<String> {
+    metrics.scope_metrics().find_map(|scope_metrics| {
+        let mut seen: Vec<(String, &'static str, &str)> = Vec::new();
+        for metric in scope_metrics.metrics() {
+            let name = metric.name().to_ascii_lowercase();
+            let shape = aggregated_metric_shape(metric.data());
+            let unit = metric.unit();
+            match seen.iter().find(|(seen_name, ..)| *seen_name == name) {
+                Some((_, seen_shape, seen_unit)) if *seen_shape != shape || *seen_unit != unit => {
+                    return Some(metric.name().to_owned());
+                }
+                Some(_) => {}
+                None => seen.push((name, shape, unit)),
+            }
+        }
+        None
+    })
+}
+
+/// Names the number type and aggregation of one native metric.
+fn aggregated_metric_shape(data: &AggregatedMetrics) -> &'static str {
+    match data {
+        AggregatedMetrics::F64(data) => metric_data_shape(
+            data,
+            [
+                "f64 gauge",
+                "f64 sum",
+                "f64 histogram",
+                "f64 exponential histogram",
+            ],
+        ),
+        AggregatedMetrics::I64(data) => metric_data_shape(
+            data,
+            [
+                "i64 gauge",
+                "i64 sum",
+                "i64 histogram",
+                "i64 exponential histogram",
+            ],
+        ),
+        AggregatedMetrics::U64(data) => metric_data_shape(
+            data,
+            [
+                "u64 gauge",
+                "u64 sum",
+                "u64 histogram",
+                "u64 exponential histogram",
+            ],
+        ),
+    }
+}
+
+/// Picks the label for the aggregation of one native metric.
+fn metric_data_shape<T>(data: &MetricData<T>, labels: [&'static str; 4]) -> &'static str {
+    match data {
+        MetricData::Gauge(_) => labels[0],
+        MetricData::Sum(_) => labels[1],
+        MetricData::Histogram(_) => labels[2],
+        MetricData::ExponentialHistogram(_) => labels[3],
     }
 }
 

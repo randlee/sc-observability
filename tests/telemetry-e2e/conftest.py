@@ -12,7 +12,9 @@ bounded watchdog deadline and never sleeps to let an export happen.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import importlib.util
 import json
 import os
 import platform
@@ -41,9 +43,25 @@ COLLECTOR_STOP_TIMEOUT_SECONDS = 10
 POLL_SECONDS = 0.05
 MACHINES = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}
 SIGNALS = ("logs", "traces", "metrics")
-VIEWER_TIMEOUT_SECONDS = 30
 VIEWER_MACHINES = MACHINES
 VIEWER_HARNESS = ROOT / "scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py"
+
+
+def _harness_ready_seconds() -> int:
+    """The harness's own readiness deadline, read from the harness so the two cannot drift."""
+    spec = importlib.util.spec_from_file_location("viewer_harness_constants", VIEWER_HARNESS)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return int(module.READY_SECONDS)
+
+
+# Harness start worst case before it can report: the SHA-256 pass (allowed 30 s),
+# the 10 s --version call, READY_SECONDS, then terminate and kill waits of 5 s each.
+# The outer limit is that total plus a margin, so the harness always finishes its
+# own cleanup before the outer SIGKILL can fire.
+VIEWER_HARNESS_WORST_CASE_SECONDS = 30 + 10 + _harness_ready_seconds() + 5 + 5
+VIEWER_TIMEOUT_SECONDS = VIEWER_HARNESS_WORST_CASE_SECONDS + 30
 
 
 def run_process(command: list[str], *, timeout: float, **kwargs: Any) -> subprocess.CompletedProcess[str]:
@@ -442,26 +460,6 @@ def run_python(artifacts: dict[str, Path], cwd: Path, request: dict[str, Any]) -
 # Pinned desktop viewer
 
 
-def reserve_loopback_sockets(count: int) -> list[socket.socket]:
-    """Reserve distinct loopback ports until the caller deliberately releases them."""
-    sockets: list[socket.socket] = []
-    try:
-        for _ in range(count):
-            reserved = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            reserved.bind(("127.0.0.1", 0))
-            sockets.append(reserved)
-        return sockets
-    except BaseException:
-        for reserved in sockets:
-            reserved.close()
-        raise
-
-
-def loopback_endpoint(reserved: socket.socket) -> str:
-    host, port = reserved.getsockname()[:2]
-    return f"http://{host}:{port}"
-
-
 def _viewer_host_platform() -> str:
     """Match the downloader's host selection for explicit local viewer opt-in."""
     machine = platform.machine().lower()
@@ -483,26 +481,24 @@ def _viewer_start_command(
 
 
 class PinnedViewer(dict[str, str]):
-    """A hash-pinned viewer that tests may stop and restart on its same ports."""
+    """A hash-pinned viewer that tests may stop and restart.
+
+    The harness asks the viewer to bind ephemeral ports and reports the bound
+    ports in its ready JSON, so no port is chosen and released before use.
+    Every start, including a restart, publishes the ports it was given.
+    """
 
     def __init__(self, binary: str, version: str, binary_sha256: str, state: Path) -> None:
         self.binary = binary
         self.version = version
         self.binary_sha256 = binary_sha256
         self.state = state
-        self._reservations = reserve_loopback_sockets(3)
-        self.http, self.grpc, self.ui = (int(port.getsockname()[1]) for port in self._reservations)
-        assert len({self.http, self.grpc, self.ui}) == 3
-        super().__init__(otlp=f"http://127.0.0.1:{self.http}", rpc=f"http://127.0.0.1:{self.ui}/rpc")
+        self.http = self.grpc = self.ui = 0
+        super().__init__()
 
     def start(self, *, reuse_state: bool = False) -> None:
-        # The harness owns the listeners, so release the deterministic
-        # reservations immediately before it is invoked.
-        for reserved in self._reservations:
-            reserved.close()
-        self._reservations = []
         command = _viewer_start_command(
-            self.binary, self.version, self.binary_sha256, self.state, self.http, self.grpc, self.ui,
+            self.binary, self.version, self.binary_sha256, self.state, 0, 0, 0,
             reuse_state=reuse_state,
         )
         started = run_process(
@@ -510,6 +506,9 @@ class PinnedViewer(dict[str, str]):
             check=False, text=True, capture_output=True, timeout=VIEWER_TIMEOUT_SECONDS,
         )
         assert started.returncode == 0, started.stdout + started.stderr
+        ready = json.loads(started.stdout.strip().splitlines()[-1])
+        self.http, self.grpc, self.ui = (int(ready[name]) for name in ("http", "grpc", "ui"))
+        self.update(otlp=f"http://127.0.0.1:{self.http}", rpc=f"http://127.0.0.1:{self.ui}/rpc")
 
     def stop(self) -> None:
         stopped = run_process(
@@ -546,19 +545,35 @@ def pinned_viewer(tmp_path: Path) -> Iterator[PinnedViewer]:
     if receipt_sha256 and receipt_sha256 != entry["binary_sha256"]:
         pytest.fail("pinned viewer downloader receipt does not match host manifest", pytrace=False)
     viewer = PinnedViewer(binary, manifest["version"], entry["binary_sha256"], tmp_path / "viewer-state")
-    viewer.start()
+    with owned_viewer(viewer):
+        yield viewer
+
+
+@contextlib.contextmanager
+def owned_viewer(viewer: PinnedViewer) -> Iterator[PinnedViewer]:
+    """Start the viewer and always stop it, including when the start itself fails.
+
+    A start that failed or timed out may have left the viewer running; its state
+    directory is how the harness finds and stops it.
+    """
     try:
+        viewer.start()
         yield viewer
     finally:
         if viewer.state.exists():
             viewer.stop()
 
 
-def rpc(url: str, method: str, params: list[object]) -> object:
+def rpc_response(url: str, method: str, params: list[object]) -> dict[str, Any]:
+    """The decoded JSON-RPC response, including an ``error`` member when the viewer sent one."""
     payload = json.dumps({"jsonrpc": "2.0", "id": "d32", "method": method,
                           "params": params}).encode("utf-8")
     request = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(request, timeout=10) as response:
-        decoded = json.loads(response.read())
+        return json.loads(response.read())
+
+
+def rpc(url: str, method: str, params: list[object]) -> object:
+    decoded = rpc_response(url, method, params)
     assert "error" not in decoded, decoded
     return decoded["result"]

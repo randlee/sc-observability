@@ -90,7 +90,7 @@ pub(crate) enum Command {
     Log(LogArgs),
     /// Export one completed span.
     #[command(
-        after_long_help = "Examples:\n  sc-otel span --name build --start-time-unix-nano 1700000000000000000 --end-time-unix-nano 1700000005000000000\n  sc-otel span --name deploy --kind client --error 'rollout timed out' --attributes @span.json\n\nWithout --trace-id and --span-id the span gets new random ids. Pass the ids of a parent span with --trace-id and --parent-span-id to join an existing trace. A parent supplied this way is external to this CLI process and is marked remote."
+        after_long_help = "Examples:\n  sc-otel span --name build --start-time-unix-nano 1700000000000000000 --end-time-unix-nano 1700000005000000000\n  sc-otel span --name deploy --kind client --error 'rollout timed out' --attributes @span.json\n\nWithout --trace-id and --span-id the span gets new random ids. Pass the ids of a parent span with --trace-id and --parent-span-id to join an existing trace. A parent supplied this way is recorded as local; this CLI does not mark it remote."
     )]
     Span(SpanArgs),
     /// Export one metric measurement.
@@ -136,7 +136,7 @@ pub(crate) struct SpanArgs {
     /// Span id (16 hex digits). Defaults to a new random id.
     #[arg(long, value_name = "HEX", value_parser = parse_span_id)]
     pub(crate) span_id: Option<SpanId>,
-    /// Remote parent span id (16 hex digits). Requires --trace-id.
+    /// Parent span id (16 hex digits); a supplied id is local unless provenance is explicit. Requires --trace-id.
     #[arg(long, value_name = "HEX", value_parser = parse_span_id, requires = "trace_id")]
     pub(crate) parent_span_id: Option<SpanId>,
     /// Span kind.
@@ -224,7 +224,7 @@ fn parse_span_id(value: &str) -> Result<SpanId, SyncError> {
 #[cfg(test)]
 mod tests {
     use super::{Cli, Command, MetricKind};
-    use clap::{Parser, error::ErrorKind};
+    use clap::{CommandFactory, Parser, error::ErrorKind};
 
     fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
         Cli::try_parse_from(std::iter::once("sc-otel").chain(args.iter().copied()))
@@ -354,5 +354,30 @@ mod tests {
         let rendered = format!("{cli:?}");
         assert!(rendered.contains("<invalid header>"), "{rendered}");
         assert!(!rendered.contains("Bearer secret"), "{rendered}");
+    }
+
+    #[test]
+    fn span_help_describes_the_shared_parent_provenance_rule() {
+        let mut command = Cli::command();
+        let span = command
+            .find_subcommand_mut("span")
+            .expect("span command exists");
+        let parent = span
+            .get_arguments()
+            .find(|argument| argument.get_id() == "parent_span_id")
+            .expect("parent span argument exists");
+        assert!(
+            parent
+                .get_help()
+                .expect("parent span help")
+                .to_string()
+                .contains("local unless provenance is explicit")
+        );
+        let long_help = span
+            .get_after_long_help()
+            .expect("span long help")
+            .to_string();
+        assert!(long_help.contains("recorded as local"), "{long_help}");
+        assert!(!long_help.contains("marked remote"), "{long_help}");
     }
 }

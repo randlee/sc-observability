@@ -56,6 +56,11 @@ def run(args: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, cwd=ROOT, text=True, capture_output=True)
 
 
+def has_library_target(manifest: Path, cargo: dict) -> bool:
+    """Binary-only crates expose no Rust API, so they have no API snapshot."""
+    return "lib" in cargo or (manifest.parent / "src/lib.rs").is_file()
+
+
 def published_packages(root: Path = ROOT) -> list[Package]:
     manifest = tomllib.loads((root / "release/publish-artifacts.toml").read_text(encoding="utf-8"))
     workspace = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))["workspace"]["package"]
@@ -68,6 +73,8 @@ def published_packages(root: Path = ROOT) -> list[Package]:
         package = cargo["package"]
         if package["name"] != item["package"]:
             raise SnapshotError(f"publish manifest package mismatch for {path}")
+        if not has_library_target(path, cargo):
+            continue
         version = package["version"]
         if isinstance(version, dict):
             version = workspace["version"]

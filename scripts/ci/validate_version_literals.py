@@ -5,6 +5,8 @@ import re
 import tomllib
 from pathlib import Path
 
+from stock_public_api import has_library_target
+
 HISTORICAL_LOCKS = {
     Path("crates/sc-observability/tests/fixtures/bp1-published-v1.2.0-baseline/Cargo.lock"),
     Path("crates/sc-observability/tests/fixtures/bp1-published-v1.2.0-consumer/Cargo.lock"),
@@ -25,8 +27,8 @@ APPROVED_DEFERRED_STANDALONE_PACKAGES = [
 ]
 
 
-def validate_api_package_roster(inventory: dict, publish_artifacts: dict) -> None:
-    """Require release inventory coverage for every published Rust crate."""
+def validate_api_package_roster(inventory: dict, publish_artifacts: dict, root: Path) -> None:
+    """Require release inventory coverage for every published Rust library crate."""
     candidate = inventory.get("qualificationCandidate")
     if not isinstance(candidate, dict):
         raise ValueError("release inventory must define qualificationCandidate")
@@ -48,9 +50,13 @@ def validate_api_package_roster(inventory: dict, publish_artifacts: dict) -> Non
         not isinstance(item, dict) for item in artifact_crates
     ):
         raise ValueError("publish-artifacts manifest must define a crates list")
-    published_names = [item.get("package") for item in artifact_crates]
-    if any(not isinstance(name, str) or not name for name in published_names):
+    if any(not isinstance(item.get("package"), str) or not item.get("package") for item in artifact_crates):
         raise ValueError("every publish-artifacts crate must name a package")
+    published_names = []
+    for item in artifact_crates:
+        manifest = root / item["cargo_toml"]
+        if has_library_target(manifest, tomllib.loads(manifest.read_text(encoding="utf-8"))):
+            published_names.append(item["package"])
     all_names = candidate_names + deferred_names
     if len(candidate_names) != len(set(candidate_names)):
         raise ValueError("qualificationCandidate.packages contains duplicate packages")
@@ -148,7 +154,7 @@ def validate(root: Path) -> None:
         raise ValueError("public API policy candidate must match the workspace release version")
     inventory = json.loads((root / "release/release-inventory.json").read_text(encoding="utf-8"))
     publish_manifest = tomllib.loads((root / "release/publish-artifacts.toml").read_text(encoding="utf-8"))
-    validate_api_package_roster(inventory, publish_manifest)
+    validate_api_package_roster(inventory, publish_manifest, root)
     workspace_lock = tomllib.loads((root / "Cargo.lock").read_text(encoding="utf-8"))
     locked_packages = {item["name"]: item["version"] for item in workspace_lock.get("package", [])}
     for crate in api_policy["crates"]:

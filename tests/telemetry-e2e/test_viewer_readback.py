@@ -14,7 +14,7 @@ from typing import Any, Callable
 
 import pytest
 
-from conftest import rpc, run_cli, run_python
+from conftest import rpc_response, run_cli, run_python
 
 
 _TRACE_IDS = {
@@ -31,21 +31,30 @@ _METRICS = (  # (kind, value, viewer metricType)
 )
 
 
+_TRACE_NOT_FOUND = -32001  # searchSpans answers this until the trace has been ingested
+
+
 def _wait_for(
     viewer: dict[str, str], method: str, params: list[object], predicate: Callable[[object], bool],
 ) -> object:
-    """Wait for viewer ingestion while retaining the last useful response."""
+    """Poll for ingestion within one deadline.
+
+    The only RPC error that means "not ingested yet" is searchSpans reporting
+    ``Trace not found``; every other RPC error is a real failure and propagates at once.
+    """
     deadline = time.monotonic() + 15
     last: object = None
     while time.monotonic() < deadline:
-        try:
-            result = rpc(viewer["rpc"], method, params)
-            last = result
-            if predicate(result):
-                return result
-        except (AssertionError, OSError, TimeoutError, ValueError) as error:
-            # The viewer may briefly reject RPCs while it starts its ingest loop.
-            last = f"{type(error).__name__}: {error}"
+        response = rpc_response(viewer["rpc"], method, params)
+        error = response.get("error")
+        if error is None:
+            last = response["result"]
+            if predicate(last):
+                return last
+        elif method == "searchSpans" and isinstance(error, dict) and error.get("code") == _TRACE_NOT_FOUND:
+            last = error
+        else:
+            raise AssertionError(f"viewer RPC {method} failed: {response!r}")
         time.sleep(0.25)
     raise AssertionError(f"viewer ingestion via {method} timed out; last result: {last!r}")
 

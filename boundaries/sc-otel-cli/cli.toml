@@ -16,8 +16,8 @@ allowed_dependents = []
 allowed_dependencies = ["sc-observability-otlp"]
 forbidden_edges = [
     { from = "sc-otel-cli", to = "sc-observe" },
-    { from = "sc-otel-cli", to = "rusqlite" },
-    { from = "sc-otel-cli", to = "uuid" },
+    { from = "sc-otel-cli", to = "rcgen" },
+    { from = "sc-otel-cli", to = "rustls" },
 ]
 [references]
 scope = "outside_owner_crate"

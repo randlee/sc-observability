@@ -13,7 +13,7 @@ constructor = "none"
 [composition]
 roots = []
 [dependencies]
-allowed_dependents = ["sc-otel-cli", "log-settings-example", "rust-python-logging", "sc-observability", "sc-observability-binding-runtime", "sc-observability-dto", "sc-observability-log", "sc-observability-otlp", "sc-observability-py", "sc-observability-tauri", "sc-observe"]
+allowed_dependents = ["log-settings-example", "rust-python-logging", "sc-observability", "sc-observability-binding-runtime", "sc-observability-dto", "sc-observability-log", "sc-observability-otlp", "sc-observability-py", "sc-observability-tauri", "sc-observe"]
 allowed_dependencies = []
 forbidden_edges = []
 [references]

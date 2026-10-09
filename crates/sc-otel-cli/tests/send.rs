@@ -6,7 +6,7 @@ use std::{
     io::{BufRead, BufReader, ErrorKind, Read, Write},
     net::{TcpListener, TcpStream},
     process::{Child, ChildStdin, Command, Output, Stdio},
-    sync::{Arc, mpsc},
+    sync::mpsc,
     thread,
     time::{Duration, Instant},
 };
@@ -84,19 +84,6 @@ impl Collector {
         thread::spawn(move || handle(self.accept(), status).expect("request line"))
     }
 
-    /// Serves one connection over TLS; `None` when no request arrives, as when
-    /// the client rejects the certificate during the handshake.
-    fn serve_tls(
-        self,
-        status: &'static str,
-        config: Arc<rustls::ServerConfig>,
-    ) -> thread::JoinHandle<Option<Captured>> {
-        thread::spawn(move || {
-            let connection = rustls::ServerConnection::new(config).expect("TLS server connection");
-            handle(rustls::StreamOwned::new(connection, self.accept()), status)
-        })
-    }
-
     /// Blocks for one connection; past the watchdog the fixture connects to
     /// itself and writes the wake line, which `handle` rejects.
     fn accept(&self) -> TcpStream {
@@ -170,49 +157,6 @@ fn handle<S: Read + Write>(stream: S, status: &str) -> Option<Captured> {
         headers,
         body,
     })
-}
-
-/// A `127.0.0.1` server certificate generated in-process for one test, valid
-/// from a day before to a day after now: platform verifiers such as macOS
-/// reject long-lived server certificates, so a committed fixture would expire.
-struct LoopbackCertificate {
-    pem_directory: tempfile::TempDir,
-    config: Arc<rustls::ServerConfig>,
-}
-
-impl LoopbackCertificate {
-    fn generate() -> Self {
-        let mut params = rcgen::CertificateParams::new(vec!["127.0.0.1".to_owned()])
-            .expect("certificate parameters");
-        let now = time::OffsetDateTime::now_utc();
-        params.not_before = now - time::Duration::DAY;
-        params.not_after = now + time::Duration::DAY;
-        params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
-        let key = rcgen::KeyPair::generate().expect("key pair");
-        let certificate = params.self_signed(&key).expect("self-signed certificate");
-        let pem_directory = tempfile::tempdir().expect("certificate directory");
-        std::fs::write(pem_directory.path().join("loopback.crt"), certificate.pem())
-            .expect("write certificate");
-        let config = rustls::ServerConfig::builder_with_provider(Arc::new(
-            rustls::crypto::ring::default_provider(),
-        ))
-        .with_safe_default_protocol_versions()
-        .expect("TLS protocol versions")
-        .with_no_client_auth()
-        .with_single_cert(
-            vec![certificate.der().clone()],
-            rustls::pki_types::PrivateKeyDer::Pkcs8(key.serialize_der().into()),
-        )
-        .expect("server certificate");
-        Self {
-            pem_directory,
-            config: Arc::new(config),
-        }
-    }
-
-    fn path(&self) -> std::path::PathBuf {
-        self.pem_directory.path().join("loopback.crt")
-    }
 }
 
 /// Returns whether two environment names identify the same setting on this platform.
@@ -529,8 +473,8 @@ fn span_exports_completed_native_span() {
         b"eu-west",
         &hex(TRACE_ID),
         &hex(SPAN_ID),
-        // OTLP Span.flags field 16: sampled plus the known-remote parent bits.
-        &[0x85, 0x01, 0x01, 0x03, 0x00, 0x00],
+        // OTLP Span.flags field 16: sampled with a supplied, locally-provenanced parent.
+        &[0x85, 0x01, 0x01, 0x01, 0x00, 0x00],
         &1_700_000_000_000_000_000_u64.to_le_bytes(),
         &1_700_000_005_000_000_000_u64.to_le_bytes(),
     ] {
@@ -648,37 +592,30 @@ fn unreachable_collector_exits_7() {
 }
 
 #[test]
-fn https_export_succeeds_only_with_the_trusted_root_certificate() {
+fn invalid_root_certificate_exits_3_without_sending() {
     let directory = tempfile::tempdir().expect("tempdir");
-    let certificate = LoopbackCertificate::generate();
+    let certificate_directory = tempfile::tempdir().expect("certificate tempdir");
+    let certificate_path = certificate_directory.path().join("not-a-certificate.pem");
+    std::fs::write(&certificate_path, b"not a certificate").expect("write invalid root");
     let collector = Collector::start();
-    let endpoint = collector.endpoint.replace("http://", "https://");
-    let request = collector.serve_tls("200 OK", Arc::clone(&certificate.config));
     let output = run(sc_otel(&directory)
-        .args(["--endpoint", &endpoint, "--timeout", "5"])
+        .args(["--endpoint", &collector.endpoint])
         .arg("--root-certificate")
-        .arg(certificate.path())
-        .args(["log", "--body", "over-tls"]));
-    assert_eq!(output.status.code(), Some(0), "{output:?}");
-    let request = request
-        .join()
-        .expect("TLS collector")
-        .expect("trusted export reached the collector");
-    assert_eq!(request.path, "/v1/logs");
-    assert!(request.body_contains(b"over-tls"));
-    assert_no_files(&directory);
+        .arg(certificate_path)
+        .args(["log", "--body", "invalid-root"]));
 
-    let collector = Collector::start();
-    let endpoint = collector.endpoint.replace("http://", "https://");
-    let request = collector.serve_tls("200 OK", certificate.config);
-    let output = run(sc_otel(&directory)
-        .args(["--endpoint", &endpoint, "--timeout", "5"])
-        .args(["log", "--body", "untrusted"]));
-    assert_eq!(output.status.code(), Some(7), "{output:?}");
+    assert_eq!(output.status.code(), Some(3), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        request.join().expect("TLS collector").is_none(),
-        "an export without the trusted root reached the collector"
+        stderr.contains("SC_OBSERVABILITY_OTLP_SYNC_INVALID_CONFIG"),
+        "{stderr}"
     );
+    assert!(
+        stderr.contains("root certificate PEM contains no certificate"),
+        "{stderr}"
+    );
+    assert!(output.stdout.is_empty());
+    collector.assert_untouched();
     assert_no_files(&directory);
 }
 

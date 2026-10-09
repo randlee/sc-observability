@@ -17,9 +17,33 @@ class StockPublicApiTests(unittest.TestCase):
         )
         expected = {
             item["package"] for item in manifest["crates"] if item.get("publish") is True
-        }
+        } - {"sc-otel-cli"}
         self.assertEqual({package.name for package in packages}, expected)
         self.assertEqual(len(packages), len(expected))
+
+    def test_published_packages_skip_binary_only_crates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Cargo.toml").write_text('[workspace.package]\nversion = "1.0.0"\n', encoding="utf-8")
+            for name, source in (("lib-crate", "lib.rs"), ("bin-crate", "main.rs")):
+                (root / name / "src").mkdir(parents=True)
+                (root / name / "src" / source).write_text("", encoding="utf-8")
+                (root / name / "Cargo.toml").write_text(
+                    f'[package]\nname = "{name}"\nversion.workspace = true\n', encoding="utf-8"
+                )
+            (root / "release").mkdir()
+            (root / "release/publish-artifacts.toml").write_text(
+                "".join(
+                    f'[[crates]]\npackage = "{name}"\ncargo_toml = "{name}/Cargo.toml"\npublish = true\n'
+                    for name in ("lib-crate", "bin-crate")
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual([package.name for package in snapshots.published_packages(root)], ["lib-crate"])
+            (root / "bin-crate/src/lib.rs").write_text("", encoding="utf-8")
+            self.assertEqual(
+                [package.name for package in snapshots.published_packages(root)], ["lib-crate", "bin-crate"]
+            )
 
     def test_check_requires_generated_json_before_invoking_stock_tool(self):
         package = snapshots.Package("demo", Path("demo/Cargo.toml"), "demo", "1.5.0")

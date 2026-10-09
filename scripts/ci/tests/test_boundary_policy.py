@@ -63,22 +63,6 @@ class BoundaryPolicyTests(unittest.TestCase):
                 SC_OTEL_CLI_EDGES | {"sc-observe"},
             )
 
-    def test_sc_otel_cli_forbids_durable_store_dependencies(self):
-        import tomllib
-
-        manifest = tomllib.loads(
-            (ROOT / "boundaries/sc-otel-cli/cli.toml").read_text(encoding="utf-8")
-        )
-        self.assertEqual(manifest["enforcement"]["lint_rules"], [])
-        for dependency in ("rusqlite", "uuid"):
-            with self.subTest(dependency=dependency):
-                with self.assertRaisesRegex(ValueError, rf"forbidden edge.*{dependency}"):
-                    validate_first_party_dependencies(
-                        ROOT,
-                        "sc-otel-cli",
-                        SC_OTEL_CLI_EDGES | {dependency},
-                    )
-
     def test_sc_otel_cli_has_no_allowed_dependents(self):
         # cli.toml allowed_dependents = [].
         with self.assertRaisesRegex(

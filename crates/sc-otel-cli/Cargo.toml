@@ -1,6 +1,5 @@
 [package]
 name = "sc-otel-cli"
-publish = false
 authors.workspace = true
 version.workspace = true
 edition.workspace = true
@@ -17,15 +16,11 @@ path = "src/main.rs"
 [dependencies]
 sc-observability-otlp = { workspace = true, features = ["synchronous-client"] }
 clap.workspace = true
-serde_json.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
 
 [dev-dependencies]
 tempfile.workspace = true
-# Loopback TLS collector and its in-process certificate for the trusted-root
-# export test.
-rcgen = "=0.14.10"
-rustls = { version = "=0.23.45", features = ["ring"] }
-time.workspace = true
 
 [lints]
 workspace = true

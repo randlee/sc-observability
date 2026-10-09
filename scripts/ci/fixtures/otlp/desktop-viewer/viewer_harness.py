@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shlex
 import signal
 import socket
@@ -89,6 +90,106 @@ def _tcp_listener(host: str, port: int, timeout: float = 2) -> bool:
         except OSError:
             return False
     return True
+
+
+EPHEMERAL = 0
+_LOGGED_ENDPOINT = re.compile(
+    r"Starting (GRPC|HTTP) server.*\"endpoint\": \"(?:\[[^\]]*\]|[^\":]*):(\d+)\"")
+
+
+def _logged_endpoints(log_text: str) -> dict[str, int]:
+    """Return the OTLP gRPC and HTTP ports the viewer logged when it bound them.
+
+    A logged port of 0 is the request, not a bound port, and is ignored.
+    """
+    return {kind.lower(): int(port) for kind, port in _LOGGED_ENDPOINT.findall(log_text)
+            if int(port) != EPHEMERAL}
+
+
+def _parse_proc_net_tcp(text: str) -> dict[str, int]:
+    """Map socket inode to port for every LISTEN row of a /proc/net/tcp{,6} table."""
+    listening: dict[str, int] = {}
+    for line in text.splitlines()[1:]:
+        fields = line.split()
+        if len(fields) > 9 and fields[3] == "0A":
+            listening[fields[9]] = int(fields[1].rsplit(":", 1)[1], 16)
+    return listening
+
+
+def _parse_lsof_ports(text: str) -> set[int]:
+    """Ports from ``lsof -F n`` output, whose name rows read ``n127.0.0.1:55187``."""
+    return {int(line[1:].rsplit(":", 1)[1])
+            for line in text.splitlines() if line.startswith("n") and ":" in line}
+
+
+def _parse_netstat_ports(text: str, pid: int) -> set[int]:
+    """Ports in LISTENING rows of ``netstat -ano -p TCP`` owned by ``pid``."""
+    ports: set[int] = set()
+    for line in text.splitlines():
+        fields = line.split()
+        if len(fields) >= 5 and fields[3] == "LISTENING" and fields[4] == str(pid):
+            ports.add(int(fields[1].rsplit(":", 1)[1]))
+    return ports
+
+
+def _listening_ports(pid: int) -> set[int]:
+    """TCP ports the process listens on, read from the operating system's socket table."""
+    if _is_windows():
+        out = subprocess.run(["netstat", "-ano", "-p", "TCP"], check=False,
+                             capture_output=True, text=True, timeout=10).stdout
+        return _parse_netstat_ports(out, pid)
+    if sys.platform.startswith("linux"):
+        inodes: dict[str, int] = {}
+        for table in ("/proc/net/tcp", "/proc/net/tcp6"):
+            try:
+                inodes.update(_parse_proc_net_tcp(Path(table).read_text()))
+            except OSError:
+                pass
+        ports: set[int] = set()
+        try:
+            for descriptor in Path(f"/proc/{pid}/fd").iterdir():
+                try:
+                    target = os.readlink(descriptor)
+                except OSError:
+                    continue
+                if target.startswith("socket:[") and target[8:-1] in inodes:
+                    ports.add(inodes[target[8:-1]])
+        except OSError:
+            pass
+        return ports
+    out = subprocess.run(["lsof", "-nP", "-a", "-p", str(pid), "-iTCP", "-sTCP:LISTEN", "-Fn"],
+                         check=False, capture_output=True, text=True, timeout=10).stdout
+    return _parse_lsof_ports(out)
+
+
+def _bound_ports(pid: int, log_path: Path, requested: dict[str, int],
+                 log_offset: int = 0) -> dict[str, int] | None:
+    """Resolve ports requested as ephemeral to the ports the viewer bound.
+
+    The viewer logs its OTLP gRPC and HTTP endpoints; its browser port is the
+    one remaining listener of the owned process. Only log bytes after
+    ``log_offset`` (the log size before this process started) are read, so a
+    previous run's endpoints in the retained log are never reported. Returns
+    ``None`` until every port is known.
+    """
+    bound = dict(requested)
+    if EPHEMERAL not in requested.values():
+        return bound
+    try:
+        logged = _logged_endpoints(log_path.read_bytes()[log_offset:].decode(errors="replace"))
+    except OSError:
+        return None
+    for name in ("grpc", "http"):
+        if bound[name] == EPHEMERAL:
+            if name not in logged:
+                return None
+            bound[name] = logged[name]
+    if bound["ui"] == EPHEMERAL:
+        remaining = _listening_ports(pid) - {bound["grpc"], bound["http"]}
+        if len(remaining) != 1:
+            return None
+        bound["ui"] = remaining.pop()
+    return bound
 
 
 _WIN = None
@@ -218,12 +319,6 @@ def _command_args(pid: int) -> list[str] | None:
         return None
 
 
-def _command_line(pid: int) -> str | None:
-    """Compatibility helper for status display and older local callers."""
-    args = _command_args(pid)
-    return " ".join(args) if args else None
-
-
 def _owned(state: Path) -> tuple[int, dict[str, Any]]:
     pid_file = state / "viewer.pid"
     meta_file = state / "viewer.json"
@@ -324,8 +419,8 @@ def start(args: argparse.Namespace) -> None:
         restart = _restart_metadata(state, binary, actual_hash, args.version)
     elif reuse_state:
         raise HarnessError(f"restart state does not exist: {state}")
-    ports = ((args.host, args.http), (args.host, args.grpc), (args.host, args.ui))
-    if len({port for _, port in ports}) != 3 or any(
+    ports = [(args.host, port) for port in (args.http, args.grpc, args.ui) if port != EPHEMERAL]
+    if len({port for _, port in ports}) != len(ports) or any(
             not _port_available(h, p, reuse_address=restart is not None) for h, p in ports):
         raise HarnessError("one or more selected ports are occupied; choose explicit free ports; "
                            "the harness will not stop the existing listener")
@@ -338,6 +433,7 @@ def start(args: argparse.Namespace) -> None:
     log_path = state / "viewer.log"
     log = None
     try:
+        log_offset = log_path.stat().st_size if log_path.exists() else 0
         log = log_path.open("ab")
         detach: dict[str, Any] = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
                                   if _is_windows() else {"start_new_session": True})
@@ -364,16 +460,24 @@ def start(args: argparse.Namespace) -> None:
         (state / "viewer.json").write_text(json.dumps(metadata, indent=2) + "\n")
         (state / "viewer.pid").write_text(f"{process.pid}\n")
         deadline = time.monotonic() + READY_SECONDS
-        ui_url = f"http://{args.host}:{args.ui}/"
+        requested = {"http": args.http, "grpc": args.grpc, "ui": args.ui}
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 raise HarnessError(f"viewer exited during startup; inspect {state / 'viewer.log'}")
-            try:
-                _request(ui_url, timeout=1)
-                print(json.dumps({"status": "ready", **metadata, "ui_url": ui_url}))
-                return
-            except (OSError, TimeoutError, urllib.error.URLError):
-                time.sleep(0.25)
+            bound = _bound_ports(process.pid, log_path, requested, log_offset)
+            if bound is not None:
+                ui_url = f"http://{args.host}:{bound['ui']}/"
+                try:
+                    _request(ui_url, timeout=1)
+                    rpc(ui_url, "searchLogs", ["-1000000000", "1893456000000000000"], timeout=5)
+                except (OSError, TimeoutError, urllib.error.URLError):
+                    pass  # not listening yet; an RPC error from a live viewer propagates
+                else:
+                    metadata.update(bound)
+                    (state / "viewer.json").write_text(json.dumps(metadata, indent=2) + "\n")
+                    print(json.dumps({"status": "ready", **metadata, "ui_url": ui_url}))
+                    return
+            time.sleep(0.25)
         raise HarnessError(f"viewer did not become ready within {READY_SECONDS}s; inspect {state / 'viewer.log'}")
     except BaseException:
         try:

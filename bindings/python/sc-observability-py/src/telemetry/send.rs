@@ -4,26 +4,19 @@ use crate::{internal_failure, result_json, unavailable_failure};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyFloat, PyInt, PyString};
 use sc_observability_dto::{Failure, boundary_diagnostic};
-use sc_observability_otlp::api::logs::{AnyValue, LogRecord as _, Severity};
-use sc_observability_otlp::api::trace::{
-    SpanContext, SpanId, SpanKind, Status, TraceFlags, TraceId, TraceState,
-};
+use sc_observability_otlp::api::logs::{AnyValue, Severity};
+use sc_observability_otlp::api::trace::SpanKind;
 use sc_observability_otlp::api::{InstrumentationScope, KeyValue, Value};
 use sc_observability_otlp::error_codes::{TELEMETRY_EXPORT_FAILED, sync as codes};
 use sc_observability_otlp::sdk::Resource;
 use sc_observability_otlp::sdk::error::OTelSdkError;
-use sc_observability_otlp::sdk::trace::{
-    IdGenerator, RandomIdGenerator, SpanData, SpanEvents, SpanLinks,
-};
+use sc_observability_otlp::sdk::trace::SpanData;
 use sc_observability_otlp::sync::{
-    Client, SyncError, check_input_limits, parse_span_id, parse_trace_id, resolve_endpoint,
-    span_times,
+    Client, CompletedSpan, InputByteCounter, LogEntry, Measurement, MetricKind, SyncError,
+    check_input_limits, parse_span_id, parse_trace_id, read_root_certificate, resolve_endpoint,
+    span_status, unsigned_attribute,
 };
-use std::{
-    panic::AssertUnwindSafe,
-    path::PathBuf,
-    time::{Duration, SystemTime},
-};
+use std::{panic::AssertUnwindSafe, path::PathBuf, time::Duration};
 
 #[cfg(test)]
 #[path = "tests.rs"]
@@ -97,34 +90,22 @@ impl Scalar {
     }
 }
 
-struct Log {
-    severity: Severity,
-    body: String,
-    trace: Option<(TraceId, SpanId)>,
-    attributes: Vec<(String, Scalar)>,
+impl From<i64> for Scalar {
+    fn from(value: i64) -> Self {
+        Self::Int(value)
+    }
 }
 
-#[derive(Clone, Copy)]
-enum MetricKind {
-    Counter,
-    UpDownCounter,
-    Gauge,
-    Histogram,
-}
-
-struct Metric {
-    name: String,
-    kind: MetricKind,
-    value: f64,
-    unit: Option<String>,
-    description: Option<String>,
-    attributes: Vec<KeyValue>,
+impl From<String> for Scalar {
+    fn from(value: String) -> Self {
+        Self::Str(value)
+    }
 }
 
 enum Signal {
-    Log(Log),
+    Log(LogEntry),
     Span(Box<SpanData>),
-    Metric(Metric),
+    Metric(Measurement),
 }
 
 /// Exports one log record.
@@ -171,12 +152,17 @@ fn run(
 /// values and URL userinfo there.
 fn failure(operation: &str, error: &SyncError) -> Failure {
     match error {
+        // Running inside an entered Tokio runtime is a property of the calling
+        // thread, not of any input field.
+        SyncError::Validation {
+            code: codes::RUNTIME_ENTERED,
+            ..
+        } => unavailable_failure(codes::RUNTIME_ENTERED, error.to_string()),
         SyncError::Validation { code, .. } => Failure::Validation {
             diagnostic: Box::new(boundary_diagnostic(code, error.to_string())),
-            field: if *code == codes::INVALID_CONFIG {
-                "config"
-            } else {
-                "fields"
+            field: match *code {
+                codes::INVALID_CONFIG => "config",
+                _ => "fields",
             }
             .into(),
         },
@@ -197,48 +183,18 @@ fn export(config: Config, signal: Signal) -> Result<(), SyncError> {
     let mut client = client(&config)?;
     let mut resource = Resource::builder();
     if let Some(service) = config.service_name {
+        InputByteCounter::new().add_text(&service)?;
         resource = resource.with_service_name(service);
     }
     let resource = resource.build();
     match signal {
-        Signal::Log(log) => client.send_log(&resource, scope(), |record| {
-            record.set_timestamp(SystemTime::now());
-            record.set_severity_number(log.severity);
-            record.set_severity_text(log.severity.name());
-            record.set_body(AnyValue::from(log.body));
-            if let Some((trace_id, span_id)) = log.trace {
-                record.set_trace_context(trace_id, span_id, None);
-            }
-            for (key, value) in log.attributes {
-                record.add_attribute(key, value.native::<AnyValue>());
-            }
+        Signal::Log(entry) => client.send_log(&resource, scope(), |record| {
+            entry.fill(record);
             Ok(())
         }),
         Signal::Span(span) => client.send_span(&resource, *span),
-        Signal::Metric(metric) => client.send_metrics(&resource, scope(), |meter| {
-            macro_rules! instrument {
-                ($builder:expr) => {{
-                    let mut builder = $builder;
-                    if let Some(unit) = metric.unit {
-                        builder = builder.with_unit(unit);
-                    }
-                    if let Some(description) = metric.description {
-                        builder = builder.with_description(description);
-                    }
-                    builder.build()
-                }};
-            }
-            let (name, value, attributes) = (metric.name, metric.value, &metric.attributes);
-            match metric.kind {
-                MetricKind::Counter => instrument!(meter.f64_counter(name)).add(value, attributes),
-                MetricKind::UpDownCounter => {
-                    instrument!(meter.f64_up_down_counter(name)).add(value, attributes);
-                }
-                MetricKind::Gauge => instrument!(meter.f64_gauge(name)).record(value, attributes),
-                MetricKind::Histogram => {
-                    instrument!(meter.f64_histogram(name)).record(value, attributes);
-                }
-            }
+        Signal::Metric(measurement) => client.send_metrics(&resource, scope(), |meter| {
+            measurement.record(meter);
             Ok(())
         }),
     }
@@ -260,12 +216,7 @@ fn client(config: &Config) -> Result<Client, SyncError> {
         client = client.with_timeout(timeout)?;
     }
     if let Some(path) = &config.root_certificate {
-        let pem = std::fs::read(path).map_err(|error| {
-            SyncError::validation(
-                codes::INVALID_CONFIG,
-                format!("cannot read root certificate {}: {error}", path.display()),
-            )
-        })?;
+        let pem = read_root_certificate(path)?;
         client = client.with_root_certificate_pem(&pem)?;
     }
     Ok(client)
@@ -277,7 +228,7 @@ fn scope() -> InstrumentationScope {
         .build()
 }
 
-fn log(fields: LogFields<'_>) -> Result<Log, SyncError> {
+fn log(fields: LogFields<'_>) -> Result<LogEntry, SyncError> {
     let severity = match fields.severity.as_str() {
         "trace" => Severity::Trace,
         "debug" => Severity::Debug,
@@ -299,11 +250,14 @@ fn log(fields: LogFields<'_>) -> Result<Log, SyncError> {
             ));
         }
     };
-    let attributes = attributes(fields.attributes, fields.body.len())?;
-    Ok(Log {
+    let attributes = attributes(fields.attributes, &[&fields.body])?
+        .into_iter()
+        .map(|(key, value)| (key, value.native::<AnyValue>()))
+        .collect();
+    Ok(LogEntry {
         severity,
         body: fields.body,
-        trace,
+        trace_context: trace,
         attributes,
     })
 }
@@ -312,13 +266,10 @@ fn span(fields: SpanFields<'_>) -> Result<SpanData, SyncError> {
     if fields.parent_span_id.is_some() && fields.trace_id.is_none() {
         return Err(invalid("parent_span_id requires trace_id".into()));
     }
-    let status = match (fields.error, fields.ok) {
-        (Some(_), true) => return Err(invalid("ok and error are mutually exclusive".into())),
-        (Some(description), false) => Status::error(description),
-        (None, true) => Status::Ok,
-        (None, false) => Status::Unset,
-    };
-    let span_kind = match fields.kind.as_str() {
+    if fields.error.is_some() && fields.ok {
+        return Err(invalid("ok and error are mutually exclusive".into()));
+    }
+    let kind = match fields.kind.as_str() {
         "internal" => SpanKind::Internal,
         "server" => SpanKind::Server,
         "client" => SpanKind::Client,
@@ -326,54 +277,48 @@ fn span(fields: SpanFields<'_>) -> Result<SpanData, SyncError> {
         "consumer" => SpanKind::Consumer,
         other => return Err(invalid(format!("unknown span kind {other:?}"))),
     };
-    let trace_id = match fields.trace_id.as_deref() {
-        Some(value) => parse_trace_id("trace_id", value)?,
-        None => RandomIdGenerator::default().new_trace_id(),
-    };
-    let span_id = match fields.span_id.as_deref() {
-        Some(value) => parse_span_id("span_id", value)?,
-        None => RandomIdGenerator::default().new_span_id(),
-    };
+    let trace_id = fields
+        .trace_id
+        .as_deref()
+        .map(|value| parse_trace_id("trace_id", value))
+        .transpose()?;
+    let span_id = fields
+        .span_id
+        .as_deref()
+        .map(|value| parse_span_id("span_id", value))
+        .transpose()?;
     let parent_span_id = fields
         .parent_span_id
         .as_deref()
         .map(|value| parse_span_id("parent_span_id", value))
         .transpose()?;
-    let end_unix_nano = fields
+    let end_time_unix_nano = fields
         .end_time_unix_nano
         .map(|nanos| unix_nanos("end_time_unix_nano", &nanos))
         .transpose()?;
-    let start_unix_nano = fields
+    let start_time_unix_nano = fields
         .start_time_unix_nano
         .map(|nanos| unix_nanos("start_time_unix_nano", &nanos))
         .transpose()?;
-    let (start_time, end_time) = span_times(start_unix_nano, end_unix_nano)?;
-    let attributes = attributes(fields.attributes, fields.name.len())?;
-    Ok(SpanData {
-        span_context: SpanContext::new(
-            trace_id,
-            span_id,
-            TraceFlags::SAMPLED,
-            false,
-            TraceState::NONE,
-        ),
-        parent_span_id: parent_span_id.unwrap_or(SpanId::INVALID),
-        // The caller names a parent id only; nothing says it came from another process.
-        parent_span_is_remote: false,
-        span_kind,
-        name: fields.name.into(),
-        start_time,
-        end_time,
+    let attributes = attributes(
+        fields.attributes,
+        &[&fields.name, fields.error.as_deref().unwrap_or_default()],
+    )?;
+    CompletedSpan {
+        name: fields.name,
+        trace_id,
+        span_id,
+        parent_span_id,
+        kind,
+        start_time_unix_nano,
+        end_time_unix_nano,
+        status: span_status(fields.error, fields.ok),
         attributes: key_values(attributes),
-        dropped_attributes_count: 0,
-        events: SpanEvents::default(),
-        links: SpanLinks::default(),
-        status,
-        instrumentation_scope: scope(),
-    })
+    }
+    .into_span_data(scope())
 }
 
-fn metric(fields: MetricFields<'_>) -> Result<Metric, SyncError> {
+fn metric(fields: MetricFields<'_>) -> Result<Measurement, SyncError> {
     let kind = match fields.kind.as_str() {
         "counter" => MetricKind::Counter,
         "up_down_counter" => MetricKind::UpDownCounter,
@@ -381,8 +326,15 @@ fn metric(fields: MetricFields<'_>) -> Result<Metric, SyncError> {
         "histogram" => MetricKind::Histogram,
         other => return Err(invalid(format!("unknown metric kind {other:?}"))),
     };
-    let attributes = attributes(fields.attributes, fields.name.len())?;
-    Ok(Metric {
+    let attributes = attributes(
+        fields.attributes,
+        &[
+            &fields.name,
+            fields.unit.as_deref().unwrap_or_default(),
+            fields.description.as_deref().unwrap_or_default(),
+        ],
+    )?;
+    Ok(Measurement {
         name: fields.name,
         kind,
         value: fields.value,
@@ -392,22 +344,24 @@ fn metric(fields: MetricFields<'_>) -> Result<Metric, SyncError> {
     })
 }
 
-/// Converts attributes, counting `text_bytes` plus every key and string value
-/// against the shared per-call input limits.
+/// Converts attributes, counting every `signal_text` field plus every key and
+/// string value against the shared per-call input limits.
 fn attributes(
     attributes: Vec<(String, Bound<'_, PyAny>)>,
-    text_bytes: usize,
+    signal_text: &[&str],
 ) -> Result<Vec<(String, Scalar)>, SyncError> {
-    check_input_limits(text_bytes, attributes.len())?;
-    let mut bytes = text_bytes;
+    check_input_limits(0, attributes.len())?;
+    let mut input = InputByteCounter::new();
+    for text in signal_text {
+        input.add_text(text)?;
+    }
     let mut converted = Vec::with_capacity(attributes.len());
     for (key, value) in attributes {
         let value = scalar(&key, &value)?;
-        bytes = bytes.saturating_add(key.len());
+        input.add_text(&key)?;
         if let Scalar::Str(text) = &value {
-            bytes = bytes.saturating_add(text.len());
+            input.add_text(text)?;
         }
-        check_input_limits(bytes, 0)?;
         converted.push((key, value));
     }
     Ok(converted)
@@ -422,11 +376,15 @@ fn scalar(key: &str, value: &Bound<'_, PyAny>) -> Result<Scalar, SyncError> {
     if value.is_instance_of::<PyBool>() {
         value.extract().map(Scalar::Bool).map_err(|_| unsupported())
     } else if value.is_instance_of::<PyInt>() {
-        value.extract().map(Scalar::Int).map_err(|_| {
-            invalid(format!(
-                "attribute {key}: integer outside the signed 64-bit range"
-            ))
-        })
+        value
+            .extract::<i64>()
+            .map(Scalar::from)
+            .or_else(|_| value.extract::<u64>().map(unsigned_attribute::<Scalar>))
+            .map_err(|_| {
+                invalid(format!(
+                    "attribute {key}: integer outside the i64/u64 range"
+                ))
+            })
     } else if value.is_instance_of::<PyFloat>() {
         value
             .extract()

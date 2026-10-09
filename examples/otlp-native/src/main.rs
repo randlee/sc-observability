@@ -10,34 +10,38 @@
 //!
 //! `<endpoint>` is an OTLP/HTTP base URL such as `http://127.0.0.1:4318`.
 //! `sync-client` uses the blocking [`Client`]; `tokio` builds the official
-//! SDK providers and OTLP exporters directly; the `compose-*` scenarios
+//! SDK providers and OTLP exporters through this crate's re-exports; the `compose-*` scenarios
 //! register [`OtelLogSink`] on the core logger beside, or instead of, its file
 //! sink and emit through the `sc-observability-log` macros and the `log` facade.
 
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use opentelemetry::logs::{AnyValue, LogRecord as _, Logger as _, LoggerProvider as _, Severity};
-use opentelemetry::metrics::MeterProvider as _;
-use opentelemetry::trace::{
-    Span as _, SpanKind, TraceContextExt as _, Tracer as _, TracerProvider as _,
-};
-use opentelemetry::{Context, InstrumentationScope, KeyValue};
-use opentelemetry_otlp::{
-    LogExporter, MetricExporter, Protocol, SpanExporter, WithExportConfig as _,
-};
-use opentelemetry_sdk::Resource;
-use opentelemetry_sdk::logs::{BatchLogProcessor, SdkLoggerProvider};
-use opentelemetry_sdk::metrics::{PeriodicReader, SdkMeterProvider};
-use opentelemetry_sdk::trace::{BatchSpanProcessor, SdkTracerProvider};
 use sc_observability::v2::{LoggerBuilder, LoggerConfig, SinkRegistration};
 use sc_observability_log::{
     ActionName, AttachmentOptions, BridgeEventDecision, BridgeEventPolicy, BridgeOptions, LogEvent,
     ServiceName, attach_logger,
 };
 use sc_observability_otlp::OtelLogSink;
-use sc_observability_otlp::api::trace::{SpanContext, SpanId, TraceFlags, TraceId, TraceState};
-use sc_observability_otlp::sdk::trace::{SpanData, SpanEvents, SpanLinks};
+use sc_observability_otlp::api::logs::{
+    AnyValue, LogRecord as _, Logger as _, LoggerProvider as _, Severity,
+};
+use sc_observability_otlp::api::metrics::MeterProvider as _;
+use sc_observability_otlp::api::trace::{
+    Span as _, SpanContext, SpanId, SpanKind, Status, TraceContextExt as _, TraceFlags, TraceId,
+    TraceState, Tracer as _, TracerProvider as _,
+};
+use sc_observability_otlp::api::{Context, InstrumentationScope, KeyValue};
+use sc_observability_otlp::otlp::{
+    LogExporter, MetricExporter, Protocol, SpanExporter, WithExportConfig as _,
+};
+use sc_observability_otlp::sdk::Resource;
+use sc_observability_otlp::sdk::error::OTelSdkError;
+use sc_observability_otlp::sdk::logs::{BatchLogProcessor, SdkLoggerProvider};
+use sc_observability_otlp::sdk::metrics::{PeriodicReader, SdkMeterProvider};
+use sc_observability_otlp::sdk::trace::{
+    BatchSpanProcessor, SdkTracerProvider, SpanData, SpanEvents, SpanLinks,
+};
 use sc_observability_otlp::sync::Client;
 
 type Failure = Box<dyn std::error::Error>;
@@ -122,7 +126,7 @@ fn sync_client(endpoint: &str) -> Result<(), Failure> {
             dropped_attributes_count: 0,
             events: SpanEvents::default(),
             links: SpanLinks::default(),
-            status: opentelemetry::trace::Status::Ok,
+            status: Status::Ok,
             instrumentation_scope: scope(),
         },
     )?;
@@ -203,13 +207,11 @@ async fn tokio_providers(endpoint: &str) -> Result<(), Failure> {
     counter.add(5.0, &[KeyValue::new("queue", "tokio")]);
 
     // The SDK shutdown calls block on the exporter; keep them off the runtime's async workers.
-    tokio::task::spawn_blocking(
-        move || -> Result<(), opentelemetry_sdk::error::OTelSdkError> {
-            logs.shutdown()?;
-            tracer_provider.shutdown()?;
-            metrics.shutdown()
-        },
-    )
+    tokio::task::spawn_blocking(move || -> Result<(), OTelSdkError> {
+        logs.shutdown()?;
+        tracer_provider.shutdown()?;
+        metrics.shutdown()
+    })
     .await??;
     Ok(())
 }

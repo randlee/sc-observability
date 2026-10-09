@@ -4,10 +4,13 @@ owner_crate_path = "sc_observability_otlp"
 name = "ScObservabilityOtlp"
 [public]
 facade = "crate_root"
-modules = ["api", "sdk", "sync"]
+modules = ["api", "constants", "error_codes", "otlp", "sdk", "sync"]
+types = ["OtelLogSink"]
 
 [public.feature_gates]
+OtelLogSink = "log-sink"
 api = "native"
+otlp = "tokio-exporter"
 sdk = "native"
 sync = "synchronous-client"
 [implementation]

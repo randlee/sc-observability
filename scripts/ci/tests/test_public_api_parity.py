@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -20,6 +21,9 @@ import public_api_parity as parity  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = ROOT / 'scripts/ci/fixtures/public-api-parity/conditioned'
+# Hard bounds so a held cargo lock or a rustup download fails the test, not hangs it.
+PROBE_TIMEOUT_SECONDS = 120
+COMMAND_TIMEOUT_SECONDS = 900
 FIXTURE_TARGETS = ['x86_64-unknown-linux-gnu', 'x86_64-pc-windows-msvc']
 MUTATIONS = {
     'mutate-method': 'windows_only_method',
@@ -35,10 +39,10 @@ MUTATIONS = {
 
 OTLP_LIKE_FEATURES = {
     'default': [],
-    'durable-store': ['sync-http', 'dep:rusqlite', 'dep:serde-saphyr', 'dep:uuid'],
-    'otlp-sdk': ['dep:opentelemetry', 'dep:tokio', 'dep:tonic'],
-    'sdk-test-support': ['otlp-sdk'],
-    'sync-http': ['dep:reqwest', 'dep:tokio'],
+    'feature-a': ['feature-b', 'dep:serde-saphyr', 'dep:uuid'],
+    'feature-b': ['dep:reqwest', 'dep:tokio'],
+    'feature-c': ['dep:opentelemetry', 'dep:tokio', 'dep:tonic'],
+    'feature-d': ['feature-c'],
 }
 
 
@@ -76,10 +80,10 @@ def full_cells(expected):
 
 class FeatureSelectionTests(unittest.TestCase):
     def test_closure_resolves_crate_local_features_only(self):
-        self.assertEqual(parity.feature_closure(OTLP_LIKE_FEATURES, ['durable-store']),
-                         frozenset({'durable-store', 'sync-http'}))
-        self.assertEqual(parity.feature_closure(OTLP_LIKE_FEATURES, ['sdk-test-support']),
-                         frozenset({'sdk-test-support', 'otlp-sdk'}))
+        self.assertEqual(parity.feature_closure(OTLP_LIKE_FEATURES, ['feature-a']),
+                         frozenset({'feature-a', 'feature-b'}))
+        self.assertEqual(parity.feature_closure(OTLP_LIKE_FEATURES, ['feature-d']),
+                         frozenset({'feature-d', 'feature-c'}))
         self.assertEqual(parity.feature_closure(OTLP_LIKE_FEATURES, []), frozenset())
 
     def test_dependency_feature_activates_same_named_crate_feature(self):
@@ -102,8 +106,8 @@ class FeatureSelectionTests(unittest.TestCase):
         self.assertEqual(default['id'], 'default')
         bare = next(item for item in selections if item['id'] == 'none')
         self.assertEqual(bare['flags'], ['--no-default-features'])
-        durable = next(item for item in selections if item['id'] == 'durable-store+sync-http')
-        self.assertEqual(durable['flags'], ['--no-default-features', '--features', 'durable-store'])
+        feature_pair = next(item for item in selections if item['id'] == 'feature-a+feature-b')
+        self.assertEqual(feature_pair['flags'], ['--no-default-features', '--features', 'feature-a'])
         self.assertNotIn(['--no-default-features', '--features', 'default'], [item['flags'] for item in selections])
 
     def test_crate_without_default_feature_has_single_bare_default(self):
@@ -124,9 +128,10 @@ class ReleaseInventoryTests(unittest.TestCase):
             'x86_64-apple-darwin', 'x86_64-pc-windows-msvc', 'x86_64-unknown-linux-gnu',
         ])
 
-    def test_published_packages_are_the_ten_release_crates(self):
+    def test_published_packages_are_the_eleven_release_crates(self):
         names = [item['package'] for item in parity.published_packages(self.manifest)]
-        self.assertEqual(len(names), 10)
+        self.assertEqual(len(names), 11)
+        self.assertIn('sc-otel-cli', names)
         self.assertIn('sc-observability-tauri', names)
         self.assertIn('sc-observability-py', names)
         self.assertEqual(next(item for item in parity.published_packages(self.manifest)
@@ -296,6 +301,14 @@ class ComparatorTests(unittest.TestCase):
         self.assertEqual(parity.row_differences(['b', 'a'], ['a', 'b']), [])
 
 
+def probe(command):
+    """Runs a toolchain probe; a timeout becomes a result naming the command and its output."""
+    try:
+        return subprocess.run(command, capture_output=True, text=True, timeout=PROBE_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired as error:
+        return subprocess.CompletedProcess(command, -1, '', parity.timeout_message(error))
+
+
 def toolchain_unavailable():
     """Reason the real extraction cannot run here, or None when it can."""
     try:
@@ -304,15 +317,36 @@ def toolchain_unavailable():
         return str(error)
     if shutil.which('cargo') is None or shutil.which('rustup') is None:
         return 'cargo/rustup not installed'
-    probe = subprocess.run(['rustup', 'run', toolchain, 'rustdoc', '--version'], capture_output=True, text=True)
-    if probe.returncode != 0:
-        return f'{toolchain} not installed: {probe.stderr.strip()}'
-    installed = subprocess.run(['rustup', 'target', 'list', '--installed', '--toolchain', toolchain],
-                               capture_output=True, text=True)
+    rustdoc = probe(['rustup', 'run', toolchain, 'rustdoc', '--version'])
+    if rustdoc.returncode != 0:
+        return f'{toolchain} not installed: {rustdoc.stderr.strip()}'
+    installed = probe(['rustup', 'target', 'list', '--installed', '--toolchain', toolchain])
+    if installed.returncode != 0:
+        return f'{toolchain} target list failed: {installed.stderr.strip()}'
     missing = sorted(set(FIXTURE_TARGETS) - set(installed.stdout.split()))
     if missing:
         return f'{toolchain} lacks target std for {missing}'
     return None
+
+
+class CommandTimeoutTests(unittest.TestCase):
+    """Every bounded subprocess fails with its command and output instead of hanging."""
+
+    def test_run_timeout_names_command_and_output(self):
+        command = [sys.executable, '-c', 'import time; print("started", flush=True); time.sleep(60)']
+        with mock.patch.object(parity, 'COMMAND_TIMEOUT_SECONDS', 1):
+            with self.assertRaises(parity.ParityError) as caught:
+                parity.run(command, cwd=ROOT)
+        message = str(caught.exception)
+        self.assertIn('time.sleep(60)', message)
+        self.assertIn('timed out after 1s', message)
+
+    def test_probe_timeout_is_a_failed_result_naming_the_command(self):
+        command = [sys.executable, '-c', 'import time; time.sleep(60)']
+        with mock.patch.object(sys.modules[__name__], 'PROBE_TIMEOUT_SECONDS', 1):
+            result = probe(command)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('time.sleep(60)', result.stderr)
 
 
 class RealExtractionTests(unittest.TestCase):
@@ -325,13 +359,44 @@ class RealExtractionTests(unittest.TestCase):
             if os.environ.get('CI'):
                 raise AssertionError(f'CI must provide the parity toolchain: {reason}')
             raise unittest.SkipTest(reason)
-        cls.toolchain = parity.pinned_toolchain()
-        cls.renderer = parity.ensure_renderer()
-        cls.commit = parity.source_commit()
-        cls.library = parity.package_library(FIXTURE / 'Cargo.toml')
-        cls.selections = {item['id']: item for item in parity.feature_selections(cls.library['features'])}
-        cls.target_dir = FIXTURE / 'target'
-        cls.env = parity.extraction_environment()
+        # Bound every runner command from the first one, class-level setup included, and
+        # record the bound each command saw so a test can prove none ran unbounded.
+        cls.setup_bounds = []
+        real_run = parity.run
+
+        def recording_run(*args, **kwargs):
+            cls.setup_bounds.append(parity.COMMAND_TIMEOUT_SECONDS)
+            return real_run(*args, **kwargs)
+
+        bound = mock.patch.object(parity, 'COMMAND_TIMEOUT_SECONDS', COMMAND_TIMEOUT_SECONDS)
+        bound.start()
+        cls.addClassCleanup(bound.stop)
+        recording = mock.patch.object(parity, 'run', recording_run)
+        recording.start()
+        try:
+            cls.toolchain = parity.pinned_toolchain()
+            # A private copy of the renderer crate, so its build uses its own target dir
+            # instead of the shared checkout one (and its build lock).
+            renderer_dir = Path(tempfile.mkdtemp(prefix='parity-renderer-')) / 'surface-renderer'
+            cls.addClassCleanup(shutil.rmtree, renderer_dir.parent, ignore_errors=True)
+            shutil.copytree(parity.RENDERER_DIR, renderer_dir, ignore=shutil.ignore_patterns('target'))
+            cls.renderer = parity.ensure_renderer(renderer_dir)
+            cls.commit = parity.source_commit()
+            cls.library = parity.package_library(FIXTURE / 'Cargo.toml')
+            cls.selections = {item['id']: item for item in parity.feature_selections(cls.library['features'])}
+            cls.env = parity.extraction_environment()
+        finally:
+            recording.stop()
+
+    def setUp(self):
+        # A target dir per test, so no other cargo process or earlier run holds its build lock.
+        self.target_dir = Path(tempfile.mkdtemp(prefix='parity-target-'))
+        self.addCleanup(shutil.rmtree, self.target_dir, ignore_errors=True)
+
+    def test_class_setup_commands_were_all_bounded(self):
+        self.assertGreaterEqual(len(self.setup_bounds), 3)
+        self.assertEqual(set(self.setup_bounds), {COMMAND_TIMEOUT_SECONDS})
+        self.assertFalse(self.renderer.is_relative_to(parity.RENDERER_DIR))
 
     def extract(self, target, selection):
         return parity.extract_surface(

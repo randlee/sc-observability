@@ -1029,9 +1029,6 @@ name = "otlp-native-example"
 version = "1.6.0"
 dependencies = [
  "log",
- "opentelemetry",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
  "sc-observability",
  "sc-observability-log",
  "sc-observability-otlp",
@@ -1656,6 +1653,7 @@ name = "sc-observability-otlp"
 version = "1.6.0"
 dependencies = [
  "futures-executor",
+ "libc",
  "opentelemetry",
  "opentelemetry-http",
  "opentelemetry-otlp",
@@ -1685,6 +1683,7 @@ dependencies = [
  "sc-observability-types",
  "serde",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -1711,12 +1710,10 @@ name = "sc-otel-cli"
 version = "1.6.0"
 dependencies = [
  "clap",
- "rcgen",
- "rustls",
  "sc-observability-otlp",
+ "serde",
  "serde_json",
  "tempfile",
- "time",
 ]
 
 [[package]]

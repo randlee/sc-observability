@@ -43,9 +43,8 @@ each crate's `compat` module. The deprecated error wrappers stay in
 
 ## Opt in to `v2`
 
-Five crates have a `v2` module: `sc-observability-types`, `sc-observability`,
-`sc-observe`, `sc-observability-log` and `sc-observability-otlp`. The DTO,
-binding-runtime, log-macros and log-consumer-check crates have no `v2`
+Four crates have a `v2` module: `sc-observability-types`, `sc-observability`,
+`sc-observe` and `sc-observability-log`. The OTLP, DTO, binding-runtime, log-macros and log-consumer-check crates have no `v2`
 module.
 
 `v2` is the same runtime with canonical signatures, not a second
@@ -113,7 +112,6 @@ lists the nine families and their named causes.
 | `sc-observability` | `Logger`, `LoggerBuilder`, `LogError`/`LogFailure` results, `TypedLogSink` | `v2::{Logger, LoggerBuilder, LogSink}` with `InitError`, `EventError`, `FlushError`, `LogSinkError` |
 | `sc-observe` | `ObservabilityConfig`, `Observability`, `ObservabilityBuilder` with released errors | `v2::{ObservabilityConfig, Observability, ObservabilityBuilder}` with `InitError`, `FlushError`, `ShutdownError` |
 | `sc-observability-log` | `init`, `LogGuard`, `LogControl`, local lifecycle error enums | `v2::{init, LogGuard, LogControl}` with shared `InitError`, `FlushError`, `ShutdownError` |
-| `sc-observability-otlp` | `Telemetry`, `TelemetryConfig`, `OtelConfig` with the 1.4.1 protocol mapping | `v2::{Telemetry, TelemetryConfig, OtelConfig}` with an explicit `ExporterBackend` |
 
 Independently constructing a root `Logger` and a `v2::Logger` creates two
 loggers, each with its own runtime, queue and lifecycle. Consuming a logger
@@ -216,71 +214,6 @@ guard.shutdown(Duration::from_secs(5))?;
 process still has one host logger. Detaching an attachment never grants
 ownership of the host logger.
 
-## OTLP backends and runtimes
-
-`sc-observability-otlp` has two backends. Each is compiled only when its
-Cargo feature is enabled:
-
-| Backend | Feature | Protocols | Runtime |
-| --- | --- | --- | --- |
-| `ExporterBackend::OpenTelemetrySdk` | `otlp-sdk` | `Grpc`, `HttpBinary` | the caller's Tokio runtime |
-| `ExporterBackend::SyncHttp` | `sync-http` | `HttpJson` | one private worker thread |
-
-The released root facade keeps the 1.4.1 protocol choice and derives the
-backend from it: `HttpBinary` (the released default) and `Grpc` select the
-SDK backend, and `HttpJson` selects the synchronous HTTP backend. `v2::OtelConfig`
-names the backend explicitly. Enabled telemetry whose backend feature is not
-compiled in fails construction with a typed error. It never falls back to
-the disabled, no-network exporter.
-
-The SDK backend must be constructed inside the application's Tokio runtime,
-and its lifecycle is awaited. Constructing it without an entered runtime fails
-with `OTLP_TOKIO_RUNTIME_REQUIRED`:
-
-```rust
-#![deny(deprecated)]
-
-use sc_observability_otlp::v2::{
-    ExporterBackend, LogsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, Telemetry,
-    TelemetryConfigBuilder,
-};
-use sc_observability_types::ServiceName;
-
-# fn main() -> Result<(), Box<dyn std::error::Error>> {
-let mut transport = OtelConfig::new(ExporterBackend::OpenTelemetrySdk, OtlpProtocol::Grpc);
-transport.enabled = true;
-transport.endpoint = Some(OtlpEndpoint::new_typed("http://127.0.0.1:4317")?);
-let config = TelemetryConfigBuilder::new(ServiceName::new("billing")?)
-    .with_transport(transport)
-    .enable_logs(LogsConfig::default())
-    .build_typed()?;
-
-// Outside a Tokio runtime: rejected, not silently disabled.
-let outside = Telemetry::new(config.clone()).err().expect("SDK needs a runtime");
-assert!(outside.to_string().contains("Tokio runtime"));
-
-// Inside the caller's runtime: constructed, and the lifecycle is awaited.
-let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
-runtime.block_on(async move {
-    let telemetry = Telemetry::new(config)?;
-    telemetry.shutdown_async_typed().await?;
-    Ok::<_, Box<dyn std::error::Error>>(())
-})?;
-# Ok(())
-# }
-```
-
-The blocking `flush`/`shutdown` calls are for the synchronous HTTP backend. The SDK
-backend reports them as `ExportError::AsyncLifecycleRequired`; use
-`flush_async_typed` and `shutdown_async_typed`. The synchronous HTTP backend's
-blocking lifecycle, in turn, is rejected from inside an entered Tokio
-runtime with `ExportError::BlockingBackendInAsyncContext`. Call it from a
-plain thread.
-
-Applications still own environment and configuration translation. Neither
-facade reads ambient `OTEL_*` variables, and an explicit value that fails
-validation is rejected rather than replaced by a default.
-
 ## What a later major release removes
 
 ADR-020 keeps the deprecated compatibility paths available throughout the
@@ -288,8 +221,8 @@ ADR-020 keeps the deprecated compatibility paths available throughout the
 before a future major release removes the compatibility layer. The layer is
 kept apart so its removal does not touch the canonical implementation:
 
-- the `compat` modules of `sc-observability`, `sc-observe`,
-  `sc-observability-log` and `sc-observability-otlp`, and the nine released
+- the `compat` modules of `sc-observability`, `sc-observe` and
+  `sc-observability-log`, and the nine released
   wrappers in `sc-observability-types/src/errors.rs`;
 - the root re-exports of those items;
 - the named per-item deletion points in the `removable_paths` and
@@ -303,18 +236,15 @@ will need; no other migration step is required in 1.x.
 
 ## Checking the examples
 
-Build the five crates with both OTLP backends, then pass each library to
+Build the four crates, then pass each library to
 `rustdoc`:
 
 ```sh
 cargo build --locked -p sc-observability-types -p sc-observability -p sc-observe \
-  -p sc-observability-log -p sc-observability-otlp \
-  --features sc-observability-otlp/otlp-sdk,sc-observability-otlp/sync-http \
-  --message-format=json
+  -p sc-observability-log --message-format=json
 rustdoc --test --edition 2024 -L dependency=target/debug/deps \
   --extern sc_observability=<rlib> --extern sc_observability_types=<rlib> \
   --extern sc_observe=<rlib> --extern sc_observability_log=<rlib> \
-  --extern sc_observability_otlp=<rlib> --extern tokio=<rlib> \
   docs/migration/compatible-1x.md
 ```
 

@@ -111,6 +111,12 @@ def test_log_forwards_fields_and_explicit_headers_win(collector: Collector, monk
         assert expected in body, expected
 
 
+def test_float_above_u64_max_is_accepted_as_a_double(collector: Collector) -> None:
+    _ok(Telemetry(collector.endpoint).log("x", attributes={"big": 1.5e19}))
+    _, body = collector.only("/v1/logs")
+    assert struct.pack("<d", 1.5e19) in body
+
+
 def test_span_forwards_ids_times_status_and_attributes(collector: Collector) -> None:
     _ok(Telemetry(collector.endpoint).span(
         "deploy", trace_id=TRACE_ID, span_id=SPAN_ID, parent_span_id=PARENT_ID, kind="client",
@@ -152,7 +158,8 @@ LIMIT = "SC_OBSERVABILITY_OTLP_SYNC_INPUT_LIMIT_EXCEEDED"
     (lambda t: t.log("x", trace_id=TRACE_ID.upper(), span_id=SPAN_ID), INVALID_RECORD),
     (lambda t: t.log("x", attributes={"nested": [1]}), INVALID_RECORD),
     (lambda t: t.log("x", attributes={"missing": None}), INVALID_RECORD),
-    (lambda t: t.log("x", attributes={"huge": 2**63}), INVALID_RECORD),
+    (lambda t: t.log("x", attributes={"huge": 2**64}), INVALID_RECORD),
+    (lambda t: t.log("x", attributes={"low": -(2**63) - 1}), INVALID_RECORD),
     (lambda t: t.log("x" * (1024 * 1024 + 1)), LIMIT),
     (lambda t: t.log("x", attributes={f"k{i}": i for i in range(10_001)}), LIMIT),
     (lambda t: t.span("x", parent_span_id=PARENT_ID), INVALID_RECORD),

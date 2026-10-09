@@ -1,5 +1,5 @@
-# License and advisory audit for the otlp-telemetry and CLI graphs; retire when
-# covered by a workspace-wide audit. Advisories and yanked crates fail by default.
+# License and advisory audit for the otlp-telemetry, CLI and log-sink graphs; retire
+# when covered by a workspace-wide audit. Advisories and yanked crates fail by default.
 [advisories]
 ignore = []
 

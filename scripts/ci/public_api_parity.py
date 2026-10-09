@@ -39,6 +39,8 @@ REQUIRED_CELL_KEYS = (
     'toolchain', 'rustdoc_args', 'renderer', 'status', 'rows', 'row_count', 'rows_sha256',
 )
 LOG_TAIL = 4000
+# Per-command bound for `run`; None leaves release runs to the job-level timeout.
+COMMAND_TIMEOUT_SECONDS: float | None = None
 
 
 class ParityError(Exception):
@@ -153,8 +155,21 @@ def feature_selections(features: dict[str, list[str]]) -> list[dict]:
 
 
 def run(command: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
-    return subprocess.run(command, cwd=cwd, text=True, capture_output=True,
-                          env={**(env or os.environ), 'CARGO_TERM_COLOR': 'never'})
+    try:
+        return subprocess.run(command, cwd=cwd, text=True, capture_output=True,
+                              env={**(env or os.environ), 'CARGO_TERM_COLOR': 'never'},
+                              timeout=COMMAND_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired as error:
+        raise ParityError(timeout_message(error)) from error
+
+
+def timeout_message(error: subprocess.TimeoutExpired) -> str:
+    """Names the command that timed out with the tail of what it printed."""
+    captured = b''.join(
+        part if isinstance(part, bytes) else part.encode()
+        for part in (error.stdout, error.stderr) if part)
+    tail = captured.decode(errors='replace')[-LOG_TAIL:]
+    return f'{" ".join(map(str, error.cmd))} timed out after {error.timeout}s\n{tail}'
 
 
 def package_library(cargo_toml: Path, root: Path = ROOT) -> dict:

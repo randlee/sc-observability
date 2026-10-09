@@ -1,5 +1,6 @@
 //! Conversion, limit and failure-projection coverage for the Python send path.
 use super::*;
+use sc_observability_otlp::api::trace::{SpanId, Status};
 use sc_observability_otlp::constants::{MAX_BATCH_RECORDS, MAX_INPUT_BYTES};
 use sc_observability_otlp::sdk::error::OTelSdkError;
 use serde_json::Value;
@@ -45,6 +46,25 @@ fn expect_err<T>(result: Result<T, SyncError>) -> SyncError {
 }
 
 #[test]
+fn root_certificate_uses_the_shared_bounded_regular_file_reader() {
+    let directory = tempfile::tempdir().expect("create temporary certificate directory");
+    let oversized = directory.path().join("oversized.pem");
+    std::fs::write(&oversized, vec![b'x'; MAX_INPUT_BYTES + 1])
+        .expect("write oversized root certificate");
+    assert_eq!(
+        code(client(&config(None, Some(oversized))).map(drop)),
+        codes::INVALID_CONFIG
+    );
+
+    let non_regular = directory.path().join("certificate-directory");
+    std::fs::create_dir(&non_regular).expect("create certificate directory");
+    assert_eq!(
+        code(client(&config(None, Some(non_regular))).map(drop)),
+        codes::INVALID_CONFIG
+    );
+}
+
+#[test]
 fn failures_project_to_the_shared_failure_union_with_registry_codes() {
     let Failure::Validation { diagnostic, field } = failure(
         "send_log",
@@ -64,6 +84,14 @@ fn failures_project_to_the_shared_failure_union_with_registry_codes() {
         std::panic::panic_any("config rejection must be a validation failure");
     };
     assert_eq!(field, "config");
+    let Failure::Unavailable { diagnostic } = failure(
+        "send_log",
+        &SyncError::validation(codes::RUNTIME_ENTERED, "inside a runtime"),
+    ) else {
+        std::panic::panic_any("an entered runtime has no input field and must be unavailable");
+    };
+    assert_eq!(diagnostic.code, codes::RUNTIME_ENTERED);
+    assert!(diagnostic.message.contains("inside a runtime"));
     let Failure::Unavailable { diagnostic } = failure(
         "send_span",
         &SyncError::Export(OTelSdkError::InternalFailure("refused".into())),
@@ -202,7 +230,7 @@ fn attributes_map_python_scalars_and_reject_other_values() {
                 py,
                 c"[('flag', True), ('count', 3), ('ratio', 0.5), ('name', 'x')]",
             ),
-            0,
+            &[],
         )
         .expect("supported scalars");
         assert_eq!(
@@ -214,13 +242,30 @@ fn attributes_map_python_scalars_and_reject_other_values() {
                 ("name".into(), Scalar::Str("x".into())),
             ]
         );
+        assert_eq!(
+            attributes(python_attributes(py, c"[('huge', 2**63)]"), &[])
+                .expect("u64 above i64::MAX converts"),
+            [("huge".into(), Scalar::Str("9223372036854775808".into()),)]
+        );
+        assert_eq!(
+            attributes(
+                python_attributes(py, c"[('big', 1.5e19), ('low', -(2**63))]"),
+                &[]
+            )
+            .expect("large float and i64::MIN stay accepted"),
+            [
+                ("big".into(), Scalar::Float(1.5e19)),
+                ("low".into(), Scalar::Int(i64::MIN)),
+            ]
+        );
         for source in [
             c"[('k', None)]",
             c"[('k', [1])]",
             c"[('k', {'a': 1})]",
-            c"[('k', 2**63)]",
+            c"[('k', 2**64)]",
+            c"[('k', -(2**63) - 1)]",
         ] {
-            let result = attributes(python_attributes(py, source), 0);
+            let result = attributes(python_attributes(py, source), &[]);
             assert_eq!(code(result), codes::INVALID_RECORD);
         }
     });
@@ -238,22 +283,92 @@ fn input_limits_count_attributes_and_text_bytes() {
         let long_value = format!("[('k', 'x' * {})]", MAX_INPUT_BYTES - 1);
         let eval =
             |source: String| python_attributes(py, &CString::new(source).expect("no interior NUL"));
-        assert!(attributes(eval(at_limit), 0).is_ok());
-        assert!(attributes(eval(long_value.clone()), 0).is_ok());
+        assert!(attributes(eval(at_limit), &[]).is_ok());
+        assert!(attributes(eval(long_value.clone()), &[]).is_ok());
         for result in [
-            attributes(eval(over_limit), 0),
-            attributes(eval(long_value), 1),
-            attributes(Vec::new(), MAX_INPUT_BYTES + 1),
+            attributes(eval(over_limit), &[]),
+            attributes(eval(long_value), &["x"]),
+            attributes(Vec::new(), &[&"x".repeat(MAX_INPUT_BYTES + 1)]),
         ] {
             assert_eq!(code(result), codes::INPUT_LIMIT_EXCEEDED);
         }
+        let long_key = format!("[('k' * {}, True)]", MAX_INPUT_BYTES + 1);
+        assert_eq!(
+            code(attributes(eval(long_key), &[])),
+            codes::INPUT_LIMIT_EXCEEDED
+        );
     });
+}
+
+#[test]
+fn oversized_span_name_is_an_input_limit_failure() {
+    let result = span(SpanFields {
+        name: "x".repeat(MAX_INPUT_BYTES + 1),
+        trace_id: None,
+        span_id: None,
+        parent_span_id: None,
+        kind: "internal".into(),
+        start_time_unix_nano: None,
+        end_time_unix_nano: None,
+        ok: false,
+        error: None,
+        attributes: Vec::new(),
+    });
+    assert_eq!(code(result), codes::INPUT_LIMIT_EXCEEDED);
+}
+
+#[test]
+fn oversized_span_error_metric_text_and_service_name_are_input_limit_failures() {
+    let big = "x".repeat(MAX_INPUT_BYTES + 1);
+    let span_with_error = SpanFields {
+        name: "span".into(),
+        trace_id: None,
+        span_id: None,
+        parent_span_id: None,
+        kind: "internal".into(),
+        start_time_unix_nano: None,
+        end_time_unix_nano: None,
+        ok: false,
+        error: Some(big.clone()),
+        attributes: Vec::new(),
+    };
+    assert_eq!(code(span(span_with_error)), codes::INPUT_LIMIT_EXCEEDED);
+    let metric_fields = |unit: Option<String>, description: Option<String>| MetricFields {
+        name: "metric".into(),
+        kind: "counter".into(),
+        value: 1.0,
+        unit,
+        description,
+        attributes: Vec::new(),
+    };
+    assert_eq!(
+        code(metric(metric_fields(Some(big.clone()), None))),
+        codes::INPUT_LIMIT_EXCEEDED
+    );
+    assert_eq!(
+        code(metric(metric_fields(None, Some(big.clone())))),
+        codes::INPUT_LIMIT_EXCEEDED
+    );
+    let config = Config {
+        endpoint: None,
+        headers: Vec::new(),
+        timeout_s: None,
+        root_certificate: None,
+        service_name: Some(big),
+    };
+    let signal = Signal::Log(LogEntry {
+        severity: Severity::Info,
+        body: "body".into(),
+        trace_context: None,
+        attributes: Vec::new(),
+    });
+    assert_eq!(code(export(config, signal)), codes::INPUT_LIMIT_EXCEEDED);
 }
 
 #[test]
 fn invalid_timeout_and_unreadable_certificate_are_config_failures_before_export() {
     let signal = || {
-        Signal::Metric(Metric {
+        Signal::Metric(Measurement {
             name: "jobs".into(),
             kind: MetricKind::Counter,
             value: 1.0,

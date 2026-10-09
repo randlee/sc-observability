@@ -530,7 +530,8 @@ Owns:
 - `constants` (`DEFAULT_OTLP_TIMEOUT_MS`, `MAX_INPUT_BYTES`,
   `MAX_BATCH_RECORDS`) and `error_codes` (`TELEMETRY_EXPORT_FAILED`, `sync::*`)
 
-Tokio hosts use `opentelemetry_sdk` and `opentelemetry-otlp` directly. The
+Tokio hosts build the official SDK providers and OTLP exporters through the
+`api`/`sdk`/`otlp` re-exports (feature `tokio-exporter`). The
 `sc-otel` CLI and the Python `Telemetry` binding are thin frontends over
 `sync::Client`.
 
@@ -667,13 +668,13 @@ metric projectors with `sc-observe`; OTel logging attaches through the core
 | `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState`, and logging query/follow value and error contracts |
 | `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, legacy direct rotation helpers, `RetainedLogPolicy`, queue-backed writer runtime, `Logger`, `JsonlLogReader`, follow session runtime, and logging health/maintenance re-exports including `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState` |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, log projectors, top-level health re-exports; no OTLP dependents |
-| `sc-observability-otlp` | `sc-observability-types`; optional `opentelemetry`, `opentelemetry_sdk` (feature `native`); optional `sc-observability`, `serde_json` (feature `log-sink`, with `native`); optional `opentelemetry-otlp`, `opentelemetry-http`, `otel-reqwest` (reqwest 0.13 blocking), `futures-executor`, `tokio` (feature `synchronous-client`, with `native`); dev-only `sc-observability`, `tempfile`, `tokio`, `rustls`, `opentelemetry-proto`, `prost` ([ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends)) | `sc-observe`, `agent-team-mail-*` | `OtelLogSink`, `sync::Client`, `api`/`sdk` official re-exports, OTLP constants and error codes |
+| `sc-observability-otlp` | `sc-observability-types`; optional `opentelemetry`, `opentelemetry_sdk` (feature `native`); optional `sc-observability`, `serde_json` (feature `log-sink`, with `native`); optional `opentelemetry-otlp`, `opentelemetry-http`, `otel-reqwest` (reqwest 0.13 blocking), `futures-executor`, `tokio`, and on Unix `libc` for the non-blocking bounded file open (feature `synchronous-client`, with `native`); `opentelemetry-otlp` also under feature `tokio-exporter` (with `native`); dev-only `sc-observability`, `time`, `tempfile`, `tokio`, `rustls`, `rcgen`, `opentelemetry-proto`, `prost` ([ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends)) | `sc-observe`, `agent-team-mail-*` | `OtelLogSink`, `sync::Client`, `api`/`sdk`/`otlp` official re-exports, OTLP constants and error codes |
 | `sc-observability-log`† | `sc-observability`, `sc-observability-types`, `sc-observability-log-macros` (exact-pinned) | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*`, Tauri/Specta/PyO3 | `log`-facade bridge and tracing-compatible event/`#[instrument]` macros re-exports; `LogGuard`/`LogControl` lifecycle; `InitError`/`FlushError`/`ShutdownError`/`DetachError` are a scoped TYP-030 companion exception (PHB-002); B.1 mechanical copy, unpublished |
 | `sc-observability-dto`† | `sc-observability-types`, `serde`, `serde_json`; optional exact-pinned Schemars tooling | core runtime, bridge, Tauri, PyO3, ownership capabilities | B.3 schema-v1 wire projections and checked conversions; scoped TYP-030 wire-only exception, no native type replacement |
 | `sc-observability-schema` | `sc-observability-dto` (with the `schema-gen` feature) | runtime crates, binding runtimes, and host/framework crates | isolated, unpublished schema-generator crate under `bindings/schema-generator/`; emits schema artifacts from DTO wire types |
 | `sc-observability-log-macros`† | third-party proc-macro support only (`syn`, `quote`, `proc-macro2`) | `sc-observability-log` (no reverse dependency back to the bridge), `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | procedural macro expansion only for `sc-observability-log`'s event/`#[instrument]` forms; no runtime types; B.1 mechanical copy, unpublished |
 | `sc-observability-log-consumer-check`† | `sc-observability-log` only (direct path dependency) | `sc-observability-log-macros` (macro expansion is exercised only through the bridge, preserving the external macro-expansion hygiene check), `agent-team-mail-*` | CI-only compile-time proof that macro consumers need only the bridge dependency; never published |
-| `sc-otel-cli` | `sc-observability-types`, `sc-observability-otlp` (feature `synchronous-client`) | `sc-observe`, PyO3, `agent-team-mail-*` | `sc-otel` command-line telemetry frontend; workspace member, `publish = false` |
+| `sc-otel-cli` | `sc-observability-otlp` (feature `synchronous-client`) | `sc-observe`, PyO3, `agent-team-mail-*` | `sc-otel` command-line telemetry frontend; workspace member, `publish = false` |
 | `sc-observability-py` | `sc-observability`, `sc-observability-binding-runtime`, `sc-observability-dto`, `sc-observability-types`; optionally `sc-observability-otlp` (`otlp-telemetry` enables `synchronous-client`) | `agent-team-mail-*` | owned and host-attached Python bindings; optional native synchronous OTLP telemetry |
 
 † This crate's ADR-011 companion-boundary placement (including its TYP-030 companion/wire-only exception scoping above) follows ADR-011's accepted companion-boundary decision.
@@ -741,15 +742,17 @@ OTLP edge, and the Python crate without the feature has none.
 `policy/otlp-transport.toml` binds the reviewed `opentelemetry`,
 `opentelemetry_sdk`, `opentelemetry-otlp`, `opentelemetry-http`,
 `futures-executor`, `otel-reqwest` (`reqwest =0.13.5`, `blocking`, `rustls`)
-and Tokio pins to the `log-sink` and `synchronous-client` features (ADR-023).
+and Tokio pins to the `native`, `log-sink`, `synchronous-client` and
+`tokio-exporter` features (ADR-023).
 The `synchronous-client` exporter uses the official blocking reqwest client and
 requires no caller-owned runtime. No wildcard approval covers an unrelated
 dependency; the existing boundary manifest is the single machine allowlist.
 
-The OTLP crate's dev-dependencies support its tests: `tempfile` for
-temporary-file tests, `sc-observability` and `tokio` for sink and Tokio-path
-tests, and `opentelemetry-proto`, `prost` and `rustls` (`ring`) to decode
-requests and serve TLS at the synchronous client's loopback test collector. The
+The OTLP crate's dev-dependencies support its tests: `time` for timestamps,
+`tempfile` for temporary-file tests, `sc-observability` and `tokio` for sink
+and Tokio-path tests, and `opentelemetry-proto`, `prost`, `rustls` (`ring`)
+and `rcgen` to decode requests and serve TLS at the synchronous client's
+loopback test collector. The
 production `sc-observability` edge exists only under the optional `log-sink`
 feature, which `OtelLogSink` needs
 ([ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends)).
@@ -821,7 +824,8 @@ facade is deprecated behind the default `v1` feature.
 - **Decision**: The dependency order is `types <- sc-observability <- sc-observability-log`, `sc-observability <- sc-observe`, and `types <- sc-observability-otlp`; `sc-observability` and `sc-observe` are OTLP test dev-dependencies only.
 - **Amended by ADR-023**: `sc-observability <- sc-observability-otlp` is also a
   production edge under the optional `log-sink` feature, for `OtelLogSink`
-  only. `sc-observe` stays an OTLP dev-dependency and no reverse edge exists.
+  only. `sc-observe` is no dependency of `sc-observability-otlp` (not even a
+  dev-dependency), and no reverse edge exists.
 - **Consequences**:
   - OTLP remains optional
   - `sc-observe` can be used without OpenTelemetry
@@ -1571,7 +1575,7 @@ was reworded accordingly to describe the remaining validation.
   | Exemplars | supported | typed error |
   | Profiles | supported, `/v1development/profiles` | typed error |
 
-- **Durability and layering**: SQLite via `rusqlite =0.40.2` (`bundled`)
+- **Historical durability and layering (superseded by ADR-023)**: SQLite via `rusqlite =0.40.2` (`bundled`)
   behind `durable-store`. `emit` commits a versioned envelope plus per-signal
   delivery rows (WAL, `synchronous=FULL`) before returning an
   `AdmissionReceipt`. The layering is store → drain worker → the sync-http
@@ -1605,8 +1609,9 @@ was reworded accordingly to describe the remaining validation.
   gains no YAML dependency. `SubmissionId` and the drain lease holder ID
   (`<pid>:<uuid>`) use `uuid =1.26.1` (v7), optional in both crates. The
   `sc-otel` CLI parses arguments with `clap =4.6.7`. The full pin set is in
-  the d-29 sprint doc. The license and advisory audit is cargo-deny with
-  `policy/deny-durable-store.toml`. The platform matrix is linux
+  the d-29 sprint doc. The durable-store-specific
+  `policy/deny-durable-store.toml` was retired and replaced by `policy/deny.toml`.
+  The platform matrix is linux
   x86_64/aarch64, macOS x86_64/arm64, windows x86_64/arm64 and abi3-py310
   wheels on each. It is proven by the dispatched `telemetry-platforms.yml`
   run (d-33, re-run by d-32) and the dispatched `b4a-python-distributions.yml`
@@ -1829,9 +1834,10 @@ No transport implementation or runtime dependency enters the types layer.
   request DTO. H-1 retains only two narrowly scoped private adapters: the
   `FlushOnlyExporter`/`FlushGate` pair gates the official metric exporter to
   the explicit flush, prevents a second export during shutdown after a
-  caller-recording error, and detects an empty metric recording; `ExplicitHeaders`
-  reapplies explicit application headers after exporter-provided environment
-  headers so explicit values win. Neither adapter adds a public exporter,
+  caller-recording error, detects an empty metric recording, and detects an
+  instrument name recorded with a different kind or unit (compared
+  case-insensitively); `ExplicitHeaders` reapplies explicit application
+  headers after exporter-provided environment headers so explicit values win. Neither adapter adds a public exporter,
   provider or reader facade, and no other wrapper is authorized.
   Metric sends take a closure over the native Meter; the SDK owns provider,
   resource, reader and flush. Flush reports failure but coarsens its cause in
@@ -1945,7 +1951,11 @@ No transport implementation or runtime dependency enters the types layer.
   - *Features*: `native` = official `opentelemetry` and `opentelemetry_sdk`
     0.33.0 and the `api`/`sdk` re-exports only. `log-sink` = `native` +
     `sc-observability`, no transport; the ATM/native Tokio path selects
-    only this. `synchronous-client` = `native` + `opentelemetry-otlp`
+    only this. `tokio-exporter` = `native` + `opentelemetry-otlp`
+    `http-proto`, `reqwest-blocking-client` and `reqwest-rustls` (upstream
+    requires the blocking client with the default SDK batch processors and
+    periodic reader, which run exports on SDK-owned threads); it does not enable
+    `log-sink`. `synchronous-client` = `native` + `opentelemetry-otlp`
     `http-proto`, `reqwest-blocking-client` and `reqwest-rustls`, a
     caller-supplied blocking reqwest 0.13 client with rustls, `opentelemetry-http`
     (its `HttpClient` trait only), `futures-executor`
@@ -1953,13 +1963,18 @@ No transport implementation or runtime dependency enters the types layer.
     `sc-observability-otlp/synchronous-client`. `validate_dependency_bans.sh`
     checks the resolved `log-sink` graph contains no `reqwest`,
     `opentelemetry-otlp` or `opentelemetry-http`.
-  - *Re-exports*: `api::{InstrumentationScope, Key, KeyValue, Value}`,
-    `api::logs::{AnyValue, LogRecord, Severity}`,
-    `api::trace::{Event, Link, SpanContext, SpanId, SpanKind, Status,
-    TraceFlags, TraceId, TraceState}`, `api::metrics::{Meter, MeterProvider}`,
-    `sdk::Resource`, `sdk::trace::{SpanData, SpanEvents, SpanLinks}`,
-    `sdk::logs::{SdkLogRecord, SdkLoggerProvider}`,
-    `sdk::error::{OTelSdkError, OTelSdkResult}`; unmodified upstream types, no
+  - *Re-exports*: `api::{Context, InstrumentationScope, Key, KeyValue, Value}`,
+    `api::logs::{AnyValue, LogRecord, Logger, LoggerProvider, Severity}`,
+    `api::trace::{Event, Link, Span, SpanContext, SpanId, SpanKind, Status,
+    TraceContextExt, TraceFlags, TraceId, TraceState, Tracer,
+    TracerProvider}`, `api::metrics::{Meter, MeterProvider}`,
+    `sdk::Resource`, `sdk::trace::{BatchSpanProcessor, IdGenerator,
+    RandomIdGenerator, SdkTracerProvider, SpanData, SpanEvents, SpanLinks}`,
+    `sdk::logs::{BatchLogProcessor, SdkLogRecord, SdkLoggerProvider}`,
+    `sdk::metrics::{PeriodicReader, SdkMeterProvider}`,
+    `sdk::error::{OTelSdkError, OTelSdkResult}`, and under `tokio-exporter`
+    `otlp::{LogExporter, MetricExporter, Protocol, SpanExporter,
+    WithExportConfig}`; unmodified upstream types, no
     glob re-export.
   - *Signatures*: `sync::Client::new(&str)`, `with_header(self, &str, &str)`,
     `with_timeout(self, Duration)`, `with_root_certificate_pem(self, &[u8])`
@@ -1969,8 +1984,34 @@ No transport implementation or runtime dependency enters the types layer.
     sdk::trace::SpanData)`; `send_metrics<F>(&mut self, &sdk::Resource,
     api::InstrumentationScope, F)` with `F: FnOnce(&api::metrics::Meter) ->
     Result<(), SyncError>`; `sync::check_input_limits(bytes, records)`;
-    `sync::span_times(Option<u64>, Option<u64>)`, which orders span times on the
-    supplied Unix nanoseconds before converting them to `SystemTime`;
+    `sync::resolve_endpoint(Option<&str>) -> Result<Cow<str>, SyncError>`;
+    `sync::parse_trace_id(field, value) -> Result<TraceId, SyncError>` and
+    `sync::parse_span_id(field, value) -> Result<SpanId, SyncError>`;
+    the shared CLI and Python frontend policy, owned by `sync` so both apply one
+    rule: `sync::read_root_certificate(&Path) -> Result<Vec<u8>, SyncError>`
+    (bounded read of a regular certificate file, 1 MiB) over
+    `sync::read_bounded_regular_file(&Path, &str, &'static str)`,
+    `sync::unsigned_attribute<T>(u64) -> T` (an integer attribute within `i64`
+    stays an integer; a larger `u64` becomes its exact decimal string),
+    `sync::InputByteCounter` (per-call input byte accounting over signal text,
+    attribute keys and string attribute values, checked against
+    `MAX_INPUT_BYTES`); `sync` keeps `parent_span_is_remote` (always `false`: a
+    supplied parent is recorded as local) and `span_times` (orders span times on
+    the supplied Unix nanoseconds before converting them to `SystemTime`) crate
+    internal; and the shared CLI and
+    Python signal construction, so both frontends build identical native
+    signals: `sync::LogEntry { severity, body, trace_context, attributes }`
+    with `fill(self, &mut sdk::logs::SdkLogRecord)` (timestamp now, severity
+    name as text), `sync::Measurement { name, kind, value, unit, description,
+    attributes }` with `record(self, &api::metrics::Meter)` over
+    `sync::MetricKind::{Counter, UpDownCounter, Gauge, Histogram}` (`f64`
+    instruments), `sync::span_status(Option<String>, bool) -> api::trace::Status`
+    (error wins, then `ok`, else unset), and `sync::CompletedSpan` with
+    `into_span_data(self, api::InstrumentationScope) -> Result<sdk::trace::SpanData,
+    SyncError>` (missing ids random, sampled, local parent, times through
+    `span_times`); each frontend keeps its argument extraction, scope name
+    and option rules (both frontends reject `ok` together with an error; `span_status`'s
+    error-wins rule is for library callers);
     `OtelLogSink::new(&sdk::logs::SdkLoggerProvider, api::InstrumentationScope)`
     implementing the core `LogSink`. The SDK span collections
     `SpanEvents`/`SpanLinks` are non-exhaustive: callers fill them from
@@ -1981,7 +2022,9 @@ No transport implementation or runtime dependency enters the types layer.
     reaches the network; `SyncError::Export` wraps the native exporter error.
     A closure's `Validation` passes through; any other closure error becomes
     `CALLER_REJECTED`. A metric send that records no valid measurement is
-    `INVALID_RECORD`. Display and sources redact header values and URL
+    `INVALID_RECORD`, as is one that records the same instrument name (compared
+    case-insensitively) with a different kind or unit: `FlushGate` suppresses
+    the export and keeps the latest conflict. Display and sources redact header values and URL
     userinfo. Limits are `MAX_INPUT_BYTES` (1 MiB) and `MAX_BATCH_RECORDS`
     (10,000) in `constants`.
   - *Metrics lifecycle*: delta temporality behind the official
