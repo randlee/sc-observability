@@ -160,8 +160,14 @@ fn attributes(source: Option<&str>, signal_text: &str) -> Result<Vec<(String, Js
     let text = if source == STDIN_SOURCE {
         read_capped(std::io::stdin().lock(), "standard input")?
     } else if let Some(path) = source.strip_prefix('@') {
-        let file = std::fs::File::open(path)
-            .map_err(|error| invalid(format!("cannot read attributes file {path}: {error}")))?;
+        let unreadable =
+            |error: std::io::Error| invalid(format!("cannot read attributes file {path}: {error}"));
+        if !std::fs::metadata(path).map_err(unreadable)?.is_file() {
+            return Err(invalid(format!(
+                "attributes file {path} must be a regular file"
+            )));
+        }
+        let file = std::fs::File::open(path).map_err(unreadable)?;
         read_capped(file, path)?
     } else {
         source.to_owned()
@@ -364,6 +370,38 @@ mod tests {
         }
         let error = attributes(Some("@/nonexistent/sc-otel-attributes.json"), "")
             .expect_err("missing file");
+        assert_eq!(code(&error), codes::INVALID_RECORD);
+    }
+
+    #[test]
+    fn attributes_file_rejects_directory_path() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let source = format!("@{}", directory.path().display());
+
+        let error = attributes(Some(&source), "").expect_err("directory path");
+        assert_eq!(code(&error), codes::INVALID_RECORD);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn attributes_file_rejects_writerless_fifo_without_blocking() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let path = directory.path().join("attributes.json");
+        let status = std::process::Command::new("mkfifo")
+            .arg(&path)
+            .status()
+            .expect("create FIFO");
+        assert!(status.success(), "mkfifo exited with {status}");
+        let source = format!("@{}", path.display());
+
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = sender.send(attributes(Some(&source), ""));
+        });
+        let result = receiver
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("reader blocked on writer-less FIFO");
+        let error = result.expect_err("FIFO is not a regular attributes file");
         assert_eq!(code(&error), codes::INVALID_RECORD);
     }
 
