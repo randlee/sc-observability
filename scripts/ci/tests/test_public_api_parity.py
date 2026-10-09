@@ -359,20 +359,44 @@ class RealExtractionTests(unittest.TestCase):
             if os.environ.get('CI'):
                 raise AssertionError(f'CI must provide the parity toolchain: {reason}')
             raise unittest.SkipTest(reason)
-        cls.toolchain = parity.pinned_toolchain()
-        cls.renderer = parity.ensure_renderer()
-        cls.commit = parity.source_commit()
-        cls.library = parity.package_library(FIXTURE / 'Cargo.toml')
-        cls.selections = {item['id']: item for item in parity.feature_selections(cls.library['features'])}
-        cls.env = parity.extraction_environment()
+        # Bound every runner command from the first one, class-level setup included, and
+        # record the bound each command saw so a test can prove none ran unbounded.
+        cls.setup_bounds = []
+        real_run = parity.run
+
+        def recording_run(*args, **kwargs):
+            cls.setup_bounds.append(parity.COMMAND_TIMEOUT_SECONDS)
+            return real_run(*args, **kwargs)
+
+        bound = mock.patch.object(parity, 'COMMAND_TIMEOUT_SECONDS', COMMAND_TIMEOUT_SECONDS)
+        bound.start()
+        cls.addClassCleanup(bound.stop)
+        recording = mock.patch.object(parity, 'run', recording_run)
+        recording.start()
+        try:
+            cls.toolchain = parity.pinned_toolchain()
+            # A private copy of the renderer crate, so its build uses its own target dir
+            # instead of the shared checkout one (and its build lock).
+            renderer_dir = Path(tempfile.mkdtemp(prefix='parity-renderer-')) / 'surface-renderer'
+            cls.addClassCleanup(shutil.rmtree, renderer_dir.parent, ignore_errors=True)
+            shutil.copytree(parity.RENDERER_DIR, renderer_dir, ignore=shutil.ignore_patterns('target'))
+            cls.renderer = parity.ensure_renderer(renderer_dir)
+            cls.commit = parity.source_commit()
+            cls.library = parity.package_library(FIXTURE / 'Cargo.toml')
+            cls.selections = {item['id']: item for item in parity.feature_selections(cls.library['features'])}
+            cls.env = parity.extraction_environment()
+        finally:
+            recording.stop()
 
     def setUp(self):
         # A target dir per test, so no other cargo process or earlier run holds its build lock.
         self.target_dir = Path(tempfile.mkdtemp(prefix='parity-target-'))
         self.addCleanup(shutil.rmtree, self.target_dir, ignore_errors=True)
-        bound = mock.patch.object(parity, 'COMMAND_TIMEOUT_SECONDS', COMMAND_TIMEOUT_SECONDS)
-        bound.start()
-        self.addCleanup(bound.stop)
+
+    def test_class_setup_commands_were_all_bounded(self):
+        self.assertGreaterEqual(len(self.setup_bounds), 3)
+        self.assertEqual(set(self.setup_bounds), {COMMAND_TIMEOUT_SECONDS})
+        self.assertFalse(self.renderer.is_relative_to(parity.RENDERER_DIR))
 
     def extract(self, target, selection):
         return parity.extract_surface(
