@@ -17,7 +17,7 @@ use sc_observability_otlp::sdk::trace::{
 };
 use sc_observability_otlp::sync::{
     Client, InputByteCounter, SyncError, check_input_limits, parent_span_is_remote, parse_span_id,
-    parse_trace_id, read_root_certificate, resolve_endpoint, span_times,
+    parse_trace_id, read_root_certificate, resolve_endpoint, span_times, unsigned_attribute,
 };
 use std::{
     panic::AssertUnwindSafe,
@@ -94,6 +94,18 @@ impl Scalar {
             Self::Float(value) => T::from(value),
             Self::Str(value) => T::from(value),
         }
+    }
+}
+
+impl From<i64> for Scalar {
+    fn from(value: i64) -> Self {
+        Self::Int(value)
+    }
+}
+
+impl From<String> for Scalar {
+    fn from(value: String) -> Self {
+        Self::Str(value)
     }
 }
 
@@ -416,11 +428,15 @@ fn scalar(key: &str, value: &Bound<'_, PyAny>) -> Result<Scalar, SyncError> {
     if value.is_instance_of::<PyBool>() {
         value.extract().map(Scalar::Bool).map_err(|_| unsupported())
     } else if value.is_instance_of::<PyInt>() {
-        value.extract().map(Scalar::Int).map_err(|_| {
-            invalid(format!(
-                "attribute {key}: integer outside the signed 64-bit range"
-            ))
-        })
+        value
+            .extract::<i64>()
+            .map(Scalar::from)
+            .or_else(|_| value.extract::<u64>().map(unsigned_attribute::<Scalar>))
+            .map_err(|_| {
+                invalid(format!(
+                    "attribute {key}: integer outside the unsigned 64-bit range"
+                ))
+            })
     } else if value.is_instance_of::<PyFloat>() {
         value
             .extract()

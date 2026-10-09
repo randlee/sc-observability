@@ -206,6 +206,23 @@ impl std::error::Error for SyncError {
     }
 }
 
+/// Converts an unsigned attribute integer without losing its exact value.
+///
+/// Native OpenTelemetry attributes support signed integers only. Values that
+/// fit that representation remain integers; larger values become their exact
+/// decimal string instead of a lossy floating-point value. CLI and Python use
+/// this shared rule at their language boundaries.
+#[must_use]
+pub fn unsigned_attribute<T>(value: u64) -> T
+where
+    T: From<i64> + From<String>,
+{
+    match i64::try_from(value) {
+        Ok(value) => T::from(value),
+        Err(_) => T::from(value.to_string()),
+    }
+}
+
 /// Rejects frontend input above [`MAX_INPUT_BYTES`] or [`MAX_BATCH_RECORDS`].
 ///
 /// CLI and Python entry points call this before parsing or exporting input.

@@ -92,8 +92,8 @@ ATTRIBUTES
   not bound these input reads.
   Input is limited to 1 MiB and 10,000 attributes. Null, array and object
   values are rejected. If an object repeats a key, the last value is used.
-  Unsigned integers greater than i64::MAX are converted to floating point and
-  may lose precision.
+  Unsigned integers greater than i64::MAX are converted to exact decimal
+  strings.
 
 EXIT CODES
   0  The exporter reported success.

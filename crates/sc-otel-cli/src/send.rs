@@ -17,7 +17,7 @@ use sc_observability_otlp::sdk::trace::{
 };
 use sc_observability_otlp::sync::{
     Client, InputByteCounter, SyncError, check_input_limits, parent_span_is_remote,
-    read_root_certificate, resolve_endpoint, span_times,
+    read_root_certificate, resolve_endpoint, span_times, unsigned_attribute,
 };
 use serde_json::Value as Json;
 use std::{io::Read, time::SystemTime};
@@ -244,6 +244,7 @@ where
         Json::Number(number) => number
             .as_i64()
             .map(T::from)
+            .or_else(|| number.as_u64().map(unsigned_attribute::<T>))
             .or_else(|| number.as_f64().map(T::from))
             .ok_or_else(|| invalid(format!("attribute {key}: unsupported number {number}"))),
         Json::String(value) => Ok(T::from(value)),
@@ -314,7 +315,7 @@ mod tests {
         assert_eq!(find("b"), Some(Value::Bool(true)));
         assert_eq!(find("i"), Some(Value::I64(-3)));
         assert_eq!(find("f"), Some(Value::F64(1.5)));
-        assert_eq!(find("big"), Some(Value::F64(18_446_744_073_709_551_615.0)));
+        assert_eq!(find("big"), Some(Value::from("18446744073709551615")));
         assert_eq!(find("duplicate"), Some(Value::from("last")));
         assert_eq!(
             scalar::<AnyValue>("k", Json::from("v")).expect("string"),

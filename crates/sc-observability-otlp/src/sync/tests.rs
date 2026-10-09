@@ -31,6 +31,7 @@ use prost::Message;
 use super::{
     Client, DEFAULT_OTLP_ENDPOINT, InputByteCounter, REDACTED, SyncError, check_input_limits,
     parent_span_is_remote, parse_span_id, parse_trace_id, resolve_endpoint_with, span_times,
+    unsigned_attribute,
 };
 use crate::constants::{MAX_BATCH_RECORDS, MAX_INPUT_BYTES};
 use crate::error_codes::sync as codes;
@@ -901,6 +902,22 @@ fn input_limits_accept_at_limit_and_reject_above() {
     assert_eq!(
         validation_code(input.add_text("x")),
         codes::INPUT_LIMIT_EXCEEDED
+    );
+}
+
+#[test]
+fn unsigned_attributes_above_i64_max_keep_exact_decimal_text() {
+    assert_eq!(
+        unsigned_attribute::<AnyValue>(i64::MAX as u64),
+        AnyValue::Int(i64::MAX)
+    );
+    assert_eq!(
+        unsigned_attribute::<AnyValue>(i64::MAX as u64 + 1),
+        AnyValue::from("9223372036854775808".to_owned())
+    );
+    assert_eq!(
+        unsigned_attribute::<AnyValue>(u64::MAX),
+        AnyValue::from(u64::MAX.to_string())
     );
 }
 

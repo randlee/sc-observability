@@ -239,11 +239,18 @@ fn attributes_map_python_scalars_and_reject_other_values() {
                 ("name".into(), Scalar::Str("x".into())),
             ]
         );
+        assert_eq!(
+            attributes(python_attributes(py, c"[('huge', 2**63)]"), 0),
+            Ok(vec![(
+                "huge".into(),
+                Scalar::Str("9223372036854775808".into()),
+            )])
+        );
         for source in [
             c"[('k', None)]",
             c"[('k', [1])]",
             c"[('k', {'a': 1})]",
-            c"[('k', 2**63)]",
+            c"[('k', 2**64)]",
         ] {
             let result = attributes(python_attributes(py, source), "");
             assert_eq!(code(result), codes::INVALID_RECORD);
