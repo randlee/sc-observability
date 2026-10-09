@@ -887,40 +887,56 @@ fn span_times_default_end_is_now_and_bounds_the_start() {
 
 #[test]
 fn input_limits_accept_at_limit_and_reject_above() {
-    check_input_limits(MAX_INPUT_BYTES, MAX_BATCH_RECORDS).expect("at-limit input accepted");
+    check_input_limits("input", MAX_INPUT_BYTES, MAX_BATCH_RECORDS)
+        .expect("at-limit input accepted");
     assert_eq!(
-        validation_code(check_input_limits(MAX_INPUT_BYTES + 1, 1)),
+        validation_code(check_input_limits("input", MAX_INPUT_BYTES + 1, 1)),
         codes::INPUT_LIMIT_EXCEEDED
     );
     assert_eq!(
-        validation_code(check_input_limits(1, MAX_BATCH_RECORDS + 1)),
+        validation_code(check_input_limits("attributes", 1, MAX_BATCH_RECORDS + 1)),
         codes::INPUT_LIMIT_EXCEEDED
     );
     let mut input = InputByteCounter::new();
     input
-        .add_text(&"x".repeat(MAX_INPUT_BYTES))
+        .add_text("body", &"x".repeat(MAX_INPUT_BYTES))
         .expect("at-limit text accepted");
     assert_eq!(
-        validation_code(input.add_text("x")),
+        validation_code(input.add_text("body", "x")),
         codes::INPUT_LIMIT_EXCEEDED
     );
 }
 
 #[test]
 fn input_limit_messages_name_the_field_and_the_limit() {
-    let bytes = check_input_limits(MAX_INPUT_BYTES + 1, 1)
+    let bytes = check_input_limits("body", MAX_INPUT_BYTES + 1, 1)
         .expect_err("oversized input")
         .to_string();
-    assert!(bytes.contains("input bytes"), "{bytes}");
+    assert!(bytes.contains("body:"), "{bytes}");
     assert!(bytes.contains(&MAX_INPUT_BYTES.to_string()), "{bytes}");
-    let records = check_input_limits(1, MAX_BATCH_RECORDS + 1)
-        .expect_err("too many records")
+    let attributes = check_input_limits("attributes", 1, MAX_BATCH_RECORDS + 1)
+        .expect_err("too many attributes")
         .to_string();
-    assert!(records.contains("record count"), "{records}");
+    assert!(attributes.contains("attributes:"), "{attributes}");
+    assert!(!attributes.contains("record"), "{attributes}");
     assert!(
-        records.contains(&MAX_BATCH_RECORDS.to_string()),
-        "{records}"
+        attributes.contains(&MAX_BATCH_RECORDS.to_string()),
+        "{attributes}"
     );
+    let mut input = InputByteCounter::new();
+    let text = input
+        .add_text("attribute key", &"x".repeat(MAX_INPUT_BYTES + 1))
+        .expect_err("oversized key")
+        .to_string();
+    assert!(text.contains("attribute key:"), "{text}");
+    assert!(text.contains(&MAX_INPUT_BYTES.to_string()), "{text}");
+    let client = Client::new("http://127.0.0.1:4318").expect("client");
+    let build = client
+        .build_error(
+            &opentelemetry_otlp::ExporterBuildError::InvalidConfiguration("endpoint".to_owned()),
+        )
+        .to_string();
+    assert!(build.contains("exporter configuration:"), "{build}");
 }
 
 #[test]

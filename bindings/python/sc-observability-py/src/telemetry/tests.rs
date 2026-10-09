@@ -287,8 +287,8 @@ fn input_limits_count_attributes_and_text_bytes() {
         assert!(attributes(eval(long_value.clone()), &[]).is_ok());
         for result in [
             attributes(eval(over_limit), &[]),
-            attributes(eval(long_value), &["x"]),
-            attributes(Vec::new(), &[&"x".repeat(MAX_INPUT_BYTES + 1)]),
+            attributes(eval(long_value), &[("body", "x")]),
+            attributes(Vec::new(), &[("body", &"x".repeat(MAX_INPUT_BYTES + 1))]),
         ] {
             assert_eq!(code(result), codes::INPUT_LIMIT_EXCEEDED.as_str());
         }

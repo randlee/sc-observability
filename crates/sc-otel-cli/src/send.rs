@@ -25,7 +25,7 @@ pub(crate) fn run(cli: Cli) -> Result<(), SyncError> {
     let mut client = client(&cli)?;
     let mut resource = Resource::builder();
     if let Some(service) = cli.service {
-        InputByteCounter::new().add_text(&service)?;
+        InputByteCounter::new().add_text("service", &service)?;
         resource = resource.with_service_name(service);
     }
     let resource = resource.build();
@@ -75,13 +75,16 @@ fn send_log(
     scope: InstrumentationScope,
     args: LogArgs,
 ) -> Result<(), SyncError> {
-    let attributes = attributes(args.attributes.attributes.as_deref(), &[&args.body])?
-        .into_iter()
-        .map(|(key, value)| {
-            let value = scalar::<AnyValue>(&key, value)?;
-            Ok((key, value))
-        })
-        .collect::<Result<_, SyncError>>()?;
+    let attributes = attributes(
+        args.attributes.attributes.as_deref(),
+        &[("body", &args.body)],
+    )?
+    .into_iter()
+    .map(|(key, value)| {
+        let value = scalar::<AnyValue>(&key, value)?;
+        Ok((key, value))
+    })
+    .collect::<Result<_, SyncError>>()?;
     let entry = LogEntry {
         severity: match args.severity {
             LogSeverity::Trace => Severity::Trace,
@@ -104,7 +107,10 @@ fn send_log(
 fn span(args: SpanArgs, scope: InstrumentationScope) -> Result<SpanData, SyncError> {
     let attributes = key_values(attributes(
         args.attributes.attributes.as_deref(),
-        &[&args.name, args.error.as_deref().unwrap_or_default()],
+        &[
+            ("name", &args.name),
+            ("error", args.error.as_deref().unwrap_or_default()),
+        ],
     )?)?;
     CompletedSpan {
         name: args.name,
@@ -136,9 +142,12 @@ fn send_metric(
     let attributes = key_values(attributes(
         args.attributes.attributes.as_deref(),
         &[
-            &args.name,
-            args.unit.as_deref().unwrap_or_default(),
-            args.description.as_deref().unwrap_or_default(),
+            ("name", &args.name),
+            ("unit", args.unit.as_deref().unwrap_or_default()),
+            (
+                "description",
+                args.description.as_deref().unwrap_or_default(),
+            ),
         ],
     )?)?;
     let measurement = Measurement {
@@ -164,11 +173,11 @@ fn send_metric(
 /// text fields.
 fn attributes(
     source: Option<&str>,
-    signal_text: &[&str],
+    signal_text: &[(&str, &str)],
 ) -> Result<Vec<(String, Json)>, SyncError> {
     let mut input = InputByteCounter::new();
-    for text in signal_text {
-        input.add_text(text)?;
+    for (field, text) in signal_text {
+        input.add_text(field, text)?;
     }
     let Some(source) = source else {
         return Ok(Vec::new());
@@ -188,10 +197,10 @@ fn attributes(
     // order and a repeated key stays, as in the Python frontend.
     let ObjectEntries(object) = serde_json::from_str(&text)
         .map_err(|error| invalid(format!("attributes must be one JSON object: {error}")))?;
-    check_input_limits(0, object.len())?;
+    check_input_limits("attributes", 0, object.len())?;
     let mut attributes = Vec::with_capacity(object.len());
     for (key, raw) in object {
-        input.add_text(&key)?;
+        input.add_text("attribute key", &key)?;
         let token = raw.get().trim();
         if integer_out_of_range(token) {
             return Err(invalid(format!(
@@ -201,7 +210,7 @@ fn attributes(
         let value: Json = serde_json::from_str(token)
             .map_err(|error| invalid(format!("attributes must be one JSON object: {error}")))?;
         if let Json::String(value) = &value {
-            input.add_text(value)?;
+            input.add_text("attribute value", value)?;
         }
         attributes.push((key, value));
     }
@@ -256,7 +265,7 @@ fn read_capped(reader: impl Read, name: &str) -> Result<String, SyncError> {
         .take(cap)
         .read_to_end(&mut bytes)
         .map_err(|error| invalid(format!("cannot read {name}: {error}")))?;
-    check_input_limits(bytes.len(), 0)?;
+    check_input_limits(name, bytes.len(), 0)?;
     String::from_utf8(bytes).map_err(|_| invalid(format!("{name} is not UTF-8")))
 }
 
@@ -440,8 +449,8 @@ mod tests {
         let above = std::io::repeat(b' ').take(10 * MAX_INPUT_BYTES as u64);
         let error = read_capped(above, "input").expect_err("above limit");
         assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED.as_str());
-        let error =
-            attributes(None, &[&"x".repeat(MAX_INPUT_BYTES + 1)]).expect_err("oversized log body");
+        let error = attributes(None, &[("body", &"x".repeat(MAX_INPUT_BYTES + 1))])
+            .expect_err("oversized log body");
         assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED.as_str());
         let cli = Cli::try_parse_from([
             "sc-otel",
@@ -472,8 +481,11 @@ mod tests {
             .expect_err("oversized span error text");
         assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED.as_str());
         let half = "x".repeat(MAX_INPUT_BYTES / 2 + 1);
-        let error =
-            attributes(None, &[&half, &half, &half]).expect_err("metric text fields add up");
+        let error = attributes(
+            None,
+            &[("name", &half), ("unit", &half), ("description", &half)],
+        )
+        .expect_err("metric text fields add up");
         assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED.as_str());
         let cli = Cli::try_parse_from([
             "sc-otel",

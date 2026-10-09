@@ -1518,7 +1518,8 @@ pub enum SyncError {
     Export(sdk::error::OTelSdkError),
 }
 
-pub fn check_input_limits(input_bytes: usize, records: usize) -> Result<(), SyncError>;
+pub fn check_input_limits(field: &str, input_bytes: usize, records: usize)
+    -> Result<(), SyncError>;
 ```
 
 Rules:
