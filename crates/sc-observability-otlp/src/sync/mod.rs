@@ -692,8 +692,9 @@ impl Client {
     /// Returns [`SyncError::Validation`] when the closure fails (nothing is
     /// exported), when no valid measurement was recorded (for example only
     /// instruments with invalid names), when one scope registers the same
-    /// instrument name with a different kind or unit (nothing is exported), or when a Tokio runtime is entered;
-    /// returns [`SyncError::Export`] when the flush or shutdown fails.
+    /// instrument name with a different kind or unit (nothing is exported),
+    /// or when a Tokio runtime is entered; returns [`SyncError::Export`] when
+    /// the flush or shutdown fails.
     pub fn send_metrics<F>(
         &mut self,
         resource: &sdk::Resource,
