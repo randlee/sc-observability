@@ -1834,9 +1834,10 @@ No transport implementation or runtime dependency enters the types layer.
   request DTO. H-1 retains only two narrowly scoped private adapters: the
   `FlushOnlyExporter`/`FlushGate` pair gates the official metric exporter to
   the explicit flush, prevents a second export during shutdown after a
-  caller-recording error, and detects an empty metric recording; `ExplicitHeaders`
-  reapplies explicit application headers after exporter-provided environment
-  headers so explicit values win. Neither adapter adds a public exporter,
+  caller-recording error, detects an empty metric recording, and detects an
+  instrument name recorded with a different kind or unit (compared
+  case-insensitively); `ExplicitHeaders` reapplies explicit application
+  headers after exporter-provided environment headers so explicit values win. Neither adapter adds a public exporter,
   provider or reader facade, and no other wrapper is authorized.
   Metric sends take a closure over the native Meter; the SDK owns provider,
   resource, reader and flush. Flush reports failure but coarsens its cause in
@@ -2019,7 +2020,9 @@ No transport implementation or runtime dependency enters the types layer.
     reaches the network; `SyncError::Export` wraps the native exporter error.
     A closure's `Validation` passes through; any other closure error becomes
     `CALLER_REJECTED`. A metric send that records no valid measurement is
-    `INVALID_RECORD`. Display and sources redact header values and URL
+    `INVALID_RECORD`, as is one that records the same instrument name (compared
+    case-insensitively) with a different kind or unit: `FlushGate` suppresses
+    the export and keeps the latest conflict. Display and sources redact header values and URL
     userinfo. Limits are `MAX_INPUT_BYTES` (1 MiB) and `MAX_BATCH_RECORDS`
     (10,000) in `constants`.
   - *Metrics lifecycle*: delta temporality behind the official
