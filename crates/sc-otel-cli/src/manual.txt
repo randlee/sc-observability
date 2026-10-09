@@ -34,7 +34,8 @@ ATTRIBUTES
   or FIFO remains open. The global --timeout bounds OTLP export only; it does
   not bound these input reads.
   Input is limited to 1 MiB and 10,000 attributes. Null, array and object
-  values are rejected. If an object repeats a key, the last value is used.
+  values are rejected. If an object repeats a key, each occurrence is sent in
+  input order and the receiver decides how to treat the duplicates.
   Unsigned integers greater than i64::MAX are converted to exact decimal
   strings. Integer literals outside the i64 and u64 ranges are rejected;
   float literals are accepted as floats.
