@@ -358,7 +358,7 @@ pub fn parse_span_id(field: &str, value: &str) -> Result<SpanId, SyncError> {
 /// such a parent as local unless a future shared input contract carries
 /// explicit remote provenance.
 #[must_use]
-pub const fn parent_span_is_remote() -> bool {
+pub(crate) const fn parent_span_is_remote() -> bool {
     false
 }
 
@@ -374,7 +374,7 @@ pub const fn parent_span_is_remote() -> bool {
 /// Returns [`SyncError::Validation`] with
 /// [`error_codes::sync::INVALID_RECORD`](crate::error_codes::sync::INVALID_RECORD)
 /// when the start is after the end.
-pub fn span_times(
+pub(super) fn span_times(
     start_unix_nano: Option<u64>,
     end_unix_nano: Option<u64>,
 ) -> Result<(SystemTime, SystemTime), SyncError> {

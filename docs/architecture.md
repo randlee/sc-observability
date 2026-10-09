@@ -1987,17 +1987,18 @@ No transport implementation or runtime dependency enters the types layer.
     `sync::resolve_endpoint(Option<&str>) -> Result<Cow<str>, SyncError>`;
     `sync::parse_trace_id(field, value) -> Result<TraceId, SyncError>` and
     `sync::parse_span_id(field, value) -> Result<SpanId, SyncError>`;
-    `sync::span_times(Option<u64>, Option<u64>)`, which orders span times on the
-    supplied Unix nanoseconds before converting them to `SystemTime`;
     the shared CLI and Python frontend policy, owned by `sync` so both apply one
     rule: `sync::read_root_certificate(&Path) -> Result<Vec<u8>, SyncError>`
-    (bounded read of a regular certificate file, 1 MiB),
+    (bounded read of a regular certificate file, 1 MiB) over
+    `sync::read_bounded_regular_file(&Path, &str, &'static str)`,
     `sync::unsigned_attribute<T>(u64) -> T` (an integer attribute within `i64`
     stays an integer; a larger `u64` becomes its exact decimal string),
     `sync::InputByteCounter` (per-call input byte accounting over signal text,
     attribute keys and string attribute values, checked against
-    `MAX_INPUT_BYTES`), and `sync::parent_span_is_remote() -> bool` (always
-    `false`: a supplied parent is recorded as local); and the shared CLI and
+    `MAX_INPUT_BYTES`); `sync` keeps `parent_span_is_remote` (always `false`: a
+    supplied parent is recorded as local) and `span_times` (orders span times on
+    the supplied Unix nanoseconds before converting them to `SystemTime`) crate
+    internal; and the shared CLI and
     Python signal construction, so both frontends build identical native
     signals: `sync::LogEntry { severity, body, trace_context, attributes }`
     with `fill(self, &mut sdk::logs::SdkLogRecord)` (timestamp now, severity
