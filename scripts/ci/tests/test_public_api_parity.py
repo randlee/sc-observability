@@ -501,6 +501,31 @@ class RealExtractionTests(unittest.TestCase):
             with self.assertRaisesRegex(parity.ParityError, 'missing cell'):
                 parity.assert_public_api_equal(partial, inventory, commit=self.commit)
 
+    def test_bin_only_published_crate_is_omitted_end_to_end(self):
+        manifest = {
+            'release_targets': [{'target': target} for target in FIXTURE_TARGETS],
+            'crates': [
+                {'package': 'sc-otel-cli', 'cargo_toml': 'crates/sc-otel-cli/Cargo.toml', 'publish': True},
+                {'package': self.library['name'], 'cargo_toml': str(FIXTURE.relative_to(ROOT) / 'Cargo.toml'),
+                 'publish': True},
+            ],
+        }
+        self.assertIsNone(parity.package_library(ROOT / 'crates/sc-otel-cli/Cargo.toml'))
+        inventory = parity.expected_inventory(ROOT, manifest)
+        self.assertEqual(list(inventory['packages']), [self.library['name']])
+        inventory['packages'][self.library['name']]['selections'] = [self.selections['none']]
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / 'evidence'
+            cells = parity.collect(inventory, FIXTURE_TARGETS, output, target_dir=self.target_dir,
+                                   toolchain=self.toolchain, renderer=self.renderer, commit=self.commit)
+            self.assertEqual([cell['status'] for cell in cells], ['ok'] * 2)
+            written = sorted(path.relative_to(output).as_posix() for path in output.rglob('*.json'))
+            self.assertFalse([path for path in written if 'sc-otel-cli' in path], written)
+            report = parity.assert_public_api_equal(parity.load_cells(Path(directory)), inventory,
+                                                    commit=self.commit)
+            self.assertEqual(report['status'], 'equal')
+            self.assertEqual(report['packages'], [self.library['name']])
+
     def test_renderer_rejects_other_rustdoc_formats(self):
         with tempfile.TemporaryDirectory() as directory:
             fake = Path(directory) / 'fake.json'

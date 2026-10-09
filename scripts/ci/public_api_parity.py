@@ -172,8 +172,11 @@ def timeout_message(error: subprocess.TimeoutExpired) -> str:
     return f'{" ".join(map(str, error.cmd))} timed out after {error.timeout}s\n{tail}'
 
 
-def package_library(cargo_toml: Path, root: Path = ROOT) -> dict:
-    """Library target, crate types, version and declared features from Cargo metadata."""
+def package_library(cargo_toml: Path, root: Path = ROOT) -> dict | None:
+    """Library target, crate types, version and declared features from Cargo metadata.
+
+    None for a package with no library target: a binary-only crate exposes no Rust API.
+    """
     result = run(['cargo', 'metadata', '--format-version', '1', '--no-deps', '--locked',
                   '--manifest-path', str(cargo_toml)], cwd=root)
     if result.returncode != 0:
@@ -185,6 +188,8 @@ def package_library(cargo_toml: Path, root: Path = ROOT) -> dict:
         raise ParityError(f'{cargo_toml} does not identify exactly one package')
     package = packages[0]
     libraries = [target for target in package['targets'] if LIBRARY_KINDS & set(target['kind'])]
+    if not libraries:
+        return None
     if len(libraries) != 1:
         raise ParityError(f'{package["name"]} must define exactly one library target, found {len(libraries)}')
     library = libraries[0]
@@ -203,6 +208,8 @@ def expected_inventory(root: Path = ROOT, manifest: dict | None = None) -> dict:
     packages = {}
     for entry in published_packages(manifest):
         library = package_library(root / entry['cargo_toml'], root)
+        if library is None:
+            continue
         if library['name'] != entry['package']:
             raise ParityError(f'{entry["cargo_toml"]} names {library["name"]}, manifest says {entry["package"]}')
         packages[entry['package']] = {
