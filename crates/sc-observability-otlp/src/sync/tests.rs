@@ -585,6 +585,53 @@ fn dropped_metric_measurement_is_invalid_and_sends_nothing() {
 }
 
 #[test]
+fn conflicting_instruments_are_invalid_and_send_nothing() {
+    let collector = Collector::start(Reply::Ok);
+    let mut client = Client::new(&collector.endpoint()).expect("client");
+
+    let result = client.send_metrics(&resource(), scope(), |meter| {
+        meter
+            .u64_counter("requests")
+            .with_unit("1")
+            .build()
+            .add(1, &[]);
+        meter
+            .f64_histogram("requests")
+            .with_unit("ms")
+            .build()
+            .record(2.0, &[]);
+        Ok(())
+    });
+
+    assert!(
+        collector.requests().is_empty(),
+        "a conflicting collection is never exported"
+    );
+    assert_eq!(validation_code(result), codes::INVALID_RECORD);
+}
+
+#[test]
+fn repeated_identical_instrument_exports_once() {
+    let collector = Collector::start(Reply::Ok);
+    let mut client = Client::new(&collector.endpoint()).expect("client");
+
+    client
+        .send_metrics(&resource(), scope(), |meter| {
+            for value in [1, 2] {
+                meter
+                    .u64_counter("requests")
+                    .with_unit("1")
+                    .build()
+                    .add(value, &[]);
+            }
+            Ok(())
+        })
+        .expect("identical instruments are not a conflict");
+
+    assert_eq!(collector.requests().len(), 1);
+}
+
+#[test]
 fn invalid_input_is_validation_and_sends_nothing() {
     let collector = Collector::start(Reply::Ok);
     let mut client = Client::new(&collector.endpoint()).expect("client");

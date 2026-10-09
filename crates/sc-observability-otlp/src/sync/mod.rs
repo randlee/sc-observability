@@ -69,8 +69,8 @@ use std::future::Future;
 use std::io::Read;
 use std::path::Path;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 use opentelemetry::logs::{LogRecord as _, Logger as _, LoggerProvider as _};
@@ -674,7 +674,8 @@ impl Client {
     ///
     /// Returns [`SyncError::Validation`] when the closure fails (nothing is
     /// exported), when no valid measurement was recorded (for example only
-    /// instruments with invalid names), or when a Tokio runtime is entered;
+    /// instruments with invalid names), when one scope registers the same
+    /// instrument name with a different kind or unit (nothing is exported), or when a Tokio runtime is entered;
     /// returns [`SyncError::Export`] when the flush or shutdown fails.
     pub fn send_metrics<F>(
         &mut self,
@@ -718,6 +719,17 @@ impl Client {
         let shutdown = provider.shutdown();
         flushed.map_err(|error| self.export_error(error))?;
         shutdown.map_err(|error| self.export_error(error))?;
+        let conflict = gate
+            .conflict
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(name) = conflict {
+            return Err(SyncError::validation(
+                codes::INVALID_RECORD,
+                format!("conflicting instrument {name}: registered with a different kind or unit"),
+            ));
+        }
         if gate.exported.load(Ordering::SeqCst) {
             Ok(())
         } else {
@@ -870,6 +882,8 @@ struct FlushGate {
     armed: AtomicBool,
     /// Whether the flush collected at least one metric and exported it.
     exported: AtomicBool,
+    /// The first instrument name registered twice with a different kind or unit.
+    conflict: Mutex<Option<String>>,
 }
 
 /// Delegates to the official exporter only during the explicit flush, so a
@@ -886,6 +900,14 @@ impl PushMetricExporter for FlushOnlyExporter {
         if !self.gate.armed.load(Ordering::SeqCst) || !has_metric_data_points(metrics) {
             return Ok(());
         }
+        if let Some(name) = conflicting_instrument(metrics) {
+            *self
+                .gate
+                .conflict
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(name);
+            return Ok(());
+        }
         self.gate.exported.store(true, Ordering::SeqCst);
         self.inner.export(metrics).await
     }
@@ -900,6 +922,71 @@ impl PushMetricExporter for FlushOnlyExporter {
 
     fn temporality(&self) -> Temporality {
         self.inner.temporality()
+    }
+}
+
+/// Returns the first instrument name that one scope registers twice
+/// (case-insensitively, per the `OTel` instrument identity rule) with a
+/// different data type or unit.
+fn conflicting_instrument(metrics: &ResourceMetrics) -> Option<String> {
+    metrics.scope_metrics().find_map(|scope_metrics| {
+        let mut seen: Vec<(String, &'static str, &str)> = Vec::new();
+        for metric in scope_metrics.metrics() {
+            let name = metric.name().to_ascii_lowercase();
+            let shape = aggregated_metric_shape(metric.data());
+            let unit = metric.unit();
+            match seen.iter().find(|(seen_name, ..)| *seen_name == name) {
+                Some((_, seen_shape, seen_unit)) if *seen_shape != shape || *seen_unit != unit => {
+                    return Some(metric.name().to_owned());
+                }
+                Some(_) => {}
+                None => seen.push((name, shape, unit)),
+            }
+        }
+        None
+    })
+}
+
+/// Names the number type and aggregation of one native metric.
+fn aggregated_metric_shape(data: &AggregatedMetrics) -> &'static str {
+    match data {
+        AggregatedMetrics::F64(data) => metric_data_shape(
+            data,
+            [
+                "f64 gauge",
+                "f64 sum",
+                "f64 histogram",
+                "f64 exponential histogram",
+            ],
+        ),
+        AggregatedMetrics::I64(data) => metric_data_shape(
+            data,
+            [
+                "i64 gauge",
+                "i64 sum",
+                "i64 histogram",
+                "i64 exponential histogram",
+            ],
+        ),
+        AggregatedMetrics::U64(data) => metric_data_shape(
+            data,
+            [
+                "u64 gauge",
+                "u64 sum",
+                "u64 histogram",
+                "u64 exponential histogram",
+            ],
+        ),
+    }
+}
+
+/// Picks the label for the aggregation of one native metric.
+fn metric_data_shape<T>(data: &MetricData<T>, labels: [&'static str; 4]) -> &'static str {
+    match data {
+        MetricData::Gauge(_) => labels[0],
+        MetricData::Sum(_) => labels[1],
+        MetricData::Histogram(_) => labels[2],
+        MetricData::ExponentialHistogram(_) => labels[3],
     }
 }
 
