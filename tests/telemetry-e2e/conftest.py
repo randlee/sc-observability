@@ -564,11 +564,16 @@ def owned_viewer(viewer: PinnedViewer) -> Iterator[PinnedViewer]:
             viewer.stop()
 
 
-def rpc(url: str, method: str, params: list[object]) -> object:
+def rpc_response(url: str, method: str, params: list[object]) -> dict[str, Any]:
+    """The decoded JSON-RPC response, including an ``error`` member when the viewer sent one."""
     payload = json.dumps({"jsonrpc": "2.0", "id": "d32", "method": method,
                           "params": params}).encode("utf-8")
     request = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(request, timeout=10) as response:
-        decoded = json.loads(response.read())
+        return json.loads(response.read())
+
+
+def rpc(url: str, method: str, params: list[object]) -> object:
+    decoded = rpc_response(url, method, params)
     assert "error" not in decoded, decoded
     return decoded["result"]

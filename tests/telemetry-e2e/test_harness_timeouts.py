@@ -8,6 +8,7 @@ import sys
 
 import pytest
 
+import test_viewer_readback
 from conftest import (
     PinnedViewer, ROOT, VIEWER_HARNESS, VIEWER_HARNESS_WORST_CASE_SECONDS, VIEWER_TIMEOUT_SECONDS,
     _harness_ready_seconds, _viewer_start_command, owned_viewer, run_process,
@@ -100,3 +101,39 @@ def test_failed_viewer_start_is_still_stopped_by_state_directory(
         with owned_viewer(viewer):
             pytest.fail("the body must not run after a failed start")
     assert "stop" in calls[-1] and str(state) in calls[-1]
+
+
+def _scripted_rpc(monkeypatch: pytest.MonkeyPatch, responses: list[dict[str, object]]) -> list[str]:
+    calls: list[str] = []
+
+    def respond(_url: str, method: str, _params: list[object]) -> dict[str, object]:
+        calls.append(method)
+        return responses.pop(0)
+
+    monkeypatch.setattr(test_viewer_readback, "rpc_response", respond)
+    monkeypatch.setattr(test_viewer_readback.time, "sleep", lambda _seconds: None)
+    return calls
+
+
+def test_wait_for_keeps_polling_while_the_trace_is_not_ingested(monkeypatch: pytest.MonkeyPatch) -> None:
+    not_found = {"id": "d32", "error": {"code": -32001, "message": "Trace not found"}}
+    calls = _scripted_rpc(monkeypatch, [not_found, not_found, {"id": "d32", "result": {"spans": [1]}}])
+    result = test_viewer_readback._wait_for(
+        {"rpc": "http://viewer/rpc"}, "searchSpans", ["trace"], lambda value: bool(value["spans"]),
+    )
+    assert result == {"spans": [1]}
+    assert calls == ["searchSpans"] * 3
+
+
+def test_wait_for_fails_at_once_on_any_other_rpc_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    other = {"id": "d32", "error": {"code": -32602, "message": "Invalid params"}}
+    calls = _scripted_rpc(monkeypatch, [other, {"id": "d32", "result": {}}])
+    with pytest.raises(AssertionError, match="Invalid params"):
+        test_viewer_readback._wait_for({"rpc": "http://viewer/rpc"}, "searchSpans", ["trace"], bool)
+    assert calls == ["searchSpans"]
+    # the same code from a different method is not an ingestion wait either
+    not_found = {"id": "d32", "error": {"code": -32001, "message": "Trace not found"}}
+    calls = _scripted_rpc(monkeypatch, [not_found, {"id": "d32", "result": {}}])
+    with pytest.raises(AssertionError, match="Trace not found"):
+        test_viewer_readback._wait_for({"rpc": "http://viewer/rpc"}, "getLog", ["id"], bool)
+    assert calls == ["getLog"]
