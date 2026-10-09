@@ -12,7 +12,9 @@ bounded watchdog deadline and never sleeps to let an export happen.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import importlib.util
 import json
 import os
 import platform
@@ -41,9 +43,25 @@ COLLECTOR_STOP_TIMEOUT_SECONDS = 10
 POLL_SECONDS = 0.05
 MACHINES = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}
 SIGNALS = ("logs", "traces", "metrics")
-VIEWER_TIMEOUT_SECONDS = 30
 VIEWER_MACHINES = MACHINES
 VIEWER_HARNESS = ROOT / "scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py"
+
+
+def _harness_ready_seconds() -> int:
+    """The harness's own readiness deadline, read from the harness so the two cannot drift."""
+    spec = importlib.util.spec_from_file_location("viewer_harness_constants", VIEWER_HARNESS)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return int(module.READY_SECONDS)
+
+
+# Harness start worst case before it can report: the SHA-256 pass (allowed 30 s),
+# the 10 s --version call, READY_SECONDS, then terminate and kill waits of 5 s each.
+# The outer limit is that total plus a margin, so the harness always finishes its
+# own cleanup before the outer SIGKILL can fire.
+VIEWER_HARNESS_WORST_CASE_SECONDS = 30 + 10 + _harness_ready_seconds() + 5 + 5
+VIEWER_TIMEOUT_SECONDS = VIEWER_HARNESS_WORST_CASE_SECONDS + 30
 
 
 def run_process(command: list[str], *, timeout: float, **kwargs: Any) -> subprocess.CompletedProcess[str]:
@@ -527,8 +545,19 @@ def pinned_viewer(tmp_path: Path) -> Iterator[PinnedViewer]:
     if receipt_sha256 and receipt_sha256 != entry["binary_sha256"]:
         pytest.fail("pinned viewer downloader receipt does not match host manifest", pytrace=False)
     viewer = PinnedViewer(binary, manifest["version"], entry["binary_sha256"], tmp_path / "viewer-state")
-    viewer.start()
+    with owned_viewer(viewer):
+        yield viewer
+
+
+@contextlib.contextmanager
+def owned_viewer(viewer: PinnedViewer) -> Iterator[PinnedViewer]:
+    """Start the viewer and always stop it, including when the start itself fails.
+
+    A start that failed or timed out may have left the viewer running; its state
+    directory is how the harness finds and stops it.
+    """
     try:
+        viewer.start()
         yield viewer
     finally:
         if viewer.state.exists():

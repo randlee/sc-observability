@@ -8,7 +8,10 @@ import sys
 
 import pytest
 
-from conftest import PinnedViewer, ROOT, VIEWER_HARNESS, _viewer_start_command, run_process
+from conftest import (
+    PinnedViewer, ROOT, VIEWER_HARNESS, VIEWER_HARNESS_WORST_CASE_SECONDS, VIEWER_TIMEOUT_SECONDS,
+    _harness_ready_seconds, _viewer_start_command, owned_viewer, run_process,
+)
 
 
 def test_subprocess_timeout_reports_the_command_and_captured_output(
@@ -69,3 +72,31 @@ def test_viewer_restart_uses_canonical_harness_stop_and_start_headlessly(
     assert (viewer.http, viewer.grpc, viewer.ui) == (42000, 42001, 42002)
     assert viewer["otlp"] == "http://127.0.0.1:42000"
     assert viewer["rpc"] == "http://127.0.0.1:42002/rpc"
+
+
+def test_outer_viewer_timeout_outlasts_the_harness_worst_case() -> None:
+    ready = _harness_ready_seconds()
+    # hash pass + --version (10 s) + readiness + terminate and kill waits (5 s each)
+    assert VIEWER_HARNESS_WORST_CASE_SECONDS >= 30 + 10 + ready + 5 + 5
+    assert VIEWER_TIMEOUT_SECONDS > VIEWER_HARNESS_WORST_CASE_SECONDS
+
+
+def test_failed_viewer_start_is_still_stopped_by_state_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    state = tmp_path / "viewer-state"
+    calls: list[list[str]] = []
+
+    def record(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        if "start" in command:
+            state.mkdir()  # the harness created its state before the start failed
+            return subprocess.CompletedProcess(command, 1, "", "viewer did not become ready")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr("conftest.run_process", record)
+    viewer = PinnedViewer("viewer", "0.5.0", "a" * 64, state)
+    with pytest.raises(AssertionError, match="viewer did not become ready"):
+        with owned_viewer(viewer):
+            pytest.fail("the body must not run after a failed start")
+    assert "stop" in calls[-1] and str(state) in calls[-1]
