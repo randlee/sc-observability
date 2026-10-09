@@ -240,11 +240,9 @@ fn attributes_map_python_scalars_and_reject_other_values() {
             ]
         );
         assert_eq!(
-            attributes(python_attributes(py, c"[('huge', 2**63)]"), 0),
-            Ok(vec![(
-                "huge".into(),
-                Scalar::Str("9223372036854775808".into()),
-            )])
+            attributes(python_attributes(py, c"[('huge', 2**63)]"), "")
+                .expect("u64 above i64::MAX converts"),
+            [("huge".into(), Scalar::Str("9223372036854775808".into()),)]
         );
         for source in [
             c"[('k', None)]",
