@@ -1710,6 +1710,7 @@ version = "1.6.0"
 dependencies = [
  "clap",
  "sc-observability-otlp",
+ "serde",
  "serde_json",
  "tempfile",
 ]
