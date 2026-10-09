@@ -1653,6 +1653,7 @@ name = "sc-observability-otlp"
 version = "1.6.0"
 dependencies = [
  "futures-executor",
+ "libc",
  "opentelemetry",
  "opentelemetry-http",
  "opentelemetry-otlp",
