@@ -821,7 +821,7 @@ facade is deprecated behind the default `v1` feature.
 
 - **Status**: Accepted
 - **Context**: The prior document set collapsed the stack by making `sc-observe` depend on both logging and OTLP layers.
-- **Decision**: The dependency order is `types <- sc-observability <- sc-observability-log`, `sc-observability <- sc-observe`, and `types <- sc-observability-otlp`; `sc-observability` and `sc-observe` are OTLP test dev-dependencies only.
+- **Decision**: The dependency order is `types <- sc-observability <- sc-observability-log`, `sc-observability <- sc-observe`, and `types <- sc-observability-otlp`; `sc-observability` is an OTLP test dev-dependency only; `sc-observe` is not a dependency of `sc-observability-otlp` of any kind.
 - **Amended by ADR-023**: `sc-observability <- sc-observability-otlp` is also a
   production edge under the optional `log-sink` feature, for `OtelLogSink`
   only. `sc-observe` is no dependency of `sc-observability-otlp` (not even a
