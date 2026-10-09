@@ -184,7 +184,7 @@ fn attributes(source: Option<&str>, signal_text: &str) -> Result<Vec<(String, Js
         let token = raw.get().trim();
         if integer_out_of_range(token) {
             return Err(invalid(format!(
-                "attribute {key}: integer outside the unsigned 64-bit range"
+                "attribute {key}: integer outside the i64/u64 range"
             )));
         }
         let value: Json = serde_json::from_str(token)
@@ -331,7 +331,7 @@ mod tests {
             assert!(
                 error
                     .to_string()
-                    .contains("attribute k: integer outside the unsigned 64-bit range"),
+                    .contains("attribute k: integer outside the i64/u64 range"),
                 "{source}: {error}"
             );
         }

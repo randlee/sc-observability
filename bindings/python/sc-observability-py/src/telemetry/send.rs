@@ -364,7 +364,7 @@ fn scalar(key: &str, value: &Bound<'_, PyAny>) -> Result<Scalar, SyncError> {
             .or_else(|_| value.extract::<u64>().map(unsigned_attribute::<Scalar>))
             .map_err(|_| {
                 invalid(format!(
-                    "attribute {key}: integer outside the unsigned 64-bit range"
+                    "attribute {key}: integer outside the i64/u64 range"
                 ))
             })
     } else if value.is_instance_of::<PyFloat>() {
