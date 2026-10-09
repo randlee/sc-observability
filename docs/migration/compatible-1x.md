@@ -214,16 +214,6 @@ guard.shutdown(Duration::from_secs(5))?;
 process still has one host logger. Detaching an attachment never grants
 ownership of the host logger.
 
-## OTLP
-
-Phase H removed the OTLP facade without a compatibility path (H-006):
-the `v1`/`v2` `Telemetry`, `RuntimeTelemetry`, `OtelConfig` and span assembly
-types, and the `otlp-sdk`/`sync-http` backends. OTLP users call the official
-OpenTelemetry SDK through `sc_observability_otlp::{api, sdk}`: a Tokio host
-bridges logging with `OtelLogSink` (feature `log-sink`), and a synchronous
-host sends logs, spans and metrics with `sync::Client` (feature
-`synchronous-client`). ADR-023 records the contract.
-
 ## What a later major release removes
 
 ADR-020 keeps the deprecated compatibility paths available throughout the

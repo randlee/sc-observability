@@ -13,14 +13,6 @@ migration by building with `default-features = false` (and therefore without
 `v1`). A later release deletes the `v1` modules and features. Deprecated paths
 are not a compatibility promise: move to the canonical replacement below.
 
-Phase H removed the OTLP facade without a compatibility path (H-006):
-the `v1`/`v2` `Telemetry`, `RuntimeTelemetry`, `OtelConfig` and span assembly
-types, and the `otlp-sdk`/`sync-http` backends. OTLP users call the official
-OpenTelemetry SDK through `sc_observability_otlp::{api, sdk}`: a Tokio host
-bridges logging with `OtelLogSink` (feature `log-sink`), and a synchronous
-host sends logs, spans and metrics with `sync::Client` (feature
-`synchronous-client`). ADR-023 records the contract.
-
 ## Lifecycle consolidation
 
 The canonical lifecycle handles use a shared-reference shutdown contract. The
