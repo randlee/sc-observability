@@ -432,6 +432,14 @@ mod tests {
         assert_eq!(code(&error), codes::INVALID_CONFIG);
     }
 
+    #[test]
+    fn root_certificate_rejects_directory_path() {
+        let directory = tempfile::tempdir().expect("tempdir");
+
+        let error = client_with_root_certificate(directory.path()).expect_err("directory path");
+        assert_eq!(code(&error), codes::INVALID_CONFIG);
+    }
+
     #[cfg(unix)]
     #[test]
     fn root_certificate_rejects_writerless_fifo_without_blocking() {
