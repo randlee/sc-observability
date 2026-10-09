@@ -1985,6 +1985,15 @@ No transport implementation or runtime dependency enters the types layer.
     `sync::parse_span_id(field, value) -> Result<SpanId, SyncError>`;
     `sync::span_times(Option<u64>, Option<u64>)`, which orders span times on the
     supplied Unix nanoseconds before converting them to `SystemTime`;
+    the shared CLI and Python frontend policy, owned by `sync` so both apply one
+    rule: `sync::read_root_certificate(&Path) -> Result<Vec<u8>, SyncError>`
+    (bounded read of a regular certificate file, 1 MiB),
+    `sync::unsigned_attribute<T>(u64) -> T` (an integer attribute within `i64`
+    stays an integer; a larger `u64` becomes its exact decimal string),
+    `sync::InputByteCounter` (per-call input byte accounting over signal text,
+    attribute keys and string attribute values, checked against
+    `MAX_INPUT_BYTES`), and `sync::parent_span_is_remote() -> bool` (always
+    `false`: a supplied parent is recorded as local);
     `OtelLogSink::new(&sdk::logs::SdkLoggerProvider, api::InstrumentationScope)`
     implementing the core `LogSink`. The SDK span collections
     `SpanEvents`/`SpanLinks` are non-exhaustive: callers fill them from
