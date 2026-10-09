@@ -1984,7 +1984,7 @@ No transport implementation or runtime dependency enters the types layer.
     -> Result<(), SyncError>`; `send_span(&mut self, &sdk::Resource,
     sdk::trace::SpanData)`; `send_metrics<F>(&mut self, &sdk::Resource,
     api::InstrumentationScope, F)` with `F: FnOnce(&api::metrics::Meter) ->
-    Result<(), SyncError>`; `sync::check_input_limits(bytes, records)`;
+    Result<(), SyncError>`; `sync::check_input_limits(field, bytes, records)`;
     `sync::resolve_endpoint(Option<&str>) -> Result<Cow<str>, SyncError>`;
     `sync::parse_trace_id(field, value) -> Result<TraceId, SyncError>` and
     `sync::parse_span_id(field, value) -> Result<SpanId, SyncError>`;

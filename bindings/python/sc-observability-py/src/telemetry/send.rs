@@ -183,7 +183,7 @@ fn export(config: Config, signal: Signal) -> Result<(), SyncError> {
     let mut client = client(&config)?;
     let mut resource = Resource::builder();
     if let Some(service) = config.service_name {
-        InputByteCounter::new().add_text(&service)?;
+        InputByteCounter::new().add_text("service_name", &service)?;
         resource = resource.with_service_name(service);
     }
     let resource = resource.build();
@@ -250,7 +250,7 @@ fn log(fields: LogFields<'_>) -> Result<LogEntry, SyncError> {
             ));
         }
     };
-    let attributes = attributes(fields.attributes, &[&fields.body])?
+    let attributes = attributes(fields.attributes, &[("body", &fields.body)])?
         .into_iter()
         .map(|(key, value)| (key, value.native::<AnyValue>()))
         .collect();
@@ -302,7 +302,10 @@ fn span(fields: SpanFields<'_>) -> Result<SpanData, SyncError> {
         .transpose()?;
     let attributes = attributes(
         fields.attributes,
-        &[&fields.name, fields.error.as_deref().unwrap_or_default()],
+        &[
+            ("name", &fields.name),
+            ("error", fields.error.as_deref().unwrap_or_default()),
+        ],
     )?;
     CompletedSpan {
         name: fields.name,
@@ -329,9 +332,12 @@ fn metric(fields: MetricFields<'_>) -> Result<Measurement, SyncError> {
     let attributes = attributes(
         fields.attributes,
         &[
-            &fields.name,
-            fields.unit.as_deref().unwrap_or_default(),
-            fields.description.as_deref().unwrap_or_default(),
+            ("name", &fields.name),
+            ("unit", fields.unit.as_deref().unwrap_or_default()),
+            (
+                "description",
+                fields.description.as_deref().unwrap_or_default(),
+            ),
         ],
     )?;
     Ok(Measurement {
@@ -348,19 +354,19 @@ fn metric(fields: MetricFields<'_>) -> Result<Measurement, SyncError> {
 /// string value against the shared per-call input limits.
 fn attributes(
     attributes: Vec<(String, Bound<'_, PyAny>)>,
-    signal_text: &[&str],
+    signal_text: &[(&str, &str)],
 ) -> Result<Vec<(String, Scalar)>, SyncError> {
-    check_input_limits(0, attributes.len())?;
+    check_input_limits("attributes", 0, attributes.len())?;
     let mut input = InputByteCounter::new();
-    for text in signal_text {
-        input.add_text(text)?;
+    for (field, text) in signal_text {
+        input.add_text(field, text)?;
     }
     let mut converted = Vec::with_capacity(attributes.len());
     for (key, value) in attributes {
         let value = scalar(&key, &value)?;
-        input.add_text(&key)?;
+        input.add_text("attribute key", &key)?;
         if let Scalar::Str(text) = &value {
-            input.add_text(text)?;
+            input.add_text("attribute value", text)?;
         }
         converted.push((key, value));
     }

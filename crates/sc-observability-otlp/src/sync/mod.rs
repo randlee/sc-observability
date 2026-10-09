@@ -249,17 +249,21 @@ where
 /// Returns [`SyncError::Validation`] with
 /// [`error_codes::sync::INPUT_LIMIT_EXCEEDED`](crate::error_codes::sync::INPUT_LIMIT_EXCEEDED)
 /// when either limit is exceeded.
-pub fn check_input_limits(input_bytes: usize, records: usize) -> Result<(), SyncError> {
+pub fn check_input_limits(
+    field: &str,
+    input_bytes: usize,
+    records: usize,
+) -> Result<(), SyncError> {
     if input_bytes > MAX_INPUT_BYTES {
         return Err(SyncError::validation(
             codes::INPUT_LIMIT_EXCEEDED,
-            format!("input bytes: {input_bytes} exceeds the limit of {MAX_INPUT_BYTES}"),
+            format!("{field}: {input_bytes} bytes exceeds the limit of {MAX_INPUT_BYTES} bytes"),
         ));
     }
     if records > MAX_BATCH_RECORDS {
         return Err(SyncError::validation(
             codes::INPUT_LIMIT_EXCEEDED,
-            format!("record count: {records} exceeds the limit of {MAX_BATCH_RECORDS}"),
+            format!("{field}: {records} entries exceeds the limit of {MAX_BATCH_RECORDS} entries"),
         ));
     }
     Ok(())
@@ -283,16 +287,17 @@ impl InputByteCounter {
         Self { bytes: 0 }
     }
 
-    /// Adds text to the input and rejects it as soon as it exceeds the limit.
+    /// Adds the text of `field` to the input and rejects it as soon as it
+    /// exceeds the limit; the error names `field`.
     ///
     /// # Errors
     ///
     /// Returns [`SyncError::Validation`] with
     /// [`error_codes::sync::INPUT_LIMIT_EXCEEDED`](crate::error_codes::sync::INPUT_LIMIT_EXCEEDED)
     /// when the accumulated input exceeds [`MAX_INPUT_BYTES`].
-    pub fn add_text(&mut self, text: &str) -> Result<(), SyncError> {
+    pub fn add_text(&mut self, field: &str, text: &str) -> Result<(), SyncError> {
         self.bytes = self.bytes.saturating_add(text.len());
-        check_input_limits(self.bytes, 0)
+        check_input_limits(field, self.bytes, 0)
     }
 }
 
@@ -800,7 +805,10 @@ impl Client {
     }
 
     fn build_error(&self, error: &ExporterBuildError) -> SyncError {
-        SyncError::validation(codes::INVALID_CONFIG, self.redact(&error.to_string()))
+        SyncError::validation(
+            codes::INVALID_CONFIG,
+            self.redact(&format!("exporter configuration: {error}")),
+        )
     }
 
     fn export_error(&self, error: OTelSdkError) -> SyncError {
