@@ -66,7 +66,7 @@ fn run() -> u8 {
             return exit;
         }
     };
-    match send::run(&cli) {
+    match send::run(cli) {
         Ok(()) => error_codes::EXIT_OK,
         Err(error) => {
             // Display only: the client redacts header values and URL userinfo there.

@@ -21,18 +21,18 @@ use serde_json::value::RawValue;
 use std::{fmt, io::Read, path::Path};
 
 /// Runs the parsed command; the error decides the process exit.
-pub(crate) fn run(cli: &Cli) -> Result<(), SyncError> {
-    let mut client = client(cli)?;
+pub(crate) fn run(cli: Cli) -> Result<(), SyncError> {
+    let mut client = client(&cli)?;
     let mut resource = Resource::builder();
-    if let Some(service) = &cli.service {
-        InputByteCounter::new().add_text(service)?;
-        resource = resource.with_service_name(service.clone());
+    if let Some(service) = cli.service {
+        InputByteCounter::new().add_text(&service)?;
+        resource = resource.with_service_name(service);
     }
     let resource = resource.build();
     let scope = InstrumentationScope::builder(SCOPE_NAME)
         .with_version(env!("CARGO_PKG_VERSION"))
         .build();
-    match &cli.command {
+    match cli.command {
         Command::Log(args) => send_log(&mut client, &resource, scope, args),
         Command::Span(args) => client.send_span(&resource, span(args, scope)?),
         Command::Metric(args) => send_metric(&mut client, &resource, scope, args),
@@ -73,7 +73,7 @@ fn send_log(
     client: &mut Client,
     resource: &Resource,
     scope: InstrumentationScope,
-    args: &LogArgs,
+    args: LogArgs,
 ) -> Result<(), SyncError> {
     let attributes = attributes(args.attributes.attributes.as_deref(), &[&args.body])?
         .into_iter()
@@ -91,7 +91,7 @@ fn send_log(
             LogSeverity::Error => Severity::Error,
             LogSeverity::Fatal => Severity::Fatal,
         },
-        body: args.body.clone(),
+        body: args.body,
         trace_context: args.trace_id.zip(args.span_id),
         attributes,
     };
@@ -101,9 +101,13 @@ fn send_log(
     })
 }
 
-fn span(args: &SpanArgs, scope: InstrumentationScope) -> Result<SpanData, SyncError> {
+fn span(args: SpanArgs, scope: InstrumentationScope) -> Result<SpanData, SyncError> {
+    let attributes = key_values(attributes(
+        args.attributes.attributes.as_deref(),
+        &[&args.name, args.error.as_deref().unwrap_or_default()],
+    )?)?;
     CompletedSpan {
-        name: args.name.clone(),
+        name: args.name,
         trace_id: args.trace_id,
         span_id: args.span_id,
         parent_span_id: args.parent_span_id,
@@ -117,11 +121,8 @@ fn span(args: &SpanArgs, scope: InstrumentationScope) -> Result<SpanData, SyncEr
         start_time_unix_nano: args.start_time_unix_nano,
         end_time_unix_nano: args.end_time_unix_nano,
         // clap rejects --ok together with --error, so span_status never sees both.
-        status: span_status(args.error.clone(), args.ok),
-        attributes: key_values(attributes(
-            args.attributes.attributes.as_deref(),
-            &[&args.name, args.error.as_deref().unwrap_or_default()],
-        )?)?,
+        status: span_status(args.error, args.ok),
+        attributes,
     }
     .into_span_data(scope)
 }
@@ -130,10 +131,18 @@ fn send_metric(
     client: &mut Client,
     resource: &Resource,
     scope: InstrumentationScope,
-    args: &MetricArgs,
+    args: MetricArgs,
 ) -> Result<(), SyncError> {
+    let attributes = key_values(attributes(
+        args.attributes.attributes.as_deref(),
+        &[
+            &args.name,
+            args.unit.as_deref().unwrap_or_default(),
+            args.description.as_deref().unwrap_or_default(),
+        ],
+    )?)?;
     let measurement = Measurement {
-        name: args.name.clone(),
+        name: args.name,
         kind: match args.kind {
             MetricKind::Counter => SharedMetricKind::Counter,
             MetricKind::UpDownCounter => SharedMetricKind::UpDownCounter,
@@ -141,16 +150,9 @@ fn send_metric(
             MetricKind::Histogram => SharedMetricKind::Histogram,
         },
         value: args.value,
-        unit: args.unit.clone(),
-        description: args.description.clone(),
-        attributes: key_values(attributes(
-            args.attributes.attributes.as_deref(),
-            &[
-                &args.name,
-                args.unit.as_deref().unwrap_or_default(),
-                args.description.as_deref().unwrap_or_default(),
-            ],
-        )?)?,
+        unit: args.unit,
+        description: args.description,
+        attributes,
     };
     client.send_metrics(resource, scope, |meter| {
         measurement.record(meter);
@@ -451,7 +453,7 @@ mod tests {
         let Command::Span(args) = cli.command else {
             panic!("expected span command");
         };
-        let error = span(&args, InstrumentationScope::builder("test").build())
+        let error = span(args, InstrumentationScope::builder("test").build())
             .expect_err("oversized span name");
         assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
         let cli = Cli::try_parse_from([
@@ -466,7 +468,7 @@ mod tests {
         let Command::Span(args) = cli.command else {
             panic!("expected span command");
         };
-        let error = span(&args, InstrumentationScope::builder("test").build())
+        let error = span(args, InstrumentationScope::builder("test").build())
             .expect_err("oversized span error text");
         assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
         let half = "x".repeat(MAX_INPUT_BYTES / 2 + 1);
@@ -482,7 +484,7 @@ mod tests {
             "b",
         ])
         .expect("log arguments parse");
-        let error = run(&cli).expect_err("oversized service name");
+        let error = run(cli).expect_err("oversized service name");
         assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
         let inline = format!("{{\"a\":\"{}\"}}", "x".repeat(MAX_INPUT_BYTES));
         let error = attributes(Some(&inline), &[]).expect_err("inline above limit");
@@ -509,7 +511,7 @@ mod tests {
             let Command::Span(args) = cli.command else {
                 panic!("expected span arguments");
             };
-            span(&args, InstrumentationScope::builder("test").build()).expect("span data")
+            span(args, InstrumentationScope::builder("test").build()).expect("span data")
         };
         let first = parse(&["span", "--name", "first"]);
         let second = parse(&["span", "--name", "second"]);
