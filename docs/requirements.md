@@ -326,7 +326,7 @@ This crate is the OTel/OTLP layer built on `sc-observability-types`.
 - OTLP-013 Superseded by H-006 (Phase H). Telemetry health shall expose `TelemetryHealthReport`,
   `ExporterHealth`, and typed `ExporterHealthState` (defined in
   `sc-observability-types` and re-exported by `sc-observability-otlp`).
-- OTLP-014 Superseded by ADR-023 (Phase H): the `log-sink` feature adds a production `sc-observability` edge; `sc-observe` is no dependency. `sc-observability-otlp`'s only normal sc-* dependency is `sc-observability-types`; `sc-observe` is a dev-dependency of its tests.
+- OTLP-014 Superseded by ADR-023 (Phase H): `sc-observability-otlp` has a normal dependency on `sc-observability-types` and, under the `log-sink` feature only, an optional production dependency on `sc-observability`. `sc-observe` is not a dependency of any kind, not even a dev-dependency.
 - OTLP-015 `sc-observability-otlp` shall attach OTel behavior using lower-level routing and logging infrastructure from the crates beneath it.
 - OTLP-016 `sc-observability-otlp` shall not push OTLP-specific requirements into `sc-observability`.
 - OTLP-017 Superseded by H-004 (Phase H): OTel logging attaches through the core `LogSink` extension point. `sc-observability-otlp` shall attach to the routing layer by registering `LogProjector`, `SpanProjector`, and `MetricProjector` implementations with `ObservabilityBuilder`, not through direct internal access to `sc-observe` internals.
@@ -674,14 +674,15 @@ Operator decisions 2026-10-07: remove the unused 1.5.0 OTel additions without a
 deprecation release, preserve accepted v2 logging, use the official blocking
 HTTP exporter for a thin shared sync client, and authorize minimal existing
 LogSink integration for file/OTel/both. Plan-QA round 2 passed 2026-10-07;
-ADR-023 is Accepted. Implementation dispatch remains separately authorized.
+ADR-023 is Accepted and implemented on the Phase H branch.
 For Phase H these requirements supersede custom OTel facade, dual custom
 transport, durable admission, and full mirror-model requirements in OTLP-002,
-OTLP-005..014, OTLP-017, OTLP-020..024 and PHD-005..013. They do not retire
-logging requirements or erase historical release contracts.
-Status for Phase H: OTLP-002, OTLP-005..014, OTLP-017, OTLP-020..024 and
-PHD-005..013 are superseded only for the rejected OTel provisions by H-001..H-008
-and ADR-023; historical text and unrelated logging obligations remain intact.
+OTLP-005..014, OTLP-017, OTLP-020..024, PHD-005..013, TYP-014..019 and
+TYP-021. They do not retire logging requirements or erase historical release
+contracts.
+Status for Phase H: OTLP-002, OTLP-005..014, OTLP-017, OTLP-020..024,
+PHD-005..013, TYP-014..019 and TYP-021 are superseded only for the rejected
+OTel provisions by H-001..H-008 and ADR-023; historical text and unrelated logging obligations remain intact.
 
 - H-001 Existing synchronous file logging and accepted canonical v2 logging,
   macros, levels, redaction, query/follow, nonblocking admission, retention and
