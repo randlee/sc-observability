@@ -13,12 +13,12 @@ use sc_observability_otlp::sdk::Resource;
 use sc_observability_otlp::sdk::trace::SpanData;
 use sc_observability_otlp::sync::{
     Client, CompletedSpan, InputByteCounter, LogEntry, Measurement, MetricKind as SharedMetricKind,
-    SyncError, check_input_limits, read_root_certificate, resolve_endpoint, span_status,
-    unsigned_attribute,
+    SyncError, check_input_limits, read_bounded_regular_file, read_root_certificate,
+    resolve_endpoint, span_status, unsigned_attribute,
 };
 use serde_json::Value as Json;
 use serde_json::value::RawValue;
-use std::{collections::BTreeMap, io::Read};
+use std::{collections::BTreeMap, io::Read, path::Path};
 
 /// Runs the parsed command; the error decides the process exit.
 pub(crate) fn run(cli: &Cli) -> Result<(), SyncError> {
@@ -163,15 +163,10 @@ fn attributes(source: Option<&str>, signal_text: &str) -> Result<Vec<(String, Js
     let text = if source == STDIN_SOURCE {
         read_capped(std::io::stdin().lock(), "standard input")?
     } else if let Some(path) = source.strip_prefix('@') {
-        let unreadable =
-            |error: std::io::Error| invalid(format!("cannot read attributes file {path}: {error}"));
-        if !std::fs::metadata(path).map_err(unreadable)?.is_file() {
-            return Err(invalid(format!(
-                "attributes file {path} must be a regular file"
-            )));
-        }
-        let file = std::fs::File::open(path).map_err(unreadable)?;
-        read_capped(file, path)?
+        let bytes =
+            read_bounded_regular_file(Path::new(path), "attributes file", codes::INVALID_RECORD)?;
+        String::from_utf8(bytes)
+            .map_err(|_| invalid(format!("attributes file {path} is not UTF-8")))?
     } else {
         source.to_owned()
     };
@@ -377,38 +372,6 @@ mod tests {
     }
 
     #[test]
-    fn attributes_file_rejects_directory_path() {
-        let directory = tempfile::tempdir().expect("tempdir");
-        let source = format!("@{}", directory.path().display());
-
-        let error = attributes(Some(&source), "").expect_err("directory path");
-        assert_eq!(code(&error), codes::INVALID_RECORD);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn attributes_file_rejects_writerless_fifo_without_blocking() {
-        let directory = tempfile::tempdir().expect("tempdir");
-        let path = directory.path().join("attributes.json");
-        let status = std::process::Command::new("mkfifo")
-            .arg(&path)
-            .status()
-            .expect("create FIFO");
-        assert!(status.success(), "mkfifo exited with {status}");
-        let source = format!("@{}", path.display());
-
-        let (sender, receiver) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let _ = sender.send(attributes(Some(&source), ""));
-        });
-        let result = receiver
-            .recv_timeout(std::time::Duration::from_secs(2))
-            .expect("reader blocked on writer-less FIFO");
-        let error = result.expect_err("FIFO is not a regular attributes file");
-        assert_eq!(code(&error), codes::INVALID_RECORD);
-    }
-
-    #[test]
     fn structured_input_is_byte_and_record_capped() {
         use clap::Parser;
 
@@ -495,36 +458,6 @@ mod tests {
             .expect("write oversized root certificate");
 
         let error = client_with_root_certificate(&path).expect_err("oversized PEM");
-        assert_eq!(code(&error), codes::INVALID_CONFIG);
-    }
-
-    #[test]
-    fn root_certificate_rejects_directory_path() {
-        let directory = tempfile::tempdir().expect("tempdir");
-
-        let error = client_with_root_certificate(directory.path()).expect_err("directory path");
-        assert_eq!(code(&error), codes::INVALID_CONFIG);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn root_certificate_rejects_writerless_fifo_without_blocking() {
-        let directory = tempfile::tempdir().expect("tempdir");
-        let path = directory.path().join("roots.pem");
-        let status = std::process::Command::new("mkfifo")
-            .arg(&path)
-            .status()
-            .expect("create FIFO");
-        assert!(status.success(), "mkfifo exited with {status}");
-
-        let (sender, receiver) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let _ = sender.send(client_with_root_certificate(&path));
-        });
-        let result = receiver
-            .recv_timeout(std::time::Duration::from_secs(2))
-            .expect("reader blocked on writer-less FIFO");
-        let error = result.expect_err("FIFO is not a regular certificate file");
         assert_eq!(code(&error), codes::INVALID_CONFIG);
     }
 }

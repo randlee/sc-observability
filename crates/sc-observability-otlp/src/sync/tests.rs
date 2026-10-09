@@ -1618,3 +1618,69 @@ fn completed_span_rejects_start_after_end() {
         codes::INVALID_RECORD
     );
 }
+
+fn read_code(path: &std::path::Path) -> &'static str {
+    let error = super::read_bounded_regular_file(path, "test input", codes::INVALID_RECORD)
+        .expect_err("input must be rejected");
+    validation_code(Err(error))
+}
+
+#[test]
+fn bounded_file_reader_reads_regular_file_up_to_limit() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let path = directory.path().join("input");
+    std::fs::write(&path, vec![b'x'; MAX_INPUT_BYTES]).expect("write at-limit file");
+
+    let bytes = super::read_bounded_regular_file(&path, "test input", codes::INVALID_RECORD)
+        .expect("at-limit file");
+    assert_eq!(bytes.len(), MAX_INPUT_BYTES);
+}
+
+#[test]
+fn bounded_file_reader_rejects_file_above_limit() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let path = directory.path().join("input");
+    std::fs::write(&path, vec![b'x'; MAX_INPUT_BYTES + 1]).expect("write oversized file");
+
+    assert_eq!(read_code(&path), codes::INVALID_RECORD);
+}
+
+#[test]
+fn bounded_file_reader_rejects_missing_file_and_directory() {
+    let directory = tempfile::tempdir().expect("tempdir");
+
+    assert_eq!(
+        read_code(&directory.path().join("missing")),
+        codes::INVALID_RECORD
+    );
+    assert_eq!(read_code(directory.path()), codes::INVALID_RECORD);
+}
+
+#[cfg(unix)]
+#[test]
+fn bounded_file_reader_rejects_writerless_fifo_without_blocking() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let path = directory.path().join("input");
+    let status = Command::new("mkfifo")
+        .arg(&path)
+        .status()
+        .expect("create FIFO");
+    assert!(status.success(), "mkfifo exited with {status}");
+
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let _ = sender.send(read_code(&path));
+    });
+    let code = receiver
+        .recv_timeout(FIXTURE_WATCHDOG)
+        .expect("reader blocked on writer-less FIFO");
+    assert_eq!(code, codes::INVALID_RECORD);
+}
+
+#[test]
+fn root_certificate_reader_uses_invalid_config_code() {
+    let directory = tempfile::tempdir().expect("tempdir");
+
+    let error = super::read_root_certificate(directory.path()).expect_err("directory path");
+    assert_eq!(validation_code(Err(error)), codes::INVALID_CONFIG);
+}

@@ -64,7 +64,6 @@
 
 use std::borrow::Cow;
 use std::fmt;
-use std::fs::File;
 use std::future::Future;
 use std::io::Read;
 use std::path::Path;
@@ -138,40 +137,54 @@ pub enum SyncError {
 /// Returns [`SyncError::Validation`] with [`codes::INVALID_CONFIG`] when the
 /// path cannot be read, is not a regular file, or exceeds the byte limit.
 pub fn read_root_certificate(path: &Path) -> Result<Vec<u8>, SyncError> {
-    let metadata = std::fs::metadata(path).map_err(|error| {
+    read_bounded_regular_file(path, "root certificate", codes::INVALID_CONFIG)
+}
+
+/// Reads one frontend-supplied file of at most [`MAX_INPUT_BYTES`] bytes.
+///
+/// The file is opened first and the check that it is a regular file runs on the
+/// opened handle, so a path swapped for a FIFO or device after a path check cannot
+/// be opened into a block. On Unix the open itself is non-blocking, which lets a
+/// writer-less FIFO open and then fail the regular-file check. `what` names the
+/// input in error messages and `code` is the registry code every failure carries.
+///
+/// # Errors
+///
+/// Returns [`SyncError::Validation`] with `code` when the path cannot be opened
+/// or read, is not a regular file, or exceeds the byte limit.
+pub fn read_bounded_regular_file(
+    path: &Path,
+    what: &str,
+    code: &'static str,
+) -> Result<Vec<u8>, SyncError> {
+    let unreadable = |error: std::io::Error| {
         SyncError::validation(
-            codes::INVALID_CONFIG,
-            format!("cannot read root certificate {}: {error}", path.display()),
+            code,
+            format!("cannot read {what} {}: {error}", path.display()),
         )
-    })?;
-    if !metadata.is_file() {
+    };
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.custom_flags(libc::O_NONBLOCK);
+    }
+    let file = options.open(path).map_err(unreadable)?;
+    if !file.metadata().map_err(unreadable)?.is_file() {
         return Err(SyncError::validation(
-            codes::INVALID_CONFIG,
-            format!("root certificate {} must be a regular file", path.display()),
+            code,
+            format!("{what} {} must be a regular file", path.display()),
         ));
     }
-    let file = File::open(path).map_err(|error| {
-        SyncError::validation(
-            codes::INVALID_CONFIG,
-            format!("cannot read root certificate {}: {error}", path.display()),
-        )
-    })?;
     let limit = MAX_INPUT_BYTES;
     let cap = u64::try_from(limit).map_or(u64::MAX, |limit| limit.saturating_add(1));
     let mut bytes = Vec::new();
-    file.take(cap).read_to_end(&mut bytes).map_err(|error| {
-        SyncError::validation(
-            codes::INVALID_CONFIG,
-            format!("cannot read root certificate {}: {error}", path.display()),
-        )
-    })?;
+    file.take(cap).read_to_end(&mut bytes).map_err(unreadable)?;
     if bytes.len() > limit {
         return Err(SyncError::validation(
-            codes::INVALID_CONFIG,
-            format!(
-                "root certificate {} exceeds the {limit}-byte limit",
-                path.display()
-            ),
+            code,
+            format!("{what} {} exceeds the {limit}-byte limit", path.display()),
         ));
     }
     Ok(bytes)

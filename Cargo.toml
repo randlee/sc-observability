@@ -43,6 +43,7 @@ sc-observability-log-macros = { version = "=1.6.0", path = "crates/sc-observabil
 log = { version = "0.4", features = ["std", "kv"] }
 hostname = "0.4"
 tempfile = "3"
+libc = "0.2"
 trybuild = "1"
 tracing = "0.1"
 tokio = { version = "=1.53.1", features = ["rt", "rt-multi-thread", "macros", "time"] }
