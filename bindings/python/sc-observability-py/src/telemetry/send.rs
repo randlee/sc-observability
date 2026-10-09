@@ -178,6 +178,7 @@ fn export(config: Config, signal: Signal) -> Result<(), SyncError> {
     let mut client = client(&config)?;
     let mut resource = Resource::builder();
     if let Some(service) = config.service_name {
+        InputByteCounter::new().add_text(&service)?;
         resource = resource.with_service_name(service);
     }
     let resource = resource.build();
@@ -244,7 +245,7 @@ fn log(fields: LogFields<'_>) -> Result<LogEntry, SyncError> {
             ));
         }
     };
-    let attributes = attributes(fields.attributes, &fields.body)?
+    let attributes = attributes(fields.attributes, &[&fields.body])?
         .into_iter()
         .map(|(key, value)| (key, value.native::<AnyValue>()))
         .collect();
@@ -294,7 +295,10 @@ fn span(fields: SpanFields<'_>) -> Result<SpanData, SyncError> {
         .start_time_unix_nano
         .map(|nanos| unix_nanos("start_time_unix_nano", &nanos))
         .transpose()?;
-    let attributes = attributes(fields.attributes, &fields.name)?;
+    let attributes = attributes(
+        fields.attributes,
+        &[&fields.name, fields.error.as_deref().unwrap_or_default()],
+    )?;
     CompletedSpan {
         name: fields.name,
         trace_id,
@@ -317,7 +321,14 @@ fn metric(fields: MetricFields<'_>) -> Result<Measurement, SyncError> {
         "histogram" => MetricKind::Histogram,
         other => return Err(invalid(format!("unknown metric kind {other:?}"))),
     };
-    let attributes = attributes(fields.attributes, &fields.name)?;
+    let attributes = attributes(
+        fields.attributes,
+        &[
+            &fields.name,
+            fields.unit.as_deref().unwrap_or_default(),
+            fields.description.as_deref().unwrap_or_default(),
+        ],
+    )?;
     Ok(Measurement {
         name: fields.name,
         kind,
@@ -328,15 +339,17 @@ fn metric(fields: MetricFields<'_>) -> Result<Measurement, SyncError> {
     })
 }
 
-/// Converts attributes, counting `signal_text` plus every key and string value
-/// against the shared per-call input limits.
+/// Converts attributes, counting every `signal_text` field plus every key and
+/// string value against the shared per-call input limits.
 fn attributes(
     attributes: Vec<(String, Bound<'_, PyAny>)>,
-    signal_text: &str,
+    signal_text: &[&str],
 ) -> Result<Vec<(String, Scalar)>, SyncError> {
     check_input_limits(0, attributes.len())?;
     let mut input = InputByteCounter::new();
-    input.add_text(signal_text)?;
+    for text in signal_text {
+        input.add_text(text)?;
+    }
     let mut converted = Vec::with_capacity(attributes.len());
     for (key, value) in attributes {
         let value = scalar(&key, &value)?;

@@ -228,7 +228,7 @@ fn attributes_map_python_scalars_and_reject_other_values() {
                 py,
                 c"[('flag', True), ('count', 3), ('ratio', 0.5), ('name', 'x')]",
             ),
-            "",
+            &[],
         )
         .expect("supported scalars");
         assert_eq!(
@@ -241,14 +241,14 @@ fn attributes_map_python_scalars_and_reject_other_values() {
             ]
         );
         assert_eq!(
-            attributes(python_attributes(py, c"[('huge', 2**63)]"), "")
+            attributes(python_attributes(py, c"[('huge', 2**63)]"), &[])
                 .expect("u64 above i64::MAX converts"),
             [("huge".into(), Scalar::Str("9223372036854775808".into()),)]
         );
         assert_eq!(
             attributes(
                 python_attributes(py, c"[('big', 1.5e19), ('low', -(2**63))]"),
-                ""
+                &[]
             )
             .expect("large float and i64::MIN stay accepted"),
             [
@@ -263,7 +263,7 @@ fn attributes_map_python_scalars_and_reject_other_values() {
             c"[('k', 2**64)]",
             c"[('k', -(2**63) - 1)]",
         ] {
-            let result = attributes(python_attributes(py, source), "");
+            let result = attributes(python_attributes(py, source), &[]);
             assert_eq!(code(result), codes::INVALID_RECORD);
         }
     });
@@ -281,18 +281,18 @@ fn input_limits_count_attributes_and_text_bytes() {
         let long_value = format!("[('k', 'x' * {})]", MAX_INPUT_BYTES - 1);
         let eval =
             |source: String| python_attributes(py, &CString::new(source).expect("no interior NUL"));
-        assert!(attributes(eval(at_limit), "").is_ok());
-        assert!(attributes(eval(long_value.clone()), "").is_ok());
+        assert!(attributes(eval(at_limit), &[]).is_ok());
+        assert!(attributes(eval(long_value.clone()), &[]).is_ok());
         for result in [
-            attributes(eval(over_limit), ""),
-            attributes(eval(long_value), "x"),
-            attributes(Vec::new(), &"x".repeat(MAX_INPUT_BYTES + 1)),
+            attributes(eval(over_limit), &[]),
+            attributes(eval(long_value), &["x"]),
+            attributes(Vec::new(), &[&"x".repeat(MAX_INPUT_BYTES + 1)]),
         ] {
             assert_eq!(code(result), codes::INPUT_LIMIT_EXCEEDED);
         }
         let long_key = format!("[('k' * {}, True)]", MAX_INPUT_BYTES + 1);
         assert_eq!(
-            code(attributes(eval(long_key), "")),
+            code(attributes(eval(long_key), &[])),
             codes::INPUT_LIMIT_EXCEEDED
         );
     });
@@ -313,6 +313,54 @@ fn oversized_span_name_is_an_input_limit_failure() {
         attributes: Vec::new(),
     });
     assert_eq!(code(result), codes::INPUT_LIMIT_EXCEEDED);
+}
+
+#[test]
+fn oversized_span_error_metric_text_and_service_name_are_input_limit_failures() {
+    let big = "x".repeat(MAX_INPUT_BYTES + 1);
+    let span_with_error = SpanFields {
+        name: "span".into(),
+        trace_id: None,
+        span_id: None,
+        parent_span_id: None,
+        kind: "internal".into(),
+        start_time_unix_nano: None,
+        end_time_unix_nano: None,
+        ok: false,
+        error: Some(big.clone()),
+        attributes: Vec::new(),
+    };
+    assert_eq!(code(span(span_with_error)), codes::INPUT_LIMIT_EXCEEDED);
+    let metric_fields = |unit: Option<String>, description: Option<String>| MetricFields {
+        name: "metric".into(),
+        kind: "counter".into(),
+        value: 1.0,
+        unit,
+        description,
+        attributes: Vec::new(),
+    };
+    assert_eq!(
+        code(metric(metric_fields(Some(big.clone()), None))),
+        codes::INPUT_LIMIT_EXCEEDED
+    );
+    assert_eq!(
+        code(metric(metric_fields(None, Some(big.clone())))),
+        codes::INPUT_LIMIT_EXCEEDED
+    );
+    let config = Config {
+        endpoint: None,
+        headers: Vec::new(),
+        timeout_s: None,
+        root_certificate: None,
+        service_name: Some(big),
+    };
+    let signal = Signal::Log(LogEntry {
+        severity: Severity::Info,
+        body: "body".into(),
+        trace_context: None,
+        attributes: Vec::new(),
+    });
+    assert_eq!(code(export(config, signal)), codes::INPUT_LIMIT_EXCEEDED);
 }
 
 #[test]

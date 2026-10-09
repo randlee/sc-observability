@@ -25,6 +25,7 @@ pub(crate) fn run(cli: &Cli) -> Result<(), SyncError> {
     let mut client = client(cli)?;
     let mut resource = Resource::builder();
     if let Some(service) = &cli.service {
+        InputByteCounter::new().add_text(service)?;
         resource = resource.with_service_name(service.clone());
     }
     let resource = resource.build();
@@ -74,7 +75,7 @@ fn send_log(
     scope: InstrumentationScope,
     args: &LogArgs,
 ) -> Result<(), SyncError> {
-    let attributes = attributes(args.attributes.attributes.as_deref(), &args.body)?
+    let attributes = attributes(args.attributes.attributes.as_deref(), &[&args.body])?
         .into_iter()
         .map(|(key, value)| {
             let value = scalar::<AnyValue>(&key, value)?;
@@ -119,7 +120,7 @@ fn span(args: &SpanArgs, scope: InstrumentationScope) -> Result<SpanData, SyncEr
         status: span_status(args.error.clone(), args.ok),
         attributes: key_values(attributes(
             args.attributes.attributes.as_deref(),
-            &args.name,
+            &[&args.name, args.error.as_deref().unwrap_or_default()],
         )?)?,
     }
     .into_span_data(scope)
@@ -144,7 +145,11 @@ fn send_metric(
         description: args.description.clone(),
         attributes: key_values(attributes(
             args.attributes.attributes.as_deref(),
-            &args.name,
+            &[
+                &args.name,
+                args.unit.as_deref().unwrap_or_default(),
+                args.description.as_deref().unwrap_or_default(),
+            ],
         )?)?,
     };
     client.send_metrics(resource, scope, |meter| {
@@ -153,10 +158,16 @@ fn send_metric(
     })
 }
 
-/// Reads `--attributes` as one capped JSON object and counts it with signal text.
-fn attributes(source: Option<&str>, signal_text: &str) -> Result<Vec<(String, Json)>, SyncError> {
+/// Reads `--attributes` as one capped JSON object and counts it with the signal's
+/// text fields.
+fn attributes(
+    source: Option<&str>,
+    signal_text: &[&str],
+) -> Result<Vec<(String, Json)>, SyncError> {
     let mut input = InputByteCounter::new();
-    input.add_text(signal_text)?;
+    for text in signal_text {
+        input.add_text(text)?;
+    }
     let Some(source) = source else {
         return Ok(Vec::new());
     };
@@ -326,7 +337,7 @@ mod tests {
         let parsed = key_values(
             attributes(Some(
                 r#"{"s":"text","b":true,"i":-3,"f":1.5,"big":18446744073709551615,"duplicate":"first","duplicate":"last"}"#,
-            ), "")
+            ), &[])
             .expect("valid object"),
         )
         .expect("scalars");
@@ -350,7 +361,7 @@ mod tests {
 
     #[test]
     fn attributes_keep_input_order_and_repeated_keys() {
-        let parsed = attributes(Some(r#"{"b":1,"a":2,"b":3}"#), "").expect("valid object");
+        let parsed = attributes(Some(r#"{"b":1,"a":2,"b":3}"#), &[]).expect("valid object");
         let keys: Vec<(&str, &Json)> = parsed.iter().map(|(k, v)| (k.as_str(), v)).collect();
         assert_eq!(
             keys,
@@ -368,7 +379,7 @@ mod tests {
             r#"{"k":18446744073709551616}"#,
             r#"{"k":-9223372036854775809}"#,
         ] {
-            let error = attributes(Some(source), "").expect_err(source);
+            let error = attributes(Some(source), &[]).expect_err(source);
             assert_eq!(code(&error), codes::INVALID_RECORD, "{source}");
             assert!(
                 error
@@ -380,7 +391,7 @@ mod tests {
         let parsed = key_values(
             attributes(
                 Some(r#"{"f":1.8446744073709552e19,"max":18446744073709551615,"min":-9223372036854775808}"#),
-                "",
+                &[],
             )
             .expect("in-range and float values"),
         )
@@ -405,12 +416,12 @@ mod tests {
             r#"{"a":[1]}"#,
             r#"{"a":{"b":1}}"#,
         ] {
-            let error = attributes(Some(source), "")
+            let error = attributes(Some(source), &[])
                 .and_then(key_values)
                 .expect_err(source);
             assert_eq!(code(&error), codes::INVALID_RECORD, "{source}");
         }
-        let error = attributes(Some("@/nonexistent/sc-otel-attributes.json"), "")
+        let error = attributes(Some("@/nonexistent/sc-otel-attributes.json"), &[])
             .expect_err("missing file");
         assert_eq!(code(&error), codes::INVALID_RECORD);
     }
@@ -428,7 +439,7 @@ mod tests {
         let error = read_capped(above, "input").expect_err("above limit");
         assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
         let error =
-            attributes(None, &"x".repeat(MAX_INPUT_BYTES + 1)).expect_err("oversized log body");
+            attributes(None, &[&"x".repeat(MAX_INPUT_BYTES + 1)]).expect_err("oversized log body");
         assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
         let cli = Cli::try_parse_from([
             "sc-otel",
@@ -443,18 +454,48 @@ mod tests {
         let error = span(&args, InstrumentationScope::builder("test").build())
             .expect_err("oversized span name");
         assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
+        let cli = Cli::try_parse_from([
+            "sc-otel",
+            "span",
+            "--name",
+            "s",
+            "--error",
+            &"x".repeat(MAX_INPUT_BYTES + 1),
+        ])
+        .expect("span arguments parse");
+        let Command::Span(args) = cli.command else {
+            panic!("expected span command");
+        };
+        let error = span(&args, InstrumentationScope::builder("test").build())
+            .expect_err("oversized span error text");
+        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
+        let half = "x".repeat(MAX_INPUT_BYTES / 2 + 1);
+        let error =
+            attributes(None, &[&half, &half, &half]).expect_err("metric text fields add up");
+        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
+        let cli = Cli::try_parse_from([
+            "sc-otel",
+            "--service",
+            &"x".repeat(MAX_INPUT_BYTES + 1),
+            "log",
+            "--body",
+            "b",
+        ])
+        .expect("log arguments parse");
+        let error = run(&cli).expect_err("oversized service name");
+        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
         let inline = format!("{{\"a\":\"{}\"}}", "x".repeat(MAX_INPUT_BYTES));
-        let error = attributes(Some(&inline), "").expect_err("inline above limit");
+        let error = attributes(Some(&inline), &[]).expect_err("inline above limit");
         assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
         let key = "k".repeat(MAX_INPUT_BYTES + 1);
-        let error = attributes(Some(&format!("{{\"{key}\":true}}")), "")
+        let error = attributes(Some(&format!("{{\"{key}\":true}}")), &[])
             .expect_err("oversized attribute key");
         assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
         let many = (0..=MAX_BATCH_RECORDS)
             .map(|index| format!("\"k{index}\":1"))
             .collect::<Vec<_>>()
             .join(",");
-        let error = attributes(Some(&format!("{{{many}}}")), "").expect_err("too many attributes");
+        let error = attributes(Some(&format!("{{{many}}}")), &[]).expect_err("too many attributes");
         assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
     }
 
