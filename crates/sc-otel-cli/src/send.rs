@@ -4,24 +4,21 @@
 use crate::cli::{Cli, Command, Kind, LogArgs, LogSeverity, MetricArgs, MetricKind, SpanArgs};
 use crate::constants::{SCOPE_NAME, STDIN_SOURCE};
 use crate::error_codes::{EXIT_EXPORT, EXIT_VALIDATION};
-use sc_observability_otlp::api::logs::{AnyValue, LogRecord as _, Severity};
-use sc_observability_otlp::api::trace::{
-    SpanContext, SpanId, SpanKind, Status, TraceFlags, TraceState,
-};
+use sc_observability_otlp::api::logs::{AnyValue, Severity};
+use sc_observability_otlp::api::trace::SpanKind;
 use sc_observability_otlp::api::{InstrumentationScope, KeyValue, Value};
 use sc_observability_otlp::constants::MAX_INPUT_BYTES;
 use sc_observability_otlp::error_codes::sync as codes;
 use sc_observability_otlp::sdk::Resource;
-use sc_observability_otlp::sdk::trace::{
-    IdGenerator, RandomIdGenerator, SpanData, SpanEvents, SpanLinks,
-};
+use sc_observability_otlp::sdk::trace::SpanData;
 use sc_observability_otlp::sync::{
-    Client, InputByteCounter, SyncError, check_input_limits, parent_span_is_remote,
-    read_root_certificate, resolve_endpoint, span_times, unsigned_attribute,
+    Client, CompletedSpan, InputByteCounter, LogEntry, Measurement, MetricKind as SharedMetricKind,
+    SyncError, check_input_limits, read_root_certificate, resolve_endpoint, span_status,
+    unsigned_attribute,
 };
 use serde_json::Value as Json;
 use serde_json::value::RawValue;
-use std::{collections::BTreeMap, io::Read, time::SystemTime};
+use std::{collections::BTreeMap, io::Read};
 
 /// Runs the parsed command; the error decides the process exit.
 pub(crate) fn run(cli: &Cli) -> Result<(), SyncError> {
@@ -77,68 +74,52 @@ fn send_log(
     scope: InstrumentationScope,
     args: &LogArgs,
 ) -> Result<(), SyncError> {
-    let attributes = attributes(args.attributes.attributes.as_deref(), &args.body)?;
-    let severity = match args.severity {
-        LogSeverity::Trace => Severity::Trace,
-        LogSeverity::Debug => Severity::Debug,
-        LogSeverity::Info => Severity::Info,
-        LogSeverity::Warn => Severity::Warn,
-        LogSeverity::Error => Severity::Error,
-        LogSeverity::Fatal => Severity::Fatal,
+    let attributes = attributes(args.attributes.attributes.as_deref(), &args.body)?
+        .into_iter()
+        .map(|(key, value)| Ok((key.clone(), scalar::<AnyValue>(&key, value)?)))
+        .collect::<Result<_, SyncError>>()?;
+    let entry = LogEntry {
+        severity: match args.severity {
+            LogSeverity::Trace => Severity::Trace,
+            LogSeverity::Debug => Severity::Debug,
+            LogSeverity::Info => Severity::Info,
+            LogSeverity::Warn => Severity::Warn,
+            LogSeverity::Error => Severity::Error,
+            LogSeverity::Fatal => Severity::Fatal,
+        },
+        body: args.body.clone(),
+        trace_context: args.trace_id.zip(args.span_id),
+        attributes,
     };
     client.send_log(resource, scope, |record| {
-        record.set_timestamp(SystemTime::now());
-        record.set_severity_number(severity);
-        record.set_severity_text(severity.name());
-        record.set_body(AnyValue::from(args.body.clone()));
-        if let (Some(trace_id), Some(span_id)) = (args.trace_id, args.span_id) {
-            record.set_trace_context(trace_id, span_id, None);
-        }
-        for (key, value) in attributes {
-            record.add_attribute(key.clone(), scalar::<AnyValue>(&key, value)?);
-        }
+        entry.fill(record);
         Ok(())
     })
 }
 
 fn span(args: &SpanArgs, scope: InstrumentationScope) -> Result<SpanData, SyncError> {
-    let id_generator = RandomIdGenerator::default();
-    let (start_time, end_time) = span_times(args.start_time_unix_nano, args.end_time_unix_nano)?;
-    let status = match (&args.error, args.ok) {
-        (Some(description), _) => Status::error(description.clone()),
-        (None, true) => Status::Ok,
-        (None, false) => Status::Unset,
-    };
-    Ok(SpanData {
-        span_context: SpanContext::new(
-            args.trace_id.unwrap_or_else(|| id_generator.new_trace_id()),
-            args.span_id.unwrap_or_else(|| id_generator.new_span_id()),
-            TraceFlags::SAMPLED,
-            false,
-            TraceState::NONE,
-        ),
-        parent_span_id: args.parent_span_id.unwrap_or(SpanId::INVALID),
-        parent_span_is_remote: parent_span_is_remote(),
-        span_kind: match args.kind {
+    CompletedSpan {
+        name: args.name.clone(),
+        trace_id: args.trace_id,
+        span_id: args.span_id,
+        parent_span_id: args.parent_span_id,
+        kind: match args.kind {
             Kind::Internal => SpanKind::Internal,
             Kind::Server => SpanKind::Server,
             Kind::Client => SpanKind::Client,
             Kind::Producer => SpanKind::Producer,
             Kind::Consumer => SpanKind::Consumer,
         },
-        name: args.name.clone().into(),
-        start_time,
-        end_time,
+        start_time_unix_nano: args.start_time_unix_nano,
+        end_time_unix_nano: args.end_time_unix_nano,
+        // An error description wins over --ok.
+        status: span_status(args.error.clone(), args.ok),
         attributes: key_values(attributes(
             args.attributes.attributes.as_deref(),
             &args.name,
         )?)?,
-        dropped_attributes_count: 0,
-        events: SpanEvents::default(),
-        links: SpanLinks::default(),
-        status,
-        instrumentation_scope: scope,
-    })
+    }
+    .into_span_data(scope)
 }
 
 fn send_metric(
@@ -147,38 +128,24 @@ fn send_metric(
     scope: InstrumentationScope,
     args: &MetricArgs,
 ) -> Result<(), SyncError> {
-    let attributes = key_values(attributes(
-        args.attributes.attributes.as_deref(),
-        &args.name,
-    )?)?;
+    let measurement = Measurement {
+        name: args.name.clone(),
+        kind: match args.kind {
+            MetricKind::Counter => SharedMetricKind::Counter,
+            MetricKind::UpDownCounter => SharedMetricKind::UpDownCounter,
+            MetricKind::Gauge => SharedMetricKind::Gauge,
+            MetricKind::Histogram => SharedMetricKind::Histogram,
+        },
+        value: args.value,
+        unit: args.unit.clone(),
+        description: args.description.clone(),
+        attributes: key_values(attributes(
+            args.attributes.attributes.as_deref(),
+            &args.name,
+        )?)?,
+    };
     client.send_metrics(resource, scope, |meter| {
-        macro_rules! instrument {
-            ($builder:expr) => {{
-                let mut builder = $builder;
-                if let Some(unit) = &args.unit {
-                    builder = builder.with_unit(unit.clone());
-                }
-                if let Some(description) = &args.description {
-                    builder = builder.with_description(description.clone());
-                }
-                builder.build()
-            }};
-        }
-        let name = args.name.clone();
-        match args.kind {
-            MetricKind::Counter => {
-                instrument!(meter.f64_counter(name)).add(args.value, &attributes);
-            }
-            MetricKind::UpDownCounter => {
-                instrument!(meter.f64_up_down_counter(name)).add(args.value, &attributes);
-            }
-            MetricKind::Gauge => {
-                instrument!(meter.f64_gauge(name)).record(args.value, &attributes);
-            }
-            MetricKind::Histogram => {
-                instrument!(meter.f64_histogram(name)).record(args.value, &attributes);
-            }
-        }
+        measurement.record(meter);
         Ok(())
     })
 }
@@ -284,6 +251,7 @@ fn invalid(message: String) -> SyncError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sc_observability_otlp::api::trace::TraceFlags;
 
     fn client_with_root_certificate(path: &std::path::Path) -> Result<Client, SyncError> {
         use clap::Parser;

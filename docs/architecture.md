@@ -1996,7 +1996,19 @@ No transport implementation or runtime dependency enters the types layer.
     `sync::InputByteCounter` (per-call input byte accounting over signal text,
     attribute keys and string attribute values, checked against
     `MAX_INPUT_BYTES`), and `sync::parent_span_is_remote() -> bool` (always
-    `false`: a supplied parent is recorded as local);
+    `false`: a supplied parent is recorded as local); and the shared CLI and
+    Python signal construction, so both frontends build identical native
+    signals: `sync::LogEntry { severity, body, trace_context, attributes }`
+    with `fill(self, &mut sdk::logs::SdkLogRecord)` (timestamp now, severity
+    name as text), `sync::Measurement { name, kind, value, unit, description,
+    attributes }` with `record(self, &api::metrics::Meter)` over
+    `sync::MetricKind::{Counter, UpDownCounter, Gauge, Histogram}` (`f64`
+    instruments), `sync::span_status(Option<String>, bool) -> api::trace::Status`
+    (error wins, then `ok`, else unset), and `sync::CompletedSpan` with
+    `into_span_data(self, api::InstrumentationScope) -> Result<sdk::trace::SpanData,
+    SyncError>` (missing ids random, sampled, local parent, times through
+    `span_times`); each frontend keeps its argument extraction, scope name
+    and option rules (the CLI lets an error win over `ok`; Python rejects both);
     `OtelLogSink::new(&sdk::logs::SdkLoggerProvider, api::InstrumentationScope)`
     implementing the core `LogSink`. The SDK span collections
     `SpanEvents`/`SpanLinks` are non-exhaustive: callers fill them from

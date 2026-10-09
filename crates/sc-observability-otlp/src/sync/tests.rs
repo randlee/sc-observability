@@ -29,9 +29,9 @@ use opentelemetry_sdk::trace::{SpanData, SpanEvents, SpanLinks};
 use prost::Message;
 
 use super::{
-    Client, DEFAULT_OTLP_ENDPOINT, InputByteCounter, REDACTED, SyncError, check_input_limits,
-    parent_span_is_remote, parse_span_id, parse_trace_id, resolve_endpoint_with, span_times,
-    unsigned_attribute,
+    Client, CompletedSpan, DEFAULT_OTLP_ENDPOINT, InputByteCounter, LogEntry, Measurement,
+    MetricKind, REDACTED, SyncError, check_input_limits, parent_span_is_remote, parse_span_id,
+    parse_trace_id, resolve_endpoint_with, span_status, span_times, unsigned_attribute,
 };
 use crate::constants::{MAX_BATCH_RECORDS, MAX_INPUT_BYTES};
 use crate::error_codes::sync as codes;
@@ -1397,4 +1397,224 @@ fn endpoint_resolution_owns_environment_value_and_rejects_non_unicode() {
     };
     assert_eq!(*code, codes::INVALID_CONFIG);
     assert!(error.to_string().contains("OTEL_EXPORTER_OTLP_ENDPOINT"));
+}
+
+#[test]
+fn log_entry_fills_timestamp_severity_body_trace_context_and_attributes() {
+    let collector = Collector::start(Reply::Ok);
+    let mut client = Client::new(&collector.endpoint()).expect("client");
+    let entry = LogEntry {
+        severity: Severity::Error,
+        body: "upload failed".to_owned(),
+        trace_context: Some((trace_id(), span_id())),
+        attributes: vec![
+            ("retry".to_owned(), AnyValue::Int(2)),
+            ("bucket".to_owned(), AnyValue::from("logs")),
+        ],
+    };
+    let before = unix_nanos(SystemTime::now());
+    client
+        .send_log(&resource(), scope(), |record| {
+            entry.fill(record);
+            Ok(())
+        })
+        .expect("log exported");
+    let after = unix_nanos(SystemTime::now());
+
+    let requests = collector.requests();
+    let decoded =
+        ExportLogsServiceRequest::decode(requests[0].body.as_slice()).expect("logs proto");
+    let record = &decoded.resource_logs[0].scope_logs[0].log_records[0];
+    assert!((before..=after).contains(&record.time_unix_nano));
+    assert_eq!(record.severity_number, Severity::Error as i32);
+    assert_eq!(record.severity_text, "ERROR");
+    assert!(matches!(
+        record.body.as_ref().and_then(|body| body.value.as_ref()),
+        Some(ProtoValue::StringValue(text)) if text == "upload failed"
+    ));
+    assert_eq!(record.trace_id, trace_id().to_bytes().to_vec());
+    assert_eq!(record.span_id, span_id().to_bytes().to_vec());
+    let keys: Vec<&str> = record
+        .attributes
+        .iter()
+        .map(|attribute| attribute.key.as_str())
+        .collect();
+    assert_eq!(keys, ["retry", "bucket"]);
+    assert_eq!(string_attribute(&record.attributes, "bucket"), Some("logs"));
+}
+
+#[test]
+fn log_entry_without_trace_context_exports_no_ids() {
+    let collector = Collector::start(Reply::Ok);
+    let mut client = Client::new(&collector.endpoint()).expect("client");
+    let entry = LogEntry {
+        severity: Severity::Info,
+        body: "started".to_owned(),
+        trace_context: None,
+        attributes: Vec::new(),
+    };
+    client
+        .send_log(&resource(), scope(), |record| {
+            entry.fill(record);
+            Ok(())
+        })
+        .expect("log exported");
+
+    let decoded = ExportLogsServiceRequest::decode(collector.requests()[0].body.as_slice())
+        .expect("logs proto");
+    let record = &decoded.resource_logs[0].scope_logs[0].log_records[0];
+    assert_eq!(record.severity_text, "INFO");
+    assert!(record.trace_id.is_empty() && record.span_id.is_empty());
+}
+
+#[test]
+fn measurement_records_each_kind_on_its_native_instrument() {
+    let collector = Collector::start(Reply::Ok);
+    let mut client = Client::new(&collector.endpoint()).expect("client");
+    let measurement = |name: &str, kind| Measurement {
+        name: name.to_owned(),
+        kind,
+        value: 2.5,
+        unit: Some("s".to_owned()),
+        description: Some(format!("{name} description")),
+        attributes: vec![KeyValue::new("queue", "default")],
+    };
+    client
+        .send_metrics(&resource(), scope(), |meter| {
+            measurement("counter", MetricKind::Counter).record(meter);
+            measurement("up_down", MetricKind::UpDownCounter).record(meter);
+            measurement("gauge", MetricKind::Gauge).record(meter);
+            measurement("histogram", MetricKind::Histogram).record(meter);
+            Ok(())
+        })
+        .expect("metrics exported");
+
+    let decoded = ExportMetricsServiceRequest::decode(collector.requests()[0].body.as_slice())
+        .expect("metrics proto");
+    let metrics = &decoded.resource_metrics[0].scope_metrics[0].metrics;
+    let metric = |name: &str| {
+        let metric = metrics
+            .iter()
+            .find(|metric| metric.name == name)
+            .unwrap_or_else(|| panic!("metric {name} exported"));
+        assert_eq!(metric.unit, "s");
+        assert_eq!(metric.description, format!("{name} description"));
+        metric.data.as_ref().expect("metric data")
+    };
+    let Data::Sum(counter) = metric("counter") else {
+        panic!("counter exports a sum");
+    };
+    assert!(counter.is_monotonic);
+    assert_eq!(
+        counter.data_points[0].value,
+        Some(NumberValue::AsDouble(2.5))
+    );
+    assert_eq!(
+        string_attribute(&counter.data_points[0].attributes, "queue"),
+        Some("default")
+    );
+    let Data::Sum(up_down) = metric("up_down") else {
+        panic!("up-down counter exports a sum");
+    };
+    assert!(!up_down.is_monotonic);
+    assert_eq!(
+        up_down.data_points[0].value,
+        Some(NumberValue::AsDouble(2.5))
+    );
+    let Data::Gauge(gauge) = metric("gauge") else {
+        panic!("gauge exports a gauge");
+    };
+    assert_eq!(gauge.data_points[0].value, Some(NumberValue::AsDouble(2.5)));
+    let Data::Histogram(histogram) = metric("histogram") else {
+        panic!("histogram exports a histogram");
+    };
+    assert_eq!(
+        (histogram.data_points[0].count, histogram.data_points[0].sum),
+        (1, Some(2.5))
+    );
+}
+
+#[test]
+fn span_status_error_wins_then_ok_then_unset() {
+    assert_eq!(
+        span_status(Some("boom".to_owned()), true),
+        Status::error("boom")
+    );
+    assert_eq!(
+        span_status(Some("boom".to_owned()), false),
+        Status::error("boom")
+    );
+    assert_eq!(span_status(None, true), Status::Ok);
+    assert_eq!(span_status(None, false), Status::Unset);
+}
+
+fn completed(trace: Option<TraceId>, span: Option<SpanId>) -> CompletedSpan {
+    CompletedSpan {
+        name: "upload".to_owned(),
+        trace_id: trace,
+        span_id: span,
+        parent_span_id: None,
+        kind: SpanKind::Client,
+        start_time_unix_nano: Some(1_000),
+        end_time_unix_nano: Some(2_000),
+        status: Status::Ok,
+        attributes: vec![KeyValue::new("http.request.method", "POST")],
+    }
+}
+
+#[test]
+fn completed_span_keeps_supplied_fields_as_sampled_local_span() {
+    let parent = SpanId::from_hex("a7ad6b7169203331").expect("parent span");
+    let span = CompletedSpan {
+        parent_span_id: Some(parent),
+        ..completed(Some(trace_id()), Some(span_id()))
+    }
+    .into_span_data(scope())
+    .expect("span data");
+
+    assert_eq!(span.span_context.trace_id(), trace_id());
+    assert_eq!(span.span_context.span_id(), span_id());
+    assert_eq!(span.span_context.trace_flags(), TraceFlags::SAMPLED);
+    assert!(!span.span_context.is_remote());
+    assert_eq!(span.parent_span_id, parent);
+    assert_eq!(span.parent_span_is_remote, parent_span_is_remote());
+    assert_eq!(span.span_kind, SpanKind::Client);
+    assert_eq!(span.name, "upload");
+    assert_eq!(
+        (unix_nanos(span.start_time), unix_nanos(span.end_time)),
+        (1_000, 2_000)
+    );
+    assert_eq!(span.status, Status::Ok);
+    assert_eq!(
+        span.attributes,
+        [KeyValue::new("http.request.method", "POST")]
+    );
+    assert_eq!(span.instrumentation_scope, scope());
+}
+
+#[test]
+fn completed_span_without_ids_gets_valid_random_ids_and_no_parent() {
+    let first = completed(None, None).into_span_data(scope()).expect("span");
+    let second = completed(None, None).into_span_data(scope()).expect("span");
+
+    assert!(first.span_context.is_valid());
+    assert_eq!(first.parent_span_id, SpanId::INVALID);
+    assert_ne!(
+        first.span_context.trace_id(),
+        second.span_context.trace_id()
+    );
+    assert_ne!(first.span_context.span_id(), second.span_context.span_id());
+}
+
+#[test]
+fn completed_span_rejects_start_after_end() {
+    let span = CompletedSpan {
+        start_time_unix_nano: Some(2_000),
+        end_time_unix_nano: Some(1_000),
+        ..completed(Some(trace_id()), Some(span_id()))
+    };
+    assert_eq!(
+        validation_code(span.into_span_data(scope()).map(|_| ())),
+        codes::INVALID_RECORD
+    );
 }

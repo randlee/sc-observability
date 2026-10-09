@@ -1,5 +1,6 @@
 //! Conversion, limit and failure-projection coverage for the Python send path.
 use super::*;
+use sc_observability_otlp::api::trace::{SpanId, Status};
 use sc_observability_otlp::constants::{MAX_BATCH_RECORDS, MAX_INPUT_BYTES};
 use sc_observability_otlp::sdk::error::OTelSdkError;
 use serde_json::Value;
@@ -317,7 +318,7 @@ fn oversized_span_name_is_an_input_limit_failure() {
 #[test]
 fn invalid_timeout_and_unreadable_certificate_are_config_failures_before_export() {
     let signal = || {
-        Signal::Metric(Metric {
+        Signal::Metric(Measurement {
             name: "jobs".into(),
             kind: MetricKind::Counter,
             value: 1.0,

@@ -4,26 +4,19 @@ use crate::{internal_failure, result_json, unavailable_failure};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyFloat, PyInt, PyString};
 use sc_observability_dto::{Failure, boundary_diagnostic};
-use sc_observability_otlp::api::logs::{AnyValue, LogRecord as _, Severity};
-use sc_observability_otlp::api::trace::{
-    SpanContext, SpanId, SpanKind, Status, TraceFlags, TraceId, TraceState,
-};
+use sc_observability_otlp::api::logs::{AnyValue, Severity};
+use sc_observability_otlp::api::trace::SpanKind;
 use sc_observability_otlp::api::{InstrumentationScope, KeyValue, Value};
 use sc_observability_otlp::error_codes::{TELEMETRY_EXPORT_FAILED, sync as codes};
 use sc_observability_otlp::sdk::Resource;
 use sc_observability_otlp::sdk::error::OTelSdkError;
-use sc_observability_otlp::sdk::trace::{
-    IdGenerator, RandomIdGenerator, SpanData, SpanEvents, SpanLinks,
-};
+use sc_observability_otlp::sdk::trace::SpanData;
 use sc_observability_otlp::sync::{
-    Client, InputByteCounter, SyncError, check_input_limits, parent_span_is_remote, parse_span_id,
-    parse_trace_id, read_root_certificate, resolve_endpoint, span_times, unsigned_attribute,
+    Client, CompletedSpan, InputByteCounter, LogEntry, Measurement, MetricKind, SyncError,
+    check_input_limits, parse_span_id, parse_trace_id, read_root_certificate, resolve_endpoint,
+    span_status, unsigned_attribute,
 };
-use std::{
-    panic::AssertUnwindSafe,
-    path::PathBuf,
-    time::{Duration, SystemTime},
-};
+use std::{panic::AssertUnwindSafe, path::PathBuf, time::Duration};
 
 #[cfg(test)]
 #[path = "tests.rs"]
@@ -109,34 +102,10 @@ impl From<String> for Scalar {
     }
 }
 
-struct Log {
-    severity: Severity,
-    body: String,
-    trace: Option<(TraceId, SpanId)>,
-    attributes: Vec<(String, Scalar)>,
-}
-
-#[derive(Clone, Copy)]
-enum MetricKind {
-    Counter,
-    UpDownCounter,
-    Gauge,
-    Histogram,
-}
-
-struct Metric {
-    name: String,
-    kind: MetricKind,
-    value: f64,
-    unit: Option<String>,
-    description: Option<String>,
-    attributes: Vec<KeyValue>,
-}
-
 enum Signal {
-    Log(Log),
+    Log(LogEntry),
     Span(Box<SpanData>),
-    Metric(Metric),
+    Metric(Measurement),
 }
 
 /// Exports one log record.
@@ -213,44 +182,13 @@ fn export(config: Config, signal: Signal) -> Result<(), SyncError> {
     }
     let resource = resource.build();
     match signal {
-        Signal::Log(log) => client.send_log(&resource, scope(), |record| {
-            record.set_timestamp(SystemTime::now());
-            record.set_severity_number(log.severity);
-            record.set_severity_text(log.severity.name());
-            record.set_body(AnyValue::from(log.body));
-            if let Some((trace_id, span_id)) = log.trace {
-                record.set_trace_context(trace_id, span_id, None);
-            }
-            for (key, value) in log.attributes {
-                record.add_attribute(key, value.native::<AnyValue>());
-            }
+        Signal::Log(entry) => client.send_log(&resource, scope(), |record| {
+            entry.fill(record);
             Ok(())
         }),
         Signal::Span(span) => client.send_span(&resource, *span),
-        Signal::Metric(metric) => client.send_metrics(&resource, scope(), |meter| {
-            macro_rules! instrument {
-                ($builder:expr) => {{
-                    let mut builder = $builder;
-                    if let Some(unit) = metric.unit {
-                        builder = builder.with_unit(unit);
-                    }
-                    if let Some(description) = metric.description {
-                        builder = builder.with_description(description);
-                    }
-                    builder.build()
-                }};
-            }
-            let (name, value, attributes) = (metric.name, metric.value, &metric.attributes);
-            match metric.kind {
-                MetricKind::Counter => instrument!(meter.f64_counter(name)).add(value, attributes),
-                MetricKind::UpDownCounter => {
-                    instrument!(meter.f64_up_down_counter(name)).add(value, attributes);
-                }
-                MetricKind::Gauge => instrument!(meter.f64_gauge(name)).record(value, attributes),
-                MetricKind::Histogram => {
-                    instrument!(meter.f64_histogram(name)).record(value, attributes);
-                }
-            }
+        Signal::Metric(measurement) => client.send_metrics(&resource, scope(), |meter| {
+            measurement.record(meter);
             Ok(())
         }),
     }
@@ -284,7 +222,7 @@ fn scope() -> InstrumentationScope {
         .build()
 }
 
-fn log(fields: LogFields<'_>) -> Result<Log, SyncError> {
+fn log(fields: LogFields<'_>) -> Result<LogEntry, SyncError> {
     let severity = match fields.severity.as_str() {
         "trace" => Severity::Trace,
         "debug" => Severity::Debug,
@@ -306,11 +244,14 @@ fn log(fields: LogFields<'_>) -> Result<Log, SyncError> {
             ));
         }
     };
-    let attributes = attributes(fields.attributes, &fields.body)?;
-    Ok(Log {
+    let attributes = attributes(fields.attributes, &fields.body)?
+        .into_iter()
+        .map(|(key, value)| (key, value.native::<AnyValue>()))
+        .collect();
+    Ok(LogEntry {
         severity,
         body: fields.body,
-        trace,
+        trace_context: trace,
         attributes,
     })
 }
@@ -319,13 +260,10 @@ fn span(fields: SpanFields<'_>) -> Result<SpanData, SyncError> {
     if fields.parent_span_id.is_some() && fields.trace_id.is_none() {
         return Err(invalid("parent_span_id requires trace_id".into()));
     }
-    let status = match (fields.error, fields.ok) {
-        (Some(_), true) => return Err(invalid("ok and error are mutually exclusive".into())),
-        (Some(description), false) => Status::error(description),
-        (None, true) => Status::Ok,
-        (None, false) => Status::Unset,
-    };
-    let span_kind = match fields.kind.as_str() {
+    if fields.error.is_some() && fields.ok {
+        return Err(invalid("ok and error are mutually exclusive".into()));
+    }
+    let kind = match fields.kind.as_str() {
         "internal" => SpanKind::Internal,
         "server" => SpanKind::Server,
         "client" => SpanKind::Client,
@@ -333,53 +271,45 @@ fn span(fields: SpanFields<'_>) -> Result<SpanData, SyncError> {
         "consumer" => SpanKind::Consumer,
         other => return Err(invalid(format!("unknown span kind {other:?}"))),
     };
-    let trace_id = match fields.trace_id.as_deref() {
-        Some(value) => parse_trace_id("trace_id", value)?,
-        None => RandomIdGenerator::default().new_trace_id(),
-    };
-    let span_id = match fields.span_id.as_deref() {
-        Some(value) => parse_span_id("span_id", value)?,
-        None => RandomIdGenerator::default().new_span_id(),
-    };
+    let trace_id = fields
+        .trace_id
+        .as_deref()
+        .map(|value| parse_trace_id("trace_id", value))
+        .transpose()?;
+    let span_id = fields
+        .span_id
+        .as_deref()
+        .map(|value| parse_span_id("span_id", value))
+        .transpose()?;
     let parent_span_id = fields
         .parent_span_id
         .as_deref()
         .map(|value| parse_span_id("parent_span_id", value))
         .transpose()?;
-    let end_unix_nano = fields
+    let end_time_unix_nano = fields
         .end_time_unix_nano
         .map(|nanos| unix_nanos("end_time_unix_nano", &nanos))
         .transpose()?;
-    let start_unix_nano = fields
+    let start_time_unix_nano = fields
         .start_time_unix_nano
         .map(|nanos| unix_nanos("start_time_unix_nano", &nanos))
         .transpose()?;
-    let (start_time, end_time) = span_times(start_unix_nano, end_unix_nano)?;
     let attributes = attributes(fields.attributes, &fields.name)?;
-    Ok(SpanData {
-        span_context: SpanContext::new(
-            trace_id,
-            span_id,
-            TraceFlags::SAMPLED,
-            false,
-            TraceState::NONE,
-        ),
-        parent_span_id: parent_span_id.unwrap_or(SpanId::INVALID),
-        parent_span_is_remote: parent_span_is_remote(),
-        span_kind,
-        name: fields.name.into(),
-        start_time,
-        end_time,
+    CompletedSpan {
+        name: fields.name,
+        trace_id,
+        span_id,
+        parent_span_id,
+        kind,
+        start_time_unix_nano,
+        end_time_unix_nano,
+        status: span_status(fields.error, fields.ok),
         attributes: key_values(attributes),
-        dropped_attributes_count: 0,
-        events: SpanEvents::default(),
-        links: SpanLinks::default(),
-        status,
-        instrumentation_scope: scope(),
-    })
+    }
+    .into_span_data(scope())
 }
 
-fn metric(fields: MetricFields<'_>) -> Result<Metric, SyncError> {
+fn metric(fields: MetricFields<'_>) -> Result<Measurement, SyncError> {
     let kind = match fields.kind.as_str() {
         "counter" => MetricKind::Counter,
         "up_down_counter" => MetricKind::UpDownCounter,
@@ -388,7 +318,7 @@ fn metric(fields: MetricFields<'_>) -> Result<Metric, SyncError> {
         other => return Err(invalid(format!("unknown metric kind {other:?}"))),
     };
     let attributes = attributes(fields.attributes, &fields.name)?;
-    Ok(Metric {
+    Ok(Measurement {
         name: fields.name,
         kind,
         value: fields.value,

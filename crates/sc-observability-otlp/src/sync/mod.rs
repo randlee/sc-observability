@@ -99,8 +99,11 @@ use otel_reqwest::header::{
     CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, HOST, HeaderMap, HeaderName, HeaderValue,
 };
 
+mod signal;
 #[cfg(test)]
 mod tests;
+
+pub use signal::{CompletedSpan, LogEntry, Measurement, MetricKind, span_status};
 
 /// Placeholder written in place of credentials in error text.
 const REDACTED: &str = "[REDACTED]";
