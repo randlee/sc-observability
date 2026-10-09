@@ -20,7 +20,8 @@ use sc_observability_otlp::sync::{
     read_root_certificate, resolve_endpoint, span_times, unsigned_attribute,
 };
 use serde_json::Value as Json;
-use std::{io::Read, time::SystemTime};
+use serde_json::value::RawValue;
+use std::{collections::BTreeMap, io::Read, time::SystemTime};
 
 /// Runs the parsed command; the error decides the process exit.
 pub(crate) fn run(cli: &Cli) -> Result<(), SyncError> {
@@ -198,16 +199,38 @@ fn attributes(source: Option<&str>, signal_text: &str) -> Result<Vec<(String, Js
     } else {
         source.to_owned()
     };
-    let object: serde_json::Map<String, Json> = serde_json::from_str(&text)
+    // Raw tokens keep an out-of-range integer literal distinguishable from a
+    // float: parsed `Number`s turn it into a lossy `f64`. A repeated key keeps
+    // its last value.
+    let object: BTreeMap<String, Box<RawValue>> = serde_json::from_str(&text)
         .map_err(|error| invalid(format!("attributes must be one JSON object: {error}")))?;
     check_input_limits(0, object.len())?;
-    for (key, value) in &object {
-        input.add_text(key)?;
-        if let Json::String(value) = value {
+    let mut attributes = Vec::with_capacity(object.len());
+    for (key, raw) in object {
+        input.add_text(&key)?;
+        let token = raw.get().trim();
+        if integer_out_of_range(token) {
+            return Err(invalid(format!(
+                "attribute {key}: integer outside the unsigned 64-bit range"
+            )));
+        }
+        let value: Json = serde_json::from_str(token)
+            .map_err(|error| invalid(format!("attributes must be one JSON object: {error}")))?;
+        if let Json::String(value) = &value {
             input.add_text(value)?;
         }
+        attributes.push((key, value));
     }
-    Ok(object.into_iter().collect())
+    Ok(attributes)
+}
+
+/// Whether `token` is an integer literal that fits neither `i64` nor `u64`.
+fn integer_out_of_range(token: &str) -> bool {
+    let digits = token.strip_prefix('-').unwrap_or(token);
+    !digits.is_empty()
+        && digits.bytes().all(|byte| byte.is_ascii_digit())
+        && token.parse::<i64>().is_err()
+        && token.parse::<u64>().is_err()
 }
 
 /// Reads at most one byte past the input limit, so oversized input is
@@ -321,6 +344,40 @@ mod tests {
             scalar::<AnyValue>("k", Json::from("v")).expect("string"),
             AnyValue::from("v".to_owned())
         );
+    }
+
+    #[test]
+    fn integer_literals_outside_the_64_bit_ranges_are_rejected() {
+        for source in [
+            r#"{"k":18446744073709551616}"#,
+            r#"{"k":-9223372036854775809}"#,
+        ] {
+            let error = attributes(Some(source), "").expect_err(source);
+            assert_eq!(code(&error), codes::INVALID_RECORD, "{source}");
+            assert!(
+                error
+                    .to_string()
+                    .contains("attribute k: integer outside the unsigned 64-bit range"),
+                "{source}: {error}"
+            );
+        }
+        let parsed = key_values(
+            attributes(
+                Some(r#"{"f":1.8446744073709552e19,"max":18446744073709551615,"min":-9223372036854775808}"#),
+                "",
+            )
+            .expect("in-range and float values"),
+        )
+        .expect("scalars");
+        let find = |key: &str| {
+            parsed
+                .iter()
+                .find(|kv| kv.key.as_str() == key)
+                .map(|kv| kv.value.clone())
+        };
+        assert_eq!(find("f"), Some(Value::F64(1.844_674_407_370_955_2e19)));
+        assert_eq!(find("max"), Some(Value::from("18446744073709551615")));
+        assert_eq!(find("min"), Some(Value::I64(i64::MIN)));
     }
 
     #[test]
