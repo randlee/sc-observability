@@ -319,10 +319,10 @@ mod tests {
     use sc_observability_otlp::constants::MAX_BATCH_RECORDS;
     use sc_observability_otlp::sdk::error::OTelSdkError;
 
-    fn code(error: &SyncError) -> &'static str {
+    fn code(error: &SyncError) -> String {
         match error {
-            SyncError::Validation { code, .. } => code,
-            SyncError::Export(_) => "export",
+            SyncError::Validation { code, .. } => code.to_string(),
+            SyncError::Export(_) => "export".to_owned(),
         }
     }
 
@@ -382,7 +382,7 @@ mod tests {
             r#"{"k":-9223372036854775809}"#,
         ] {
             let error = attributes(Some(source), &[]).expect_err(source);
-            assert_eq!(code(&error), codes::INVALID_RECORD, "{source}");
+            assert_eq!(code(&error), codes::INVALID_RECORD.as_str(), "{source}");
             assert!(
                 error
                     .to_string()
@@ -421,11 +421,11 @@ mod tests {
             let error = attributes(Some(source), &[])
                 .and_then(key_values)
                 .expect_err(source);
-            assert_eq!(code(&error), codes::INVALID_RECORD, "{source}");
+            assert_eq!(code(&error), codes::INVALID_RECORD.as_str(), "{source}");
         }
         let error = attributes(Some("@/nonexistent/sc-otel-attributes.json"), &[])
             .expect_err("missing file");
-        assert_eq!(code(&error), codes::INVALID_RECORD);
+        assert_eq!(code(&error), codes::INVALID_RECORD.as_str());
     }
 
     #[test]
@@ -439,10 +439,10 @@ mod tests {
         );
         let above = std::io::repeat(b' ').take(10 * MAX_INPUT_BYTES as u64);
         let error = read_capped(above, "input").expect_err("above limit");
-        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
+        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED.as_str());
         let error =
             attributes(None, &[&"x".repeat(MAX_INPUT_BYTES + 1)]).expect_err("oversized log body");
-        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
+        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED.as_str());
         let cli = Cli::try_parse_from([
             "sc-otel",
             "span",
@@ -455,7 +455,7 @@ mod tests {
         };
         let error = span(args, InstrumentationScope::builder("test").build())
             .expect_err("oversized span name");
-        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
+        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED.as_str());
         let cli = Cli::try_parse_from([
             "sc-otel",
             "span",
@@ -470,11 +470,11 @@ mod tests {
         };
         let error = span(args, InstrumentationScope::builder("test").build())
             .expect_err("oversized span error text");
-        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
+        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED.as_str());
         let half = "x".repeat(MAX_INPUT_BYTES / 2 + 1);
         let error =
             attributes(None, &[&half, &half, &half]).expect_err("metric text fields add up");
-        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
+        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED.as_str());
         let cli = Cli::try_parse_from([
             "sc-otel",
             "--service",
@@ -485,20 +485,20 @@ mod tests {
         ])
         .expect("log arguments parse");
         let error = run(cli).expect_err("oversized service name");
-        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
+        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED.as_str());
         let inline = format!("{{\"a\":\"{}\"}}", "x".repeat(MAX_INPUT_BYTES));
         let error = attributes(Some(&inline), &[]).expect_err("inline above limit");
-        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
+        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED.as_str());
         let key = "k".repeat(MAX_INPUT_BYTES + 1);
         let error = attributes(Some(&format!("{{\"{key}\":true}}")), &[])
             .expect_err("oversized attribute key");
-        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
+        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED.as_str());
         let many = (0..=MAX_BATCH_RECORDS)
             .map(|index| format!("\"k{index}\":1"))
             .collect::<Vec<_>>()
             .join(",");
         let error = attributes(Some(&format!("{{{many}}}")), &[]).expect_err("too many attributes");
-        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
+        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED.as_str());
     }
 
     #[test]
@@ -545,6 +545,6 @@ mod tests {
             .expect("write oversized root certificate");
 
         let error = client_with_root_certificate(&path).expect_err("oversized PEM");
-        assert_eq!(code(&error), codes::INVALID_CONFIG);
+        assert_eq!(code(&error), codes::INVALID_CONFIG.as_str());
     }
 }

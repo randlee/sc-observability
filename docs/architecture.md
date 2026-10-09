@@ -2017,12 +2017,13 @@ No transport implementation or runtime dependency enters the types layer.
     implementing the core `LogSink`. The SDK span collections
     `SpanEvents`/`SpanLinks` are non-exhaustive: callers fill them from
     `Default`.
-  - *Errors*: `SyncError::Validation { code, source }` uses the
-    `error_codes::sync` registry (`INVALID_CONFIG`, `RUNTIME_ENTERED`,
+  - *Errors*: `SyncError::Validation { code, source }` carries an
+    `ErrorCode` from the `error_codes::sync` registry (`INVALID_CONFIG`, `RUNTIME_ENTERED`,
     `INVALID_RECORD`, `INPUT_LIMIT_EXCEEDED`, `CALLER_REJECTED`) and never
     reaches the network; `SyncError::Export` wraps the native exporter error.
     A closure's `Validation` passes through; any other closure error becomes
-    `CALLER_REJECTED`. A metric send that records no valid measurement is
+    `CALLER_REJECTED`. Every validation message names the offending field and,
+    for a size or count limit, the limit value. A metric send that records no valid measurement is
     `INVALID_RECORD`, as is one that records the same instrument name (compared
     case-insensitively) with a different kind or unit: `FlushGate` suppresses
     the export and keeps the latest conflict. Display and sources redact header values and URL

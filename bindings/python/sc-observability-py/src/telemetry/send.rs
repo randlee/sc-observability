@@ -154,15 +154,15 @@ fn failure(operation: &str, error: &SyncError) -> Failure {
     match error {
         // Running inside an entered Tokio runtime is a property of the calling
         // thread, not of any input field.
-        SyncError::Validation {
-            code: codes::RUNTIME_ENTERED,
-            ..
-        } => unavailable_failure(codes::RUNTIME_ENTERED, error.to_string()),
+        SyncError::Validation { code, .. } if *code == codes::RUNTIME_ENTERED => {
+            unavailable_failure(code.as_str(), error.to_string())
+        }
         SyncError::Validation { code, .. } => Failure::Validation {
-            diagnostic: Box::new(boundary_diagnostic(code, error.to_string())),
-            field: match *code {
-                codes::INVALID_CONFIG => "config",
-                _ => "fields",
+            diagnostic: Box::new(boundary_diagnostic(code.as_str(), error.to_string())),
+            field: if *code == codes::INVALID_CONFIG {
+                "config"
+            } else {
+                "fields"
             }
             .into(),
         },

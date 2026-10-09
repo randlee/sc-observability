@@ -35,6 +35,7 @@ use super::{
 };
 use crate::constants::{MAX_BATCH_RECORDS, MAX_INPUT_BYTES};
 use crate::error_codes::sync as codes;
+use sc_observability_types::ErrorCode;
 
 /// Upper bound for any fixture wait so a broken client cannot hang the suite.
 const FIXTURE_WATCHDOG: Duration = Duration::from_secs(10);
@@ -333,7 +334,7 @@ fn string_attribute<'a>(attributes: &'a [ProtoKeyValue], key: &str) -> Option<&'
         })
 }
 
-fn validation_code(result: Result<(), SyncError>) -> &'static str {
+fn validation_code(result: Result<(), SyncError>) -> ErrorCode {
     match result {
         Err(SyncError::Validation { code, .. }) => code,
         other => panic!("expected a validation failure, got {other:?}"),
@@ -846,7 +847,7 @@ fn entered_tokio_runtime_is_rejected_and_drop_is_safe() {
     assert!(collector.requests().is_empty());
 }
 
-fn span_times_code(start: Option<u64>, end: Option<u64>) -> &'static str {
+fn span_times_code(start: Option<u64>, end: Option<u64>) -> ErrorCode {
     validation_code(span_times(start, end).map(|_| ()))
 }
 
@@ -902,6 +903,23 @@ fn input_limits_accept_at_limit_and_reject_above() {
     assert_eq!(
         validation_code(input.add_text("x")),
         codes::INPUT_LIMIT_EXCEEDED
+    );
+}
+
+#[test]
+fn input_limit_messages_name_the_field_and_the_limit() {
+    let bytes = check_input_limits(MAX_INPUT_BYTES + 1, 1)
+        .expect_err("oversized input")
+        .to_string();
+    assert!(bytes.contains("input bytes"), "{bytes}");
+    assert!(bytes.contains(&MAX_INPUT_BYTES.to_string()), "{bytes}");
+    let records = check_input_limits(1, MAX_BATCH_RECORDS + 1)
+        .expect_err("too many records")
+        .to_string();
+    assert!(records.contains("record count"), "{records}");
+    assert!(
+        records.contains(&MAX_BATCH_RECORDS.to_string()),
+        "{records}"
     );
 }
 
@@ -1356,10 +1374,12 @@ fn ids_must_be_fixed_width_lowercase_hex() {
             "span_id",
         ),
     ] {
-        let Err(error @ SyncError::Validation { code, .. }) = result else {
+        let Err(error @ SyncError::Validation { .. }) = result else {
             std::panic::panic_any("a malformed id must be a validation failure");
         };
-        assert_eq!(code, codes::INVALID_RECORD);
+        if let SyncError::Validation { code, .. } = &error {
+            assert_eq!(code, &codes::INVALID_RECORD);
+        }
         assert!(error.to_string().contains(&format!("{field}: expected")));
     }
 }
@@ -1395,7 +1415,7 @@ fn endpoint_resolution_owns_environment_value_and_rejects_non_unicode() {
     let SyncError::Validation { code, .. } = &error else {
         std::panic::panic_any("non-Unicode environment endpoint must be a validation error");
     };
-    assert_eq!(*code, codes::INVALID_CONFIG);
+    assert_eq!(code, &codes::INVALID_CONFIG);
     assert!(error.to_string().contains("OTEL_EXPORTER_OTLP_ENDPOINT"));
 }
 
@@ -1619,7 +1639,7 @@ fn completed_span_rejects_start_after_end() {
     );
 }
 
-fn read_code(path: &std::path::Path) -> &'static str {
+fn read_code(path: &std::path::Path) -> ErrorCode {
     let error = super::read_bounded_regular_file(path, "test input", codes::INVALID_RECORD)
         .expect_err("input must be rejected");
     validation_code(Err(error))

@@ -97,6 +97,7 @@ use crate::{api, sdk};
 use otel_reqwest::header::{
     CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, HOST, HeaderMap, HeaderName, HeaderValue,
 };
+use sc_observability_types::ErrorCode;
 
 mod signal;
 #[cfg(test)]
@@ -119,7 +120,7 @@ pub enum SyncError {
     /// Rejected input or configuration; nothing was reported as exported.
     Validation {
         /// Stable code from [`error_codes::sync`](crate::error_codes::sync).
-        code: &'static str,
+        code: ErrorCode,
         /// Native SDK error describing the rejection.
         source: sdk::error::OTelSdkError,
     },
@@ -155,11 +156,11 @@ pub fn read_root_certificate(path: &Path) -> Result<Vec<u8>, SyncError> {
 pub fn read_bounded_regular_file(
     path: &Path,
     what: &str,
-    code: &'static str,
+    code: ErrorCode,
 ) -> Result<Vec<u8>, SyncError> {
     let unreadable = |error: std::io::Error| {
         SyncError::validation(
-            code,
+            code.clone(),
             format!("cannot read {what} {}: {error}", path.display()),
         )
     };
@@ -195,7 +196,7 @@ impl SyncError {
     ///
     /// Frontend closures use this to reject unsupported input.
     #[must_use]
-    pub fn validation(code: &'static str, message: impl Into<String>) -> Self {
+    pub fn validation(code: ErrorCode, message: impl Into<String>) -> Self {
         Self::Validation {
             code,
             source: OTelSdkError::InternalFailure(message.into()),
@@ -252,13 +253,13 @@ pub fn check_input_limits(input_bytes: usize, records: usize) -> Result<(), Sync
     if input_bytes > MAX_INPUT_BYTES {
         return Err(SyncError::validation(
             codes::INPUT_LIMIT_EXCEEDED,
-            format!("input is {input_bytes} bytes; the limit is {MAX_INPUT_BYTES}"),
+            format!("input bytes: {input_bytes} exceeds the limit of {MAX_INPUT_BYTES}"),
         ));
     }
     if records > MAX_BATCH_RECORDS {
         return Err(SyncError::validation(
             codes::INPUT_LIMIT_EXCEEDED,
-            format!("input has {records} records; the limit is {MAX_BATCH_RECORDS}"),
+            format!("record count: {records} exceeds the limit of {MAX_BATCH_RECORDS}"),
         ));
     }
     Ok(())
@@ -390,7 +391,7 @@ pub(super) fn span_times(
     match start_unix_nano {
         Some(start) if u128::from(start) > end_nanos => Err(SyncError::validation(
             codes::INVALID_RECORD,
-            "span start time is after its end time",
+            "span start_unix_nano is after end_unix_nano",
         )),
         Some(start) => Ok((unix_nano(start), end_time)),
         None => Ok((end_time, end_time)),
@@ -770,7 +771,7 @@ impl Client {
         } else {
             Err(SyncError::validation(
                 codes::INVALID_RECORD,
-                "no valid measurement was recorded",
+                "metric measurements: no valid measurement was recorded",
             ))
         }
     }
@@ -789,7 +790,7 @@ impl Client {
             .map_err(|error| {
                 SyncError::validation(
                     codes::INVALID_CONFIG,
-                    self.redact(&format!("HTTP transport configuration failed: {error}")),
+                    self.redact(&format!("http transport configuration failed: {error}")),
                 )
             })?;
         Ok(ExplicitHeaders {
