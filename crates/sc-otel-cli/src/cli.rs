@@ -90,7 +90,7 @@ pub(crate) enum Command {
     Log(LogArgs),
     /// Export one completed span.
     #[command(
-        after_long_help = "Examples:\n  sc-otel span --name build --start-time-unix-nano 1700000000000000000 --end-time-unix-nano 1700000005000000000\n  sc-otel span --name deploy --kind client --error 'rollout timed out' --attributes @span.json\n\nWithout --trace-id and --span-id the span gets new random ids. Pass the ids of a parent span with --trace-id and --parent-span-id to join an existing trace. A parent supplied this way is external to this CLI process and is marked remote."
+        after_long_help = "Examples:\n  sc-otel span --name build --start-time-unix-nano 1700000000000000000 --end-time-unix-nano 1700000005000000000\n  sc-otel span --name deploy --kind client --error 'rollout timed out' --attributes @span.json\n\nWithout --trace-id and --span-id the span gets new random ids. Pass the ids of a parent span with --trace-id and --parent-span-id to join an existing trace. A parent supplied this way is recorded as local; this CLI does not mark it remote."
     )]
     Span(SpanArgs),
     /// Export one metric measurement.
@@ -373,5 +373,11 @@ mod tests {
                 .to_string()
                 .contains("local unless provenance is explicit")
         );
+        let long_help = span
+            .get_after_long_help()
+            .expect("span long help")
+            .to_string();
+        assert!(long_help.contains("recorded as local"), "{long_help}");
+        assert!(!long_help.contains("marked remote"), "{long_help}");
     }
 }
