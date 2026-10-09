@@ -319,12 +319,6 @@ def _command_args(pid: int) -> list[str] | None:
         return None
 
 
-def _command_line(pid: int) -> str | None:
-    """Compatibility helper for status display and older local callers."""
-    args = _command_args(pid)
-    return " ".join(args) if args else None
-
-
 def _owned(state: Path) -> tuple[int, dict[str, Any]]:
     pid_file = state / "viewer.pid"
     meta_file = state / "viewer.json"
