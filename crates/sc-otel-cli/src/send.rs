@@ -76,7 +76,10 @@ fn send_log(
 ) -> Result<(), SyncError> {
     let attributes = attributes(args.attributes.attributes.as_deref(), &args.body)?
         .into_iter()
-        .map(|(key, value)| Ok((key.clone(), scalar::<AnyValue>(&key, value)?)))
+        .map(|(key, value)| {
+            let value = scalar::<AnyValue>(&key, value)?;
+            Ok((key, value))
+        })
         .collect::<Result<_, SyncError>>()?;
     let entry = LogEntry {
         severity: match args.severity {
