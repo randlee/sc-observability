@@ -128,9 +128,10 @@ class ReleaseInventoryTests(unittest.TestCase):
             'x86_64-apple-darwin', 'x86_64-pc-windows-msvc', 'x86_64-unknown-linux-gnu',
         ])
 
-    def test_published_packages_are_the_ten_release_crates(self):
+    def test_published_packages_are_the_eleven_release_crates(self):
         names = [item['package'] for item in parity.published_packages(self.manifest)]
-        self.assertEqual(len(names), 10)
+        self.assertEqual(len(names), 11)
+        self.assertIn('sc-otel-cli', names)
         self.assertIn('sc-observability-tauri', names)
         self.assertIn('sc-observability-py', names)
         self.assertEqual(next(item for item in parity.published_packages(self.manifest)
