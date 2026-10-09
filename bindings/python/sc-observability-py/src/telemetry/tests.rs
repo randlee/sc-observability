@@ -91,6 +91,14 @@ fn failures_project_to_the_shared_failure_union_with_registry_codes() {
     };
     assert_eq!(field, "config");
     let Failure::Unavailable { diagnostic } = failure(
+        "send_log",
+        &SyncError::validation(codes::RUNTIME_ENTERED, "inside a runtime"),
+    ) else {
+        std::panic::panic_any("an entered runtime has no input field and must be unavailable");
+    };
+    assert_eq!(diagnostic.code, codes::RUNTIME_ENTERED);
+    assert!(diagnostic.message.contains("inside a runtime"));
+    let Failure::Unavailable { diagnostic } = failure(
         "send_span",
         &SyncError::Export(OTelSdkError::InternalFailure("refused".into())),
     ) else {
