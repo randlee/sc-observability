@@ -115,7 +115,7 @@ fn span(args: &SpanArgs, scope: InstrumentationScope) -> Result<SpanData, SyncEr
         },
         start_time_unix_nano: args.start_time_unix_nano,
         end_time_unix_nano: args.end_time_unix_nano,
-        // An error description wins over --ok.
+        // clap rejects --ok together with --error, so span_status never sees both.
         status: span_status(args.error.clone(), args.ok),
         attributes: key_values(attributes(
             args.attributes.attributes.as_deref(),

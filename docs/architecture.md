@@ -2009,7 +2009,8 @@ No transport implementation or runtime dependency enters the types layer.
     `into_span_data(self, api::InstrumentationScope) -> Result<sdk::trace::SpanData,
     SyncError>` (missing ids random, sampled, local parent, times through
     `span_times`); each frontend keeps its argument extraction, scope name
-    and option rules (the CLI lets an error win over `ok`; Python rejects both);
+    and option rules (both frontends reject `ok` together with an error; `span_status`'s
+    error-wins rule is for library callers);
     `OtelLogSink::new(&sdk::logs::SdkLoggerProvider, api::InstrumentationScope)`
     implementing the core `LogSink`. The SDK span collections
     `SpanEvents`/`SpanLinks` are non-exhaustive: callers fill them from
