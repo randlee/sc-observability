@@ -18,7 +18,7 @@ use sc_observability_otlp::sync::{
 };
 use serde_json::Value as Json;
 use serde_json::value::RawValue;
-use std::{collections::BTreeMap, io::Read, path::Path};
+use std::{fmt, io::Read, path::Path};
 
 /// Runs the parsed command; the error decides the process exit.
 pub(crate) fn run(cli: &Cli) -> Result<(), SyncError> {
@@ -171,9 +171,9 @@ fn attributes(source: Option<&str>, signal_text: &str) -> Result<Vec<(String, Js
         source.to_owned()
     };
     // Raw tokens keep an out-of-range integer literal distinguishable from a
-    // float: parsed `Number`s turn it into a lossy `f64`. A repeated key keeps
-    // its last value.
-    let object: BTreeMap<String, Box<RawValue>> = serde_json::from_str(&text)
+    // float: parsed `Number`s turn it into a lossy `f64`. Entries keep input
+    // order and a repeated key stays, as in the Python frontend.
+    let ObjectEntries(object) = serde_json::from_str(&text)
         .map_err(|error| invalid(format!("attributes must be one JSON object: {error}")))?;
     check_input_limits(0, object.len())?;
     let mut attributes = Vec::with_capacity(object.len());
@@ -193,6 +193,36 @@ fn attributes(source: Option<&str>, signal_text: &str) -> Result<Vec<(String, Js
         attributes.push((key, value));
     }
     Ok(attributes)
+}
+
+/// One JSON object as its entries in input order, repeated keys included.
+struct ObjectEntries(Vec<(String, Box<RawValue>)>);
+
+impl<'de> serde::Deserialize<'de> for ObjectEntries {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = ObjectEntries;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a JSON object")
+            }
+
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut entries = Vec::with_capacity(map.size_hint().unwrap_or(0));
+                while let Some(entry) = map.next_entry()? {
+                    entries.push(entry);
+                }
+                Ok(ObjectEntries(entries))
+            }
+        }
+
+        deserializer.deserialize_map(Visitor)
+    }
 }
 
 /// Whether `token` is an integer literal that fits neither `i64` nor `u64`.
@@ -311,10 +341,24 @@ mod tests {
         assert_eq!(find("i"), Some(Value::I64(-3)));
         assert_eq!(find("f"), Some(Value::F64(1.5)));
         assert_eq!(find("big"), Some(Value::from("18446744073709551615")));
-        assert_eq!(find("duplicate"), Some(Value::from("last")));
+        assert_eq!(find("duplicate"), Some(Value::from("first")));
         assert_eq!(
             scalar::<AnyValue>("k", Json::from("v")).expect("string"),
             AnyValue::from("v".to_owned())
+        );
+    }
+
+    #[test]
+    fn attributes_keep_input_order_and_repeated_keys() {
+        let parsed = attributes(Some(r#"{"b":1,"a":2,"b":3}"#), "").expect("valid object");
+        let keys: Vec<(&str, &Json)> = parsed.iter().map(|(k, v)| (k.as_str(), v)).collect();
+        assert_eq!(
+            keys,
+            [
+                ("b", &Json::from(1)),
+                ("a", &Json::from(2)),
+                ("b", &Json::from(3))
+            ]
         );
     }
 
