@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -20,6 +21,9 @@ import public_api_parity as parity  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = ROOT / 'scripts/ci/fixtures/public-api-parity/conditioned'
+# Hard bounds so a held cargo lock or a rustup download fails the test, not hangs it.
+PROBE_TIMEOUT_SECONDS = 120
+COMMAND_TIMEOUT_SECONDS = 900
 FIXTURE_TARGETS = ['x86_64-unknown-linux-gnu', 'x86_64-pc-windows-msvc']
 MUTATIONS = {
     'mutate-method': 'windows_only_method',
@@ -296,6 +300,14 @@ class ComparatorTests(unittest.TestCase):
         self.assertEqual(parity.row_differences(['b', 'a'], ['a', 'b']), [])
 
 
+def probe(command):
+    """Runs a toolchain probe; a timeout becomes a result naming the command and its output."""
+    try:
+        return subprocess.run(command, capture_output=True, text=True, timeout=PROBE_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired as error:
+        return subprocess.CompletedProcess(command, -1, '', parity.timeout_message(error))
+
+
 def toolchain_unavailable():
     """Reason the real extraction cannot run here, or None when it can."""
     try:
@@ -304,15 +316,36 @@ def toolchain_unavailable():
         return str(error)
     if shutil.which('cargo') is None or shutil.which('rustup') is None:
         return 'cargo/rustup not installed'
-    probe = subprocess.run(['rustup', 'run', toolchain, 'rustdoc', '--version'], capture_output=True, text=True)
-    if probe.returncode != 0:
-        return f'{toolchain} not installed: {probe.stderr.strip()}'
-    installed = subprocess.run(['rustup', 'target', 'list', '--installed', '--toolchain', toolchain],
-                               capture_output=True, text=True)
+    rustdoc = probe(['rustup', 'run', toolchain, 'rustdoc', '--version'])
+    if rustdoc.returncode != 0:
+        return f'{toolchain} not installed: {rustdoc.stderr.strip()}'
+    installed = probe(['rustup', 'target', 'list', '--installed', '--toolchain', toolchain])
+    if installed.returncode != 0:
+        return f'{toolchain} target list failed: {installed.stderr.strip()}'
     missing = sorted(set(FIXTURE_TARGETS) - set(installed.stdout.split()))
     if missing:
         return f'{toolchain} lacks target std for {missing}'
     return None
+
+
+class CommandTimeoutTests(unittest.TestCase):
+    """Every bounded subprocess fails with its command and output instead of hanging."""
+
+    def test_run_timeout_names_command_and_output(self):
+        command = [sys.executable, '-c', 'import time; print("started", flush=True); time.sleep(60)']
+        with mock.patch.object(parity, 'COMMAND_TIMEOUT_SECONDS', 1):
+            with self.assertRaises(parity.ParityError) as caught:
+                parity.run(command, cwd=ROOT)
+        message = str(caught.exception)
+        self.assertIn('time.sleep(60)', message)
+        self.assertIn('timed out after 1s', message)
+
+    def test_probe_timeout_is_a_failed_result_naming_the_command(self):
+        command = [sys.executable, '-c', 'import time; time.sleep(60)']
+        with mock.patch.object(sys.modules[__name__], 'PROBE_TIMEOUT_SECONDS', 1):
+            result = probe(command)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('time.sleep(60)', result.stderr)
 
 
 class RealExtractionTests(unittest.TestCase):
@@ -330,8 +363,15 @@ class RealExtractionTests(unittest.TestCase):
         cls.commit = parity.source_commit()
         cls.library = parity.package_library(FIXTURE / 'Cargo.toml')
         cls.selections = {item['id']: item for item in parity.feature_selections(cls.library['features'])}
-        cls.target_dir = FIXTURE / 'target'
         cls.env = parity.extraction_environment()
+
+    def setUp(self):
+        # A target dir per test, so no other cargo process or earlier run holds its build lock.
+        self.target_dir = Path(tempfile.mkdtemp(prefix='parity-target-'))
+        self.addCleanup(shutil.rmtree, self.target_dir, ignore_errors=True)
+        bound = mock.patch.object(parity, 'COMMAND_TIMEOUT_SECONDS', COMMAND_TIMEOUT_SECONDS)
+        bound.start()
+        self.addCleanup(bound.stop)
 
     def extract(self, target, selection):
         return parity.extract_surface(
