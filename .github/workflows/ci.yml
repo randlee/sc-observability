@@ -86,6 +86,9 @@ jobs:
       - name: Check CLI dependency policy
         run: cargo deny --manifest-path crates/sc-otel-cli/Cargo.toml --all-features --locked check --config policy/deny.toml licenses bans advisories
 
+      - name: Check log-sink dependency policy
+        run: cargo deny --manifest-path crates/sc-observability-otlp/Cargo.toml --features log-sink --locked check --config policy/deny.toml licenses bans advisories
+
   docs-consistency:
     name: docs-consistency (ubuntu)
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.api_only != true }}
