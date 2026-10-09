@@ -899,7 +899,8 @@ struct FlushGate {
     armed: AtomicBool,
     /// Whether the flush collected at least one metric and exported it.
     exported: AtomicBool,
-    /// The first instrument name registered twice with a different kind or unit.
+    /// The instrument name registered twice with a different kind or unit; a
+    /// later conflicting export replaces an earlier one.
     conflict: Mutex<Option<String>>,
 }
 
