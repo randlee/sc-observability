@@ -524,7 +524,7 @@ class RealExtractionTests(unittest.TestCase):
             report = parity.assert_public_api_equal(parity.load_cells(Path(directory)), inventory,
                                                     commit=self.commit)
             self.assertEqual(report['status'], 'equal')
-            self.assertEqual(report['packages'], [self.library['name']])
+            self.assertEqual(list(report['packages']), [self.library['name']])
 
     def test_renderer_rejects_other_rustdoc_formats(self):
         with tempfile.TemporaryDirectory() as directory:
