@@ -55,7 +55,7 @@ Layering requirements:
 - LAY-002 `sc-observability` shall depend on `sc-observability-types` only.
 - LAY-003 `sc-observe` shall depend on `sc-observability-types` and `sc-observability`.
 - LAY-004 `sc-observe` shall not depend on `sc-observability-otlp`.
-- LAY-005 Superseded by ADR-023 (Phase H): `sc-observability` is also a production dependency under the `log-sink` feature; `sc-observe` is no dependency. `sc-observability-otlp`'s only normal sc-* dependency is `sc-observability-types`; `sc-observability` and `sc-observe` are dev-dependencies of its tests.
+- LAY-005 Superseded by ADR-023 (Phase H): `sc-observability` is also a production dependency under the `log-sink` feature; `sc-observe` is no dependency. `sc-observability-otlp`'s only normal sc-* dependency is `sc-observability-types`; `sc-observability` is a dev-dependency of its tests; `sc-observe` is not.
 - LAY-006 Higher-layer concerns shall not be required to understand or use lower-layer crates.
 - LAY-007 `sc-observability` requirements shall remain fully self-contained and shall not include routing or OTLP concerns.
 
