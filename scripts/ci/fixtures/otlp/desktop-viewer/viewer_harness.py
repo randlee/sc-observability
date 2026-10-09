@@ -98,8 +98,12 @@ _LOGGED_ENDPOINT = re.compile(
 
 
 def _logged_endpoints(log_text: str) -> dict[str, int]:
-    """Return the OTLP gRPC and HTTP ports the viewer logged when it bound them."""
-    return {kind.lower(): int(port) for kind, port in _LOGGED_ENDPOINT.findall(log_text)}
+    """Return the OTLP gRPC and HTTP ports the viewer logged when it bound them.
+
+    A logged port of 0 is the request, not a bound port, and is ignored.
+    """
+    return {kind.lower(): int(port) for kind, port in _LOGGED_ENDPOINT.findall(log_text)
+            if int(port) != EPHEMERAL}
 
 
 def _parse_proc_net_tcp(text: str) -> dict[str, int]:
@@ -158,18 +162,21 @@ def _listening_ports(pid: int) -> set[int]:
     return _parse_lsof_ports(out)
 
 
-def _bound_ports(pid: int, log_path: Path, requested: dict[str, int]) -> dict[str, int] | None:
+def _bound_ports(pid: int, log_path: Path, requested: dict[str, int],
+                 log_offset: int = 0) -> dict[str, int] | None:
     """Resolve ports requested as ephemeral to the ports the viewer bound.
 
     The viewer logs its OTLP gRPC and HTTP endpoints; its browser port is the
-    one remaining listener of the owned process. Returns ``None`` until every
-    port is known.
+    one remaining listener of the owned process. Only log bytes after
+    ``log_offset`` (the log size before this process started) are read, so a
+    previous run's endpoints in the retained log are never reported. Returns
+    ``None`` until every port is known.
     """
     bound = dict(requested)
     if EPHEMERAL not in requested.values():
         return bound
     try:
-        logged = _logged_endpoints(log_path.read_text(errors="replace"))
+        logged = _logged_endpoints(log_path.read_bytes()[log_offset:].decode(errors="replace"))
     except OSError:
         return None
     for name in ("grpc", "http"):
@@ -432,6 +439,7 @@ def start(args: argparse.Namespace) -> None:
     log_path = state / "viewer.log"
     log = None
     try:
+        log_offset = log_path.stat().st_size if log_path.exists() else 0
         log = log_path.open("ab")
         detach: dict[str, Any] = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
                                   if _is_windows() else {"start_new_session": True})
@@ -462,14 +470,14 @@ def start(args: argparse.Namespace) -> None:
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 raise HarnessError(f"viewer exited during startup; inspect {state / 'viewer.log'}")
-            bound = _bound_ports(process.pid, log_path, requested)
+            bound = _bound_ports(process.pid, log_path, requested, log_offset)
             if bound is not None:
                 ui_url = f"http://{args.host}:{bound['ui']}/"
                 try:
                     _request(ui_url, timeout=1)
                     rpc(ui_url, "searchLogs", ["-1000000000", "1893456000000000000"], timeout=5)
-                except (OSError, TimeoutError, urllib.error.URLError, HarnessError, ValueError):
-                    pass
+                except (OSError, TimeoutError, urllib.error.URLError):
+                    pass  # not listening yet; an RPC error from a live viewer propagates
                 else:
                     metadata.update(bound)
                     (state / "viewer.json").write_text(json.dumps(metadata, indent=2) + "\n")
