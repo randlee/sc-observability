@@ -4,8 +4,9 @@
 //! native OpenTelemetry log records from a caller-owned SDK logger provider.
 //! With `synchronous-client`, `sync::Client` exports logs, spans and metrics
 //! through the official blocking OTLP/HTTP protobuf exporter for frontends
-//! without a Tokio runtime. Native Tokio hosts use the official
-//! `opentelemetry_sdk` and `opentelemetry-otlp` crates directly.
+//! without a Tokio runtime. Native Tokio hosts use the unmodified upstream
+//! re-exports: `api` and `sdk` with `native`, and `otlp` with
+//! `tokio-exporter`.
 
 pub mod constants;
 pub mod error_codes;
