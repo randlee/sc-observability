@@ -5,13 +5,13 @@
       "Edit(**/.claude/skills/atm-beads/scripts/**)",
       "Edit(**/.claude/skills/atm-beads/schemas/**)",
       "Edit(**/.claude/skills/atm-bd-orchestration/scripts/**)",
-      "Edit(**/.claude/settings.json)",
-      "Edit(**/.claude/hooks/**)",
+      "Edit(/.claude/settings.json)",
+      "Edit(/.claude/hooks/**)",
       "Write(**/.claude/skills/atm-beads/scripts/**)",
       "Write(**/.claude/skills/atm-beads/schemas/**)",
       "Write(**/.claude/skills/atm-bd-orchestration/scripts/**)",
-      "Write(**/.claude/settings.json)",
-      "Write(**/.claude/hooks/**)"
+      "Write(/.claude/settings.json)",
+      "Write(/.claude/hooks/**)"
     ]
   },
   "hooks": {
