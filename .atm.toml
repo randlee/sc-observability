@@ -19,7 +19,7 @@ env = { ATM_IDENTITY = "team-lead", ATM_TEAM = "sc-obs" }
 
 [[rmux.windows.panes]]
 name = "aobs"
-command = "codex -c features.hooks=true --yolo --model gpt-6-astra"
+command = "codex --no-daemon -c features.hooks=true --yolo --model gpt-6-astra"
 env = { ATM_IDENTITY = "aobs", ATM_TEAM = "sc-obs" }
 
 # Window 2: quality (quality-mgr + sanity)
@@ -36,7 +36,7 @@ env = { ATM_IDENTITY = "quality-mgr", ATM_TEAM = "sc-obs" }
 
 [[rmux.windows.panes]]
 name = "obs-sanity"
-command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-5.6-terra"
+command = "codex --no-daemon -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-6.1-terra"
 env = { ATM_IDENTITY = "obs-sanity", ATM_TEAM = "sc-obs" }
 
 # Window 3: dev (terra + luna)
@@ -46,12 +46,12 @@ layout = "even-horizontal"
 
 [[rmux.windows.panes]]
 name = "cobs"
-command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-5.6-terra"
+command = "codex --no-daemon -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-6.1-terra"
 env = { ATM_IDENTITY = "cobs", ATM_TEAM = "sc-obs" }
 
 [[rmux.windows.panes]]
 name = "lobs"
-command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-6-luna"
+command = "codex --no-daemon -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-6-luna"
 env = { ATM_IDENTITY = "lobs", ATM_TEAM = "sc-obs" }
 
 # Window 4: dev2 (terra + luna)
@@ -61,12 +61,12 @@ layout = "even-horizontal"
 
 [[rmux.windows.panes]]
 name = "cobs2"
-command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-5.6-terra"
+command = "codex --no-daemon -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-6.1-terra"
 env = { ATM_IDENTITY = "cobs2", ATM_TEAM = "sc-obs" }
 
 [[rmux.windows.panes]]
 name = "lobs2"
-command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-6-luna"
+command = "codex --no-daemon -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-6-luna"
 env = { ATM_IDENTITY = "lobs2", ATM_TEAM = "sc-obs" }
 
 # Window 5: info (publisher + empty terminal)
@@ -77,7 +77,7 @@ layout = "even-horizontal"
 [[rmux.windows.panes]]
 name = "publisher"
 alias = "obs-publisher"
-command = "codex -c features.hooks=true --yolo --model gpt-5.6-terra"
+command = "codex --no-daemon -c features.hooks=true --yolo --model gpt-6.1-terra"
 env = { ATM_IDENTITY = "publisher", ATM_TEAM = "sc-obs" }
 
 [[rmux.windows.panes]]
