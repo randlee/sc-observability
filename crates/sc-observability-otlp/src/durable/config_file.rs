@@ -38,7 +38,7 @@ pub fn load_telemetry_file(path: &Path) -> Result<TelemetryFileConfig, Telemetry
         ));
     }
     let mut config: TelemetryFileConfig =
-        serde_saphyr::from_str(&yaml).map_err(|error: serde_saphyr::Error| {
+        serde_saphyr::from_str(&yaml).map_err(|error: serde_saphyr::DeserializeError| {
             let reason = error.location().map_or_else(
                 || "invalid YAML configuration".to_owned(),
                 |location| {
