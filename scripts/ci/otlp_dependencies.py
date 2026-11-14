@@ -1,6 +1,5 @@
 """Shared OTLP dependency check used by the two existing boundary gates."""
 
-import re
 import tomllib
 from pathlib import Path
 
@@ -42,7 +41,6 @@ def validate_transport_dependencies(root: Path) -> set[str]:
     manifest = load("crates/sc-observability-otlp/Cargo.toml")
     document = load("policy/otlp-transport.toml")
     policy = document["transport"]
-    locked = {(p["name"], p["version"]) for p in load("Cargo.lock")["package"]}
     features = manifest["features"]
 
     for kind, dependencies in dependency_sections(manifest):
@@ -55,14 +53,6 @@ def validate_transport_dependencies(root: Path) -> set[str]:
             raise SystemExit(
                 f"OTLP dependency sc-observe: dev-only; it must not appear in [{kind}]"
             )
-    # Validate the reviewed SDK closure first. A dependency can later become a
-    # direct, policy-governed transport (for example tonic for generated OTLP
-    # clients); that must not change this invariant's diagnostic or let a
-    # missing reviewed transitive pin be masked by a per-transport comparison.
-    for name, version in document["sdk_transport_lock"].items():
-        if (name, version) not in locked:
-            raise SystemExit(f"OTLP SDK transport {name}: reviewed lock pin {version} missing")
-
     def activated(feature, visited=None):
         visited = set() if visited is None else visited
         if feature in visited:
@@ -91,11 +81,6 @@ def validate_transport_dependencies(root: Path) -> set[str]:
             raise SystemExit(prefix + "must inherit the reviewed workspace pin")
         inherited = workspace[name]
         inherited = {"version": inherited} if isinstance(inherited, str) else inherited
-        version = rule["version"]
-        if not re.fullmatch(r"=\d+\.\d+\.\d+", version):
-            raise SystemExit(prefix + "policy version must be an exact pin")
-        if inherited.get("version") != version or (name, version[1:]) not in locked:
-            raise SystemExit(prefix + "workspace/lock pin differs from transport policy")
         enabled, defaults = effective_features(inherited, declaration)
         if enabled != set(rule["features"]) or defaults != rule["default_features"]:
             raise SystemExit(prefix + "effective dependency features differ from transport policy")

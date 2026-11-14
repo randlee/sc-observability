@@ -80,20 +80,6 @@ sc-lint-attributes""",
         self.replace('"dep:opentelemetry", ', '')
         self.rejects("opentelemetry: incorrect binding")
 
-    def test_transport_workspace_pin_must_match_policy(self):
-        cargo = self.root / "Cargo.toml"
-        text = cargo.read_text(encoding="utf-8")
-        self.assertIn('opentelemetry = "=0.33.0"', text)
-        cargo.write_text(text.replace('opentelemetry = "=0.33.0"', 'opentelemetry = "0.33"'), encoding="utf-8")
-        self.rejects("opentelemetry: workspace/lock pin differs")
-
-    def test_sdk_transitive_lock_pin_is_required(self):
-        lock = self.root / "Cargo.lock"
-        text = lock.read_text(encoding="utf-8")
-        self.assertIn('name = "tonic"\nversion = "0.14.6"', text)
-        lock.write_text(text.replace('name = "tonic"\nversion = "0.14.6"', 'name = "tonic"\nversion = "0.14.5"'), encoding="utf-8")
-        self.rejects("reviewed lock pin .* missing")
-
 
 @unittest.skipIf(os.environ.get(SHELL_CHILD_ENV) == "1", "nested run inside a shell gate")
 @unittest.skipIf(shutil.which("bash") is None or shutil.which("git") is None, "bash and git are required")

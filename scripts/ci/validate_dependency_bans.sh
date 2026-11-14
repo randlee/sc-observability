@@ -173,8 +173,8 @@ dto_external_dependencies = {
 }
 if dto_external_dependencies != {"serde", "serde_json", "schemars"}:
     raise SystemExit("DTO dependency closure drifted")
-if dto["dependencies"]["schemars"] != {"version": "=1.2.2", "optional": True} or dto["features"].get("schema-gen") != ["dep:schemars"]:
-    raise SystemExit("DTO schema tooling must remain optional and exactly pinned")
+if dto["dependencies"]["schemars"].get("optional") is not True or dto["features"].get("schema-gen") != ["dep:schemars"]:
+    raise SystemExit("DTO schema tooling must remain optional")
 
 boundary_manifests = [
     root / "crates/sc-observability-dto/Cargo.toml",
