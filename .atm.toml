@@ -19,7 +19,7 @@ env = { ATM_IDENTITY = "team-lead", ATM_TEAM = "sc-obs" }
 
 [[rmux.windows.panes]]
 name = "aobs"
-command = "codex -c features.hooks=true --yolo --model gpt-6-astra"
+command = "codex --no-daemon -c features.hooks=true --yolo --model gpt-6-astra"
 env = { ATM_IDENTITY = "aobs", ATM_TEAM = "sc-obs" }
 
 # Window 2: quality (quality-mgr + sanity)
@@ -36,7 +36,7 @@ env = { ATM_IDENTITY = "quality-mgr", ATM_TEAM = "sc-obs" }
 
 [[rmux.windows.panes]]
 name = "obs-sanity"
-command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-5.6-terra"
+command = "codex --no-daemon -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-6.1-terra"
 env = { ATM_IDENTITY = "obs-sanity", ATM_TEAM = "sc-obs" }
 
 # Window 3: dev (terra + luna)
@@ -46,12 +46,12 @@ layout = "even-horizontal"
 
 [[rmux.windows.panes]]
 name = "cobs"
-command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-5.6-terra"
+command = "codex --no-daemon -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-6.1-terra"
 env = { ATM_IDENTITY = "cobs", ATM_TEAM = "sc-obs" }
 
 [[rmux.windows.panes]]
 name = "lobs"
-command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-6-luna"
+command = "codex --no-daemon -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-6-luna"
 env = { ATM_IDENTITY = "lobs", ATM_TEAM = "sc-obs" }
 
 # Window 4: dev2 (terra + luna)
@@ -60,14 +60,15 @@ name = "dev2"
 layout = "even-horizontal"
 
 [[rmux.windows.panes]]
-name = "cobs2"
-command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-5.6-terra"
-env = { ATM_IDENTITY = "cobs2", ATM_TEAM = "sc-obs" }
+name = "tobs"
+command = "codex --no-daemon -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-6.1-terra"
+env = { ATM_IDENTITY = "tobs", ATM_TEAM = "sc-obs" }
 
 [[rmux.windows.panes]]
-name = "lobs2"
-command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-6-luna"
-env = { ATM_IDENTITY = "lobs2", ATM_TEAM = "sc-obs" }
+name = "hobs"
+model = "claude-haiku-5-5"
+color = "yellow"
+env = { ATM_IDENTITY = "hobs", ATM_TEAM = "sc-obs" }
 
 # Window 5: info (publisher + empty terminal)
 [[rmux.windows]]
@@ -77,7 +78,7 @@ layout = "even-horizontal"
 [[rmux.windows.panes]]
 name = "publisher"
 alias = "obs-publisher"
-command = "codex -c features.hooks=true --yolo --model gpt-5.6-terra"
+command = "codex --no-daemon -c features.hooks=true --yolo --model gpt-6.1-terra"
 env = { ATM_IDENTITY = "publisher", ATM_TEAM = "sc-obs" }
 
 [[rmux.windows.panes]]
@@ -106,14 +107,14 @@ all = [
   "Use native atm read to read messages from team-members",
 ]
 
-[startup.cobs2]
+[startup.tobs]
 all = [
   "Your role is dev under atm-bd-orchestration: work arrives by atm task assign with the dev template; no user is watching, so execute every step through to the task close and never end a turn on a promise of future work",
   "Use native atm send or atm ack for messages to team-lead or quality-mgr",
   "Use native atm read to read messages from team-members",
 ]
 
-[startup.lobs2]
+[startup.hobs]
 all = [
   "Your role is dev under atm-bd-orchestration: work arrives by atm task assign with the dev template; no user is watching, so execute every step through to the task close and never end a turn on a promise of future work",
   "Use native atm send or atm ack for messages to team-lead or quality-mgr",
@@ -132,7 +133,7 @@ all = [
 all = [
   "Your role is quality-mgr under atm-bd-orchestration: read .claude/skills/atm-bd-orchestration/roles/quality-mgr.md now (again after every compaction); where it and quality-mgr.md differ, the role file wins",
   "read .claude/agents/quality-mgr.md for directive",
-  "Use native atm send or atm ack for messages to team-lead, cobs, lobs, aobs, cobs2, or lobs2",
+  "Use native atm send or atm ack for messages to team-lead, cobs, lobs, aobs, tobs, or hobs",
   "Use native atm read to read messages from team-members",
 ]
 
