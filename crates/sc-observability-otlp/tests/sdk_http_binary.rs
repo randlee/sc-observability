@@ -7,10 +7,6 @@
 //! so every assertion is on bytes that crossed a socket. A tonic collector is
 //! the `Grpc` control: the same public factory still speaks gRPC there.
 #![cfg(feature = "otlp-sdk")]
-#![allow(
-    deprecated,
-    reason = "the released consumer intentionally uses the retained root facade"
-)]
 
 mod http_collector {
     //! Caller-owned loopback HTTP/1.1 collector with scripted responses.
@@ -483,20 +479,30 @@ use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceRequ
 use opentelemetry_proto::tonic::collector::trace::v1::ExportTraceServiceRequest;
 use prost::Message;
 use sc_observability_otlp::v2::{
-    AuthHeader as V2AuthHeader, OtelConfig as V2OtelConfig, OtlpEndpoint as V2OtlpEndpoint,
-    OtlpProtocol as V2OtlpProtocol, Telemetry as V2Telemetry,
-    TelemetryConfigBuilder as V2TelemetryConfigBuilder,
+    AuthHeader as V2AuthHeader, LogsConfig, MetricsConfig, OtelConfig as V2OtelConfig,
+    OtlpEndpoint as V2OtlpEndpoint, OtlpProtocol as V2OtlpProtocol, Telemetry as V2Telemetry,
+    TelemetryConfigBuilder as V2TelemetryConfigBuilder, TracesConfig,
 };
+#[cfg(feature = "v1")]
+#[allow(
+    deprecated,
+    reason = "the released consumer intentionally uses the retained root facade"
+)]
 use sc_observability_otlp::{
-    LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, Telemetry,
-    TelemetryConfigBuilder, TracesConfig,
+    OtelConfig, OtlpEndpoint, OtlpProtocol, Telemetry, TelemetryConfigBuilder,
 };
 use sc_observability_types::v2::{AggregationTemporality, FiniteF64, MetricRecord, MetricValue};
 use sc_observability_types::{
     ActionName, DurationMs, Level, LogEvent, MetricName, ProcessIdentity, SchemaVersion,
-    ServiceName, SpanId, SpanRecord, SpanSignal, SpanStarted, SpanStatus, TargetCategory,
-    TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext, TraceId,
+    ServiceName, SpanId, TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp,
+    TraceId,
 };
+#[cfg(feature = "v1")]
+#[allow(
+    deprecated,
+    reason = "the released consumer intentionally uses the retained v1 types"
+)]
+use sc_observability_types::{SpanRecord, SpanSignal, SpanStarted, SpanStatus, TraceContext};
 
 const SERVICE: &str = "sdk-http-binary";
 const LOG_MESSAGE: &str = "http-binary-log";
@@ -538,6 +544,11 @@ fn log_event() -> LogEvent {
     }
 }
 
+#[cfg(feature = "v1")]
+#[allow(
+    deprecated,
+    reason = "the released consumer intentionally uses the retained v1 types"
+)]
 fn span_signals() -> [SpanSignal; 2] {
     let trace = TraceContext {
         trace_id: TraceId::new("0123456789abcdef0123456789abcdef").expect("valid trace id"),
@@ -593,6 +604,11 @@ fn canonical_span_signals() -> [sc_observability_types::v2::SpanSignal; 2] {
     ]
 }
 
+#[cfg(feature = "v1")]
+#[allow(
+    deprecated,
+    reason = "the released consumer intentionally uses the retained root facade"
+)]
 fn released_config(transport: OtelConfig) -> sc_observability_otlp::TelemetryConfig {
     TelemetryConfigBuilder::new(service_name())
         .enable_logs(LogsConfig::default())
@@ -688,6 +704,11 @@ fn assert_healthy(health: &TelemetryHealthReport) {
 }
 
 #[test]
+#[cfg(feature = "v1")]
+#[allow(
+    deprecated,
+    reason = "the released consumer intentionally uses the retained root facade"
+)]
 fn released_default_http_binary_exports_lossless_protobuf_for_every_signal() {
     assert_eq!(OtelConfig::default().protocol, OtlpProtocol::HttpBinary);
     let collector = Collector::start(&[]);
