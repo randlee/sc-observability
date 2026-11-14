@@ -379,6 +379,9 @@ impl HttpProtobufTransport {
         connection: &ValidatedBackendConnection,
         bounds: &ValidatedTransportBounds,
     ) -> Result<Self, ExportError> {
+        // This workspace uses Reqwest's `rustls-no-provider` feature and Ring.
+        // Install Ring when the host has not already selected a provider.
+        let _ = rustls::crypto::ring::default_provider().install_default();
         let client = reqwest::Client::builder()
             .timeout(bounds.request_timeout().get())
             .build()
