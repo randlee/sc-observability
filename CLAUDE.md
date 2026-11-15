@@ -26,6 +26,12 @@ sc-observability is a general-purpose logging library: a new project gets
 structured logging and OTel immediately. Every change is held to: consistent,
 clean, easy to use, high-performance.
 
+- Library crates declare third-party dependencies as literal `>=floor`
+  requirements for the lowest version our code supports, without an upper cap.
+  Executables (`sc-otel-cli` and `bindings/python/sc-observability-py`) pin
+  exact latest stable versions; lockstep internal dependencies such as
+  `sc-observability-log-macros` remain exact-pinned.
+
 - Never remove a capability because no current consumer uses it. Remove only
   duplicates of a kept item, 1.x surfaces with a canonical replacement, test
   seams (moved to `#[cfg(test)]`), and internal plumbing.

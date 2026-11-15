@@ -615,6 +615,10 @@ fn handle_control(command: ControlCommand, cancel: &AtomicBool) -> bool {
 }
 
 fn build_client(config: &SyncHttpConfig) -> Result<Client, ExportError> {
+    // This workspace uses Reqwest's `rustls-no-provider` feature and Ring.
+    // Install Ring when the host has not already selected a provider, before
+    // constructing the blocking client's internal async runtime.
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let mut builder = ClientBuilder::new().timeout(config.request_timeout);
     if config.insecure_skip_verify {
         builder = builder.danger_accept_invalid_certs(true);

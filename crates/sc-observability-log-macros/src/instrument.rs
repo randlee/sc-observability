@@ -347,9 +347,7 @@ fn erase_impl_trait(ty: &Type) -> Type {
 fn erase_in_place(ty: &mut Type) {
     match ty {
         Type::ImplTrait(_) => {
-            *ty = Type::Infer(syn::TypeInfer {
-                underscore_token: Token![_](ty.span()),
-            });
+            *ty = syn::parse_quote_spanned!(ty.span()=> _);
         }
         Type::Reference(inner) => erase_in_place(&mut inner.elem),
         Type::Ptr(inner) => erase_in_place(&mut inner.elem),
@@ -400,6 +398,7 @@ fn rewrite(function: &ItemFn, args: &InstrumentArgs) -> syn::Result<TokenStream>
         vis,
         sig,
         block,
+        ..
     } = function;
     let outer_attrs = attrs
         .iter()
@@ -601,13 +600,7 @@ fn record_fields(args: &InstrumentArgs, params: &[Param], private: &TokenStream)
 /// `if false { let x: Ret = loop {}; return x; }`: pins the body's return type for `?` inference.
 fn fake_return_edge(output: &ReturnType) -> TokenStream {
     let (ty, span) = match output {
-        ReturnType::Default => (
-            Type::Tuple(syn::TypeTuple {
-                paren_token: syn::token::Paren::default(),
-                elems: syn::punctuated::Punctuated::new(),
-            }),
-            Span::call_site(),
-        ),
+        ReturnType::Default => (syn::parse_quote!(()), Span::call_site()),
         ReturnType::Type(_, ty) if matches!(**ty, Type::Never(_)) => return TokenStream::new(),
         ReturnType::Type(_, ty) => (erase_impl_trait(ty), ty.span()),
     };

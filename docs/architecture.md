@@ -662,14 +662,20 @@ metric projectors with `sc-observe`; OTel logging attaches through the core
 
 ## 6. Crate Boundary Table
 
+Third-party dependencies for library crates use literal `>=floor` requirements:
+the floor is the lowest version the crate supports, with no upper cap.
+Executables (`sc-otel-cli` and `bindings/python/sc-observability-py`) pin exact
+latest stable versions. Lockstep internal dependencies, including
+`sc-observability-log-macros`, remain exact-pinned.
+
 | Crate | Depends On | Must Not Depend On | Public Surface Summary |
 | --- | --- | --- | --- |
 | `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState`, and logging query/follow value and error contracts |
 | `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, legacy direct rotation helpers, `RetainedLogPolicy`, queue-backed writer runtime, `Logger`, `JsonlLogReader`, follow session runtime, and logging health/maintenance re-exports including `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState` |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, log projectors, top-level health re-exports; no OTLP dependents |
-| `sc-observability-otlp` | `sc-observability-types`; optional `opentelemetry`, `opentelemetry_sdk` (feature `native`); optional `sc-observability`, `serde_json` (feature `log-sink`, with `native`); optional `opentelemetry-otlp`, `opentelemetry-http`, `otel-reqwest` (reqwest 0.13 blocking), `futures-executor`, `tokio` (feature `synchronous-client`, with `native`); dev-only `sc-observability`, `tempfile`, `tokio`, `rustls`, `opentelemetry-proto`, `prost` ([ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends)) | `sc-observe`, `agent-team-mail-*` | `OtelLogSink`, `sync::Client`, `api`/`sdk` official re-exports, OTLP constants and error codes |
+| `sc-observability-otlp` | `sc-observability-types`, `serde_json`, `thiserror`; optional `opentelemetry`, `opentelemetry_sdk`, `opentelemetry-otlp`, `opentelemetry-proto`, `tonic`, `prost`, `reqwest`, `rustls`, `tokio` (feature `otlp-sdk`); optional `reqwest`, `rustls`, `httpdate`, `getrandom`, `bytes`, `tokio` (feature `sync-http`); optional `rusqlite`, `serde-saphyr`, `uuid` (feature `durable-store`); dev-only `sc-observability`, `sc-observe`, `tempfile`, `tokio` ([ADR-023](#adr-023-native-opentelemetry-and-thin-synchronous-frontends)) | `sc-observe`, `agent-team-mail-*` | `OtelLogSink`, `sync::Client`, `api`/`sdk` official re-exports, OTLP constants and error codes |
 | `sc-observability-log`† | `sc-observability`, `sc-observability-types`, `sc-observability-log-macros` (exact-pinned) | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*`, Tauri/Specta/PyO3 | `log`-facade bridge and tracing-compatible event/`#[instrument]` macros re-exports; `LogGuard`/`LogControl` lifecycle; `InitError`/`FlushError`/`ShutdownError`/`DetachError` are a scoped TYP-030 companion exception (PHB-002); B.1 mechanical copy, unpublished |
-| `sc-observability-dto`† | `sc-observability-types`, `serde`, `serde_json`; optional exact-pinned Schemars tooling | core runtime, bridge, Tauri, PyO3, ownership capabilities | B.3 schema-v1 wire projections and checked conversions; scoped TYP-030 wire-only exception, no native type replacement |
+| `sc-observability-dto`† | `sc-observability-types`, `serde`, `serde_json`; optional Schemars tooling | core runtime, bridge, Tauri, PyO3, ownership capabilities | B.3 schema-v1 wire projections and checked conversions; scoped TYP-030 wire-only exception, no native type replacement |
 | `sc-observability-schema` | `sc-observability-dto` (with the `schema-gen` feature) | runtime crates, binding runtimes, and host/framework crates | isolated, unpublished schema-generator crate under `bindings/schema-generator/`; emits schema artifacts from DTO wire types |
 | `sc-observability-log-macros`† | third-party proc-macro support only (`syn`, `quote`, `proc-macro2`) | `sc-observability-log` (no reverse dependency back to the bridge), `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | procedural macro expansion only for `sc-observability-log`'s event/`#[instrument]` forms; no runtime types; B.1 mechanical copy, unpublished |
 | `sc-observability-log-consumer-check`† | `sc-observability-log` only (direct path dependency) | `sc-observability-log-macros` (macro expansion is exercised only through the bridge, preserving the external macro-expansion hygiene check), `agent-team-mail-*` | CI-only compile-time proof that macro consumers need only the bridge dependency; never published |
@@ -740,8 +746,8 @@ OTLP edge, and the Python crate without the feature has none.
 
 `policy/otlp-transport.toml` binds the reviewed `opentelemetry`,
 `opentelemetry_sdk`, `opentelemetry-otlp`, `opentelemetry-http`,
-`futures-executor`, `otel-reqwest` (`reqwest =0.13.5`, `blocking`, `rustls`)
-and Tokio pins to the `log-sink` and `synchronous-client` features (ADR-023).
+`futures-executor`, `otel-reqwest` (`reqwest >=0.13.5`, `blocking`, `rustls`)
+and Tokio dependencies to the `otlp-sdk` and `sync-http` features (ADR-023).
 The `synchronous-client` exporter uses the official blocking reqwest client and
 requires no caller-owned runtime. No wildcard approval covers an unrelated
 dependency; the existing boundary manifest is the single machine allowlist.
@@ -1205,9 +1211,9 @@ in [the CI policy](ci-policy.md).
   logging structural choices and consumer migration recipe without inventing
   a second contract owner or serializing the two wave-1 contract sprints.
 - **Decision — ADR-018 amendment**: Section 6's Phase D transport allowlist
-  refines ADR-018 with the `sync-http` feature's reqwest/httpdate pins, explicit
+  refines ADR-018 with the `sync-http` feature's reqwest/httpdate dependencies, explicit
   getrandom and Tokio rt/sync use, and independently gated SDK dependencies.
-  obs-d-21 records the reviewed exact Cargo.lock/manifest pins. obs-d-8 uses
+  obs-d-21 records the reviewed Cargo.lock/manifest dependency set. obs-d-8 uses
   this declaration without adding a second allowlist or editing ADR-018's
   accepted historical text.
 - **Decision — ADR-005 registry ownership**: All `OTLP_*` constants used by
@@ -1482,7 +1488,7 @@ was reworded accordingly to describe the remaining validation.
 - **Scope boundary**: This is not a blanket test exception. Production OTLP
   ownership, the ADR-009 check that `sc-observability-types`,
   `sc-observability` and `sc-observe` take no OTLP/OpenTelemetry dependency,
-  and the transport table and pins are unchanged. `tonic` and
+  and the transport table and dependency choices are unchanged. `tonic` and
   `opentelemetry-proto` must inherit the reviewed workspace pins, which the
   helper also checks.
 - **Contracts**: ADR-004, ADR-009, ADR-019, ADR-020, LAY-001–007; D18 owns the
@@ -1604,8 +1610,11 @@ was reworded accordingly to describe the remaining validation.
   `sc-observability-otlp` under `durable-store`; `sc-observability-types`
   gains no YAML dependency. `SubmissionId` and the drain lease holder ID
   (`<pid>:<uuid>`) use `uuid =1.26.1` (v7), optional in both crates. The
-  `sc-otel` CLI parses arguments with `clap =4.6.7`. The full pin set is in
-  the d-29 sprint doc. The license and advisory audit is cargo-deny with
+  `sc-otel` CLI parses arguments with `clap =4.6.7`. The historical dependency
+  selection is recorded in the d-29 sprint doc; library crates declare literal
+  `>=floor` requirements with no upper cap, executables pin exact latest stable
+  versions, and lockstep internal dependencies remain exact. The license and
+  advisory audit is cargo-deny with
   `policy/deny-durable-store.toml`. The platform matrix is linux
   x86_64/aarch64, macOS x86_64/arm64, windows x86_64/arm64 and abi3-py310
   wheels on each. It is proven by the dispatched `telemetry-platforms.yml`

@@ -3,6 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [develop, main, "integrate/*", "sprint/*", "fix/*"]
+  schedule:
+    - cron: "23 6 * * 1"
   push:
     branches: [develop, main, integrate/phase-d]
   workflow_dispatch:
@@ -18,6 +20,40 @@ on:
         description: 'Run only the native public API qualification matrix'
 
 jobs:
+  minimum-versions:
+    name: Minimum dependency versions (ubuntu)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install nightly Rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Resolve direct minimum dependency versions
+        run: cargo +nightly update -Z direct-minimal-versions
+
+      - name: Check workspace with minimum dependency versions
+        run: cargo check --workspace --all-features
+
+  fresh-dependencies:
+    name: Fresh dependency resolution (ubuntu)
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+
+      - name: Resolve latest compatible dependency versions
+        run: cargo update
+
+      - name: Test workspace with fresh dependency resolution
+        run: cargo test --workspace
+
   fmt:
     name: Format check
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.api_only != true }}

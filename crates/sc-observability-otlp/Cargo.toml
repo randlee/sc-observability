@@ -13,8 +13,8 @@ description = "Standalone OTLP export adapter for sc-observability."
 durable-store = ["sync-http", "dep:rusqlite", "dep:serde-saphyr", "dep:uuid"]
 default = ["v1"]
 v1 = ["sc-observability-types/v1"]
-otlp-sdk = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp", "dep:opentelemetry-proto", "dep:tokio", "dep:tonic", "dep:prost", "dep:reqwest"]
-sync-http = ["dep:reqwest", "dep:httpdate", "dep:getrandom", "dep:bytes", "dep:tokio"]
+otlp-sdk = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp", "dep:opentelemetry-proto", "dep:tokio", "dep:tonic", "dep:prost", "dep:reqwest", "dep:rustls"]
+sync-http = ["dep:reqwest", "dep:httpdate", "dep:getrandom", "dep:bytes", "dep:tokio", "dep:rustls"]
 
 [dependencies]
 sc-lint-attributes = "=0.4.0"
@@ -35,6 +35,7 @@ httpdate = { workspace = true, optional = true }
 getrandom = { workspace = true, optional = true }
 bytes = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["rt", "sync"], optional = true }
+rustls = { workspace = true, optional = true }
 
 [dev-dependencies]
 sc-observability-types = { workspace = true, features = ["test-double"] }
@@ -43,9 +44,8 @@ sc-observability.workspace = true
 sc-observe.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 # The hermetic conformance collector routes the three generated OTLP services
-# in integration tests only; production SDK transport keeps its pinned features.
+# in integration tests only; production transports use the workspace Ring feature.
 tonic = { workspace = true, features = ["router"] }
-rustls = { version = "=0.23.45", features = ["ring"] }
 
 [lints]
 workspace = true
