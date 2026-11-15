@@ -21,25 +21,94 @@ on:
 
 jobs:
   minimum-versions:
-    name: Minimum dependency versions (ubuntu)
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    name: Minimum dependency versions (${{ matrix.os }})
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v5
 
       - name: Install nightly Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
 
+      - name: Exclude non-library workspace members for minimum resolution
+        run: |
+          python3 -c "$(cat <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          path = Path("Cargo.toml")
+          source = path.read_text()
+          members = tomllib.loads(source)["workspace"]["members"]
+          excluded = {
+              "crates/sc-otel-cli",
+              "bindings/python/sc-observability-py",
+              "tests/sc-observability-composition",
+              "crates/sc-observability-log-consumer-check",
+          }
+          examples = {member for member in members if member.startswith("examples/")}
+          missing = excluded - set(members)
+          if missing:
+              raise SystemExit(f"workspace members not found: {sorted(missing)}")
+          if not examples:
+              raise SystemExit("no examples/* workspace members found")
+          excluded |= examples
+
+          lines = []
+          in_workspace = False
+          in_members = False
+          removed = set()
+          for line in source.splitlines(keepends=True):
+              stripped = line.strip()
+              if stripped == "[workspace]":
+                  in_workspace = True
+              elif stripped.startswith("["):
+                  in_workspace = False
+                  in_members = False
+              if in_workspace and stripped.startswith("members = ["):
+                  in_members = True
+              if in_members and stripped != "]":
+                  entry = stripped.rstrip(",")
+                  if entry.startswith("\"") and entry.endswith("\""):
+                      member = entry[1:-1]
+                      if member in excluded:
+                          removed.add(member)
+                          continue
+              if in_members and stripped == "]":
+                  in_members = False
+              lines.append(line)
+          if removed != excluded:
+              raise SystemExit(f"failed to remove workspace members: {sorted(excluded - removed)}")
+          rewritten = "".join(lines)
+          remaining = tomllib.loads(rewritten)["workspace"]["members"]
+          if excluded & set(remaining):
+              raise SystemExit("excluded members remain in workspace")
+          path.write_text(rewritten)
+          print(f"Excluded non-library members: {', '.join(sorted(excluded))}")
+          PY
+          )"
+
       - name: Resolve direct minimum dependency versions
         run: cargo +nightly update -Z direct-minimal-versions
 
       - name: Check workspace with minimum dependency versions
-        run: cargo check --workspace --all-features
+        run: cargo check --workspace --all-features --locked
 
   fresh-dependencies:
-    name: Fresh dependency resolution (ubuntu)
+    name: Fresh dependency resolution (${{ matrix.os }})
     if: github.event_name == 'schedule'
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v5
 
