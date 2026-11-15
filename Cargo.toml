@@ -29,7 +29,7 @@ repository = "https://github.com/randlee/sc-observability"
 homepage = "https://github.com/randlee/sc-observability"
 
 [workspace.dependencies]
-rusqlite = { version = ">=0.39", default-features = false, features = ["bundled"] }
+rusqlite = { version = ">=0.28.0", default-features = false, features = ["bundled"] }
 serde-saphyr = { version = ">=2.1.1", default-features = false, features = ["deserialize"] }
 clap = { version = "=4.6.7", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
 uuid = { version = ">=1.26.1", default-features = false, features = ["std", "v7"] }
