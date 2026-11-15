@@ -31,12 +31,11 @@ homepage = "https://github.com/randlee/sc-observability"
 [workspace.dependencies]
 rusqlite = { version = ">=0.39", default-features = false, features = ["bundled"] }
 serde-saphyr = { version = ">=2.1.1", default-features = false, features = ["deserialize"] }
-clap = { version = "=4.6.7", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
 uuid = { version = ">=1.26.1", default-features = false, features = ["std", "v7"] }
 sc-observability-dto = { version = "1.5.0", path = "crates/sc-observability-dto" }
 serde = { version = ">=1.0.220", features = ["derive"] }
 serde_json = ">=1.0.127"
-thiserror = "2"
+thiserror = ">=2.0.12"
 time = { version = ">=0.3.35", features = ["formatting", "parsing", "serde"] }
 sc-observability-types = { version = "1.5.0", path = "crates/sc-observability-types", default-features = false }
 sc-observability = { version = "1.5.0", path = "crates/sc-observability", default-features = false }
@@ -46,9 +45,9 @@ sc-observability-otlp = { version = "1.5.0", path = "crates/sc-observability-otl
 sc-observability-binding-runtime = { version = "1.5.0", path = "crates/sc-observability-binding-runtime", default-features = false }
 sc-observability-log-macros = { version = "=1.5.0", path = "crates/sc-observability-log-macros" }
 log = { version = ">=0.4.22", features = ["std", "kv"] }
-hostname = "0.4"
-tempfile = "3"
-trybuild = "1"
+hostname = ">=0.4.0"
+tempfile = ">=3.0.0"
+trybuild = ">=1.0.0"
 tracing = ">=0.1.40"
 tokio = { version = ">=1.53.3", features = ["rt", "rt-multi-thread", "macros", "time"] }
 opentelemetry = ">=0.33.1"
