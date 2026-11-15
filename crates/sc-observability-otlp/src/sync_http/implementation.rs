@@ -615,22 +615,17 @@ fn handle_control(command: ControlCommand, cancel: &AtomicBool) -> bool {
 }
 
 fn build_client(config: &SyncHttpConfig) -> Result<Client, ExportError> {
-    // This workspace uses Reqwest's `rustls-no-provider` feature and Ring.
-    // Install Ring when the host has not already selected a provider, before
-    // constructing the blocking client's internal async runtime.
-    let _ = rustls::crypto::ring::default_provider().install_default();
-    let mut builder = ClientBuilder::new().timeout(config.request_timeout);
-    if config.insecure_skip_verify {
-        builder = builder.danger_accept_invalid_certs(true);
-    }
-    if let Some(path) = &config.ca_file {
-        let raw = fs::read(path)
-            .map_err(|error| transport_error_with_source("failed to read CA bundle", error))?;
-        let cert = reqwest::Certificate::from_pem(&raw)
-            .or_else(|_| reqwest::Certificate::from_der(&raw))
-            .map_err(|error| transport_error_with_source("failed to parse CA bundle", error))?;
-        builder = builder.add_root_certificate(cert);
-    }
+    let ca_bundle = config
+        .ca_file
+        .as_ref()
+        .map(fs::read)
+        .transpose()
+        .map_err(|error| transport_error_with_source("failed to read CA bundle", error))?;
+    let tls = crate::tls::client_config(ca_bundle.as_deref(), config.insecure_skip_verify)
+        .map_err(|error| transport_error_with_source("failed to build HTTP client", error))?;
+    let mut builder = ClientBuilder::new()
+        .timeout(config.request_timeout)
+        .tls_backend_preconfigured(tls);
     if let Some(raw) = &config.auth_header {
         let (name, value) = parse_auth_header(raw)?;
         let mut headers = HeaderMap::new();

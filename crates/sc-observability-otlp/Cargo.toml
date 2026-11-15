@@ -13,8 +13,8 @@ description = "Standalone OTLP export adapter for sc-observability."
 durable-store = ["sync-http", "dep:rusqlite", "dep:serde-saphyr", "dep:uuid"]
 default = ["v1"]
 v1 = ["sc-observability-types/v1"]
-otlp-sdk = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp", "dep:opentelemetry-proto", "dep:tokio", "dep:tonic", "dep:prost", "dep:reqwest", "dep:rustls"]
-sync-http = ["dep:reqwest", "dep:httpdate", "dep:getrandom", "dep:bytes", "dep:tokio", "dep:rustls"]
+otlp-sdk = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp", "dep:opentelemetry-proto", "dep:tokio", "dep:tonic", "dep:prost", "dep:reqwest", "dep:rustls", "dep:rustls-platform-verifier"]
+sync-http = ["dep:reqwest", "dep:httpdate", "dep:getrandom", "dep:bytes", "dep:tokio", "dep:rustls", "dep:rustls-platform-verifier"]
 
 [dependencies]
 sc-lint-attributes = "=0.4.0"
@@ -36,6 +36,7 @@ getrandom = { workspace = true, optional = true }
 bytes = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["rt", "sync"], optional = true }
 rustls = { workspace = true, optional = true }
+rustls-platform-verifier = { workspace = true, optional = true }
 
 [dev-dependencies]
 sc-observability-types = { workspace = true, features = ["test-double"] }

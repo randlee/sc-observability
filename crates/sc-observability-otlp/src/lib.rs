@@ -34,6 +34,8 @@ mod severity;
 #[cfg(all(test, feature = "otlp-sdk", feature = "sync-http"))]
 mod severity_tests;
 mod testing;
+#[cfg(any(feature = "otlp-sdk", feature = "sync-http"))]
+mod tls;
 
 #[cfg(feature = "v1")]
 pub mod v1;
