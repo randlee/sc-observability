@@ -379,10 +379,11 @@ impl HttpProtobufTransport {
         connection: &ValidatedBackendConnection,
         bounds: &ValidatedTransportBounds,
     ) -> Result<Self, ExportError> {
-        // This workspace uses Reqwest's `rustls-no-provider` feature and Ring.
-        // Install Ring when the host has not already selected a provider.
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        let tls = crate::tls::client_config(None, false).map_err(|error| {
+            transport_error_from("OTLP/HTTP client could not be constructed", Box::new(error))
+        })?;
         let client = reqwest::Client::builder()
+            .tls_backend_preconfigured(tls)
             .timeout(bounds.request_timeout().get())
             .build()
             .map_err(|error| {
