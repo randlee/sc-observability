@@ -744,10 +744,9 @@ OTLP edge, and the Python crate without the feature has none.
 
 ### OTLP transport allowlist
 
-`policy/otlp-transport.toml` binds the reviewed `opentelemetry`,
-`opentelemetry_sdk`, `opentelemetry-otlp`, `opentelemetry-http`,
-`futures-executor`, `otel-reqwest` (`reqwest >=0.13.5`, `blocking`, `rustls`)
-and Tokio dependencies to the `otlp-sdk` and `sync-http` features (ADR-023).
+`policy/otlp-transport.toml` binds dependency names and effective features to
+their transport backends (ADR-023). Versions follow the dependency version
+policy and its floors, rather than this allowlist.
 The `synchronous-client` exporter uses the official blocking reqwest client and
 requires no caller-owned runtime. No wildcard approval covers an unrelated
 dependency; the existing boundary manifest is the single machine allowlist.
