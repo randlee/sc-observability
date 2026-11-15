@@ -667,6 +667,14 @@ the floor is the lowest version the crate supports, with no upper cap.
 Executables (`sc-otel-cli` and `bindings/python/sc-observability-py`) pin exact
 latest stable versions. Lockstep internal dependencies, including
 `sc-observability-log-macros`, remain exact-pinned.
+The `rusqlite` floor is `>=0.28.0`, the lowest release the workspace compiles
+against (`0.28.0` builds with `libsqlite3-sys 0.25.2`; `0.27.0` fails with a
+missing `rusqlite::Error::sqlite_error_code`); the locked graph uses
+`rusqlite 0.42.0` with `libsqlite3-sys 0.40.0`. A consumer that also depends on
+`sqlx 0.9.0` / `sqlx-sqlite 0.9.0` co-resolves to `rusqlite 0.39.0` with
+`libsqlite3-sys 0.37.0`, because `sqlx-sqlite 0.9.0` requires
+`libsqlite3-sys >=0.30.1, <0.38.0`. Consequently `libsqlite3-sys >=0.39`, the
+RUSTSEC fix line, cannot co-resolve with `sqlx-sqlite 0.9`.
 
 | Crate | Depends On | Must Not Depend On | Public Surface Summary |
 | --- | --- | --- | --- |

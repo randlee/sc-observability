@@ -1604,6 +1604,7 @@ dependencies = [
  "reqwest",
  "rusqlite",
  "rustls",
+ "rustls-platform-verifier",
  "sc-lint-attributes",
  "sc-observability",
  "sc-observability-types",

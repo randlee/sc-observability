@@ -40,6 +40,11 @@ backends = ["otlp-sdk", "sync-http"]
 features = ["ring"]
 default_features = false
 
+[transport.rustls-platform-verifier]
+backends = ["otlp-sdk", "sync-http"]
+features = []
+default_features = true
+
 [transport.httpdate]
 backends = ["sync-http"]
 features = []

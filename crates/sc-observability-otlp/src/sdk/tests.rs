@@ -348,7 +348,10 @@ async fn sdk_terminal_grpc_failure_keeps_the_tonic_status_as_source() {
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn sdk_terminal_http_failure_keeps_the_client_error_as_source() {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .tls_backend_preconfigured(crate::tls::client_config(None, false).unwrap())
+        .build()
+        .unwrap();
     let (_shutdown, shutdown_rx) = never_cancelled_shutdown();
     let error = super::implementation::retry_export(
         Duration::from_millis(100),
@@ -399,7 +402,11 @@ async fn sdk_http_timeout_maps_and_keeps_the_client_error_as_source() {
         let (_stream, _) = listener.accept().await.unwrap();
         let _ = released.await;
     });
-    let client = reqwest::Client::builder().no_proxy().build().unwrap();
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .tls_backend_preconfigured(crate::tls::client_config(None, false).unwrap())
+        .build()
+        .unwrap();
     // Exercise the existing send/mapping path without a competing retry deadline.
     let error = client
         .post(&endpoint)
