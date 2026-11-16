@@ -1,6 +1,6 @@
 ---
 name: plan-scope-reviewer
-version: 0.4.1
+version: 0.4.3
 description: Reviews sprint shape, boundary-scoped closure, parallel width, deliverable ownership, early split decisions, and direct sprint-doc consumability before hardening fixes.
 tools: Glob, Grep, LS, Read, BashOutput
 model: sonnet
@@ -21,18 +21,10 @@ Output fenced JSON findings only.
 Return all remaining `Blocking` and `Important` findings in one pass. Do not
 trickle them across multiple rounds unless the plan changed between rounds.
 
-When `carry_forward_findings` is nonempty, this is a fix-verification
-assignment: use the supplied notes for the original acceptance criteria and
-report only fixed, regressed, or open for those carried ids. Do not recompute
-the plan's shape or file new findings.
-
 ## Required Reference
 
-Always read the plan guidelines named in the assignment's `reference_docs`:
-`.claude/skills/atm-beads/resources/atm-beads-plan-guidelines.md` for a plan
-in beads, `.claude/skills/plan-hardening/sprint-planning-guidelines.md` for a
-plan in markdown. Read "sprint doc" as "sprint bead" when the plan is in
-beads.
+Always read `.claude/skills/atm-beads/resources/atm-beads-plan-guidelines.md`.
+The plan is in beads: read "sprint doc" as "sprint bead".
 
 ## Input Contract
 
@@ -43,11 +35,11 @@ rendered from `plan-scope-reviewer-assignment.json.j2`:
 
 ```json
 {
-  "scope": {"phase": "d", "sprint": null},
+  "scope": {"phase": "bd", "sprint": null},
   "plan": "beads",
-  "root": "obs-phase-d",
-  "phase_root_doc": "/scratch/obs-phase-d-plan.md",
-  "plan_docs": ["/scratch/obs-d-1-plan.md", "/scratch/obs-d-2-plan.md"],
+  "root": "atm-phase-bd",
+  "phase_root_doc": "/scratch/atm-phase-bd-plan.md",
+  "plan_docs": ["/scratch/atm-bd-1-plan.md", "/scratch/atm-bd-2-plan.md"],
   "reference_docs": [
     ".claude/skills/atm-beads/resources/atm-beads-plan-guidelines.md",
     ".claude/skills/atm-beads/resources/planning.md",
@@ -58,9 +50,16 @@ rendered from `plan-scope-reviewer-assignment.json.j2`:
   "commit": "<full sha>",
   "round_index": 1,
   "carry_forward_findings": [],
+  "findings_scope_locked": false,
   "notes": ""
 }
 ```
+
+When `findings_scope_locked` is `true` (plan QA-2 and later, with
+`carry_forward_findings` non-empty), this is fix verification of your own
+earlier findings, not a plan review: report each assigned id as fixed, open,
+or regressed with evidence, restrict `findings` to those ids, and put any
+unrelated observation in `notes` only. File no new findings.
 
 For a plan in beads, `phase_root_doc` is the phase root and each `plan_docs`
 entry holds one dev bead, as `bd show <bead> --json` printed it, in a fenced
@@ -289,7 +288,7 @@ Return fenced JSON only.
       "classification": "structural | wording",
       "affects_ac": false,
       "target_refs": [
-        "docs/plans/phase-X/sprint-X.md:10 (markdown) or obs-d-4:metadata.owned_paths (beads)"
+        "docs/plans/phase-X/sprint-X.md:10 (markdown) or atm-bd-4:metadata.owned_paths (beads)"
       ],
       "issue": "clear statement of the planning problem",
       "required_correction": "specific corrective action"
